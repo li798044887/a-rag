@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     device: str = "cpu"
     embedder: str = "bge-m3"
+    reranker: str = "bge"
     rag_internal_token: str = "dev-internal-token"
     upload_dir: str = "/data/uploads"
 
