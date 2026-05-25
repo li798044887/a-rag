@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     device: str = "cpu"
     embedder: str = "bge-m3"
     rag_internal_token: str = "dev-internal-token"
+    upload_dir: str = "/data/uploads"
 
 
 settings = Settings()
