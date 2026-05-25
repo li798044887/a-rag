@@ -14,3 +14,28 @@ class JobStatus(BaseModel):
     page_count: int | None = None
     chunks: int = 0
     error: str | None = None
+
+
+class RetrievedChunk(BaseModel):
+    chunk_id: str
+    document_id: str
+    document_title: str
+    heading_path: str
+    page_start: int
+    page_end: int
+    block_type: str
+    text: str
+    expanded_text: str
+    score: float
+
+
+class RetrieveRequest(BaseModel):
+    query: str
+    rewritten: str | None = None
+    owner_user_id: str
+    top_k: int = 6
+    candidate_k: int = 40
+
+
+class RetrieveResponse(BaseModel):
+    chunks: list[RetrievedChunk]
