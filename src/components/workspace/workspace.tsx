@@ -125,16 +125,18 @@ export function Workspace() {
       userScrolled.current = false;
       uploads.clear();
 
-      const result = await agent.run(
+      const { status, threadId } = await agent.run(
         finalQuery,
         ready.map((f) => f.name),
         activeThreadId !== "th-current" ? activeThreadId : undefined,
       );
-      if (result === "done") {
+      if (status === "done") {
         setPhase("done");
-        // 新規スレッドID を反映し一覧を再取得
+        // done で確定した threadId をアクティブにし、一覧を再取得。
+        // 以降の質問は同一スレッドへ追記される（別スレッドが乱立しない）。
+        if (threadId) setActiveThreadId(threadId);
         refreshThreads();
-      } else if (result === "cancelled") setPhase("cancelled");
+      } else if (status === "cancelled") setPhase("cancelled");
       else {
         push("実行に失敗しました", "error");
         setPhase("cancelled");

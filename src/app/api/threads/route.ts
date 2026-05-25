@@ -12,7 +12,7 @@ async function userId(): Promise<string | null> {
   return claims?.sub ?? null;
 }
 
-export async function GET(_req: Request) {
+export async function GET() {
   const uid = await userId();
   if (!uid) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   return NextResponse.json({ threads: await listThreads(uid) });

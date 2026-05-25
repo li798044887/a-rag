@@ -64,19 +64,21 @@ export function useAgent() {
     });
   }, []);
 
-  /** Start a live run. Resolves to "done" | "cancelled" | "error". */
+  /** Start a live run. Resolves to a status plus the resolved threadId
+   * (captured from the `done` event — avoids reading stale hook state). */
   const run = useCallback(
     async (
       query: string,
       attachments: string[] = [],
       threadId?: string,
-    ): Promise<"done" | "cancelled" | "error"> => {
+    ): Promise<{ status: "done" | "cancelled" | "error"; threadId?: string }> => {
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
       setState({ ...EMPTY, steps: buildInitialSteps(query), answer: "", streaming: false });
 
+      let doneThreadId: string | undefined;
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -84,7 +86,7 @@ export function useAgent() {
           body: JSON.stringify({ query, attachments, threadId }),
           signal: ctrl.signal,
         });
-        if (!res.ok || !res.body) return "error";
+        if (!res.ok || !res.body) return { status: "error" };
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -100,13 +102,14 @@ export function useAgent() {
             const line = frame.trim();
             if (!line.startsWith("data:")) continue;
             const event = JSON.parse(line.slice(5).trim()) as AgentEvent;
+            if (event.type === "done") doneThreadId = event.threadId;
             applyEvent(setState, event);
           }
         }
-        return "done";
+        return { status: "done", threadId: doneThreadId };
       } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return "cancelled";
-        return "error";
+        if (err instanceof DOMException && err.name === "AbortError") return { status: "cancelled" };
+        return { status: "error" };
       }
     },
     [],

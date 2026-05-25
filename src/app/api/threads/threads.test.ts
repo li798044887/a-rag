@@ -14,6 +14,6 @@ vi.mock("next/headers", () => ({
 import { GET } from "@/app/api/threads/route";
 
 test("threads list requires auth", async () => {
-  const res = await GET(new Request("http://test/api/threads"));
+  const res = await GET();
   expect(res.status).toBe(401);
 });
