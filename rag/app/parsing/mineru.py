@@ -48,7 +48,10 @@ def parse(file_path: str, out_dir: str) -> ParsedDocument:
         ["mineru", "-p", file_path, "-o", out_dir, "-d", settings.device],
         check=True,
     )
-    content_list = next(Path(out_dir).rglob("*_content_list.json"))
+    files = sorted(Path(out_dir).rglob("*_content_list.json"))
+    if not files:
+        raise FileNotFoundError(f"no *_content_list.json found under {out_dir}")
+    content_list = files[-1]
     items = json.loads(content_list.read_text(encoding="utf-8"))
     blocks = [b for b in (_block_from_item(it) for it in items) if b is not None]
     page_count = max((b.page for b in blocks), default=0) + 1

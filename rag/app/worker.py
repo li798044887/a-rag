@@ -1,10 +1,10 @@
+import asyncio
 from pathlib import Path
 from typing import Callable
 
 from sqlalchemy.orm import Session
 
 from app.chunking.chunker import chunk_blocks
-from app.config import settings
 from app.db import SessionLocal
 from app.embedding.base import Embedder
 from app.embedding.factory import get_embedder
@@ -30,7 +30,8 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
                parse_fn: ParseFn, document_id: str, job_id: str) -> None:
     doc = session.get(Document, document_id)
     job = session.get(IngestJob, job_id)
-    assert doc and job
+    if not doc or not job:
+        raise RuntimeError(f"document or job not found: doc={document_id} job={job_id}")
     try:
         store.ensure_collection()
 
@@ -77,8 +78,11 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
 async def ingest_document(ctx: dict, document_id: str, job_id: str) -> None:
     session = SessionLocal()
     try:
-        store = QdrantStore(dim=get_embedder().dim if settings.embedder != "stub" else 1024)
-        run_ingest(session, store, get_embedder(), mineru_parse, document_id, job_id)
+        embedder = get_embedder()
+        store = QdrantStore(dim=embedder.dim)
+        await asyncio.to_thread(
+            run_ingest, session, store, embedder, mineru_parse, document_id, job_id
+        )
     finally:
         session.close()
 

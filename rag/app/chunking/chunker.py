@@ -91,6 +91,8 @@ def chunk_blocks(
             parts.append(block.caption)
         parts.append(payload)
         body = "\n".join(parts).strip()
+        if not body:
+            return
         chunks.append(Chunk(
             ordinal=ordinal,
             heading_path=_heading_path(stack),
