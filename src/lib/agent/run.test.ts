@@ -17,9 +17,10 @@ vi.mock("ai", () => ({
 vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
 
 import { runAgent } from "@/lib/agent/run";
+import type { AgentEvent } from "@/lib/types";
 
 test("runAgent yields steps, streams answer, and finishes with sources+citationMap", async () => {
-  const events: any[] = [];
+  const events: AgentEvent[] = [];
   for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
     events.push(e);
   }
