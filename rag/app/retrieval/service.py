@@ -8,6 +8,8 @@ from app.vectorstore.qdrant import QdrantStore
 
 
 def _expand(session: Session, document_id: str, ordinal: int) -> str:
+    # 返り値には hit チャンク自身（ordinal）も前後（ordinal±1）と共に含まれる。
+    # Phase 5 でプロンプト組立時に text と expanded_text を併用する場合は重複に留意すること。
     rows = (session.query(Chunk)
             .filter(Chunk.document_id == document_id,
                     Chunk.ordinal.in_([ordinal - 1, ordinal, ordinal + 1]))
@@ -34,12 +36,22 @@ def retrieve(session: Session, store: QdrantStore, embedder: Embedder, reranker:
             doc = session.get(Document, doc_id)
             title_cache[doc_id] = doc.filename if doc else doc_id
         chunk = session.get(Chunk, hit["chunk_id"])
-        ordinal = chunk.ordinal if chunk else 0
+        if chunk is None:
+            # Postgres/Qdrant 不整合: チャンクが DB に存在しない。
+            # 先頭チャンク（ordinal=0）の近傍を誤って返さないよう近傍拡張を空にする。
+            out.append(RetrievedChunk(
+                chunk_id=hit["chunk_id"], document_id=doc_id,
+                document_title=title_cache[doc_id], heading_path=hit.get("heading_path", ""),
+                page_start=hit.get("page_start", 0), page_end=hit.get("page_end", 0),
+                block_type=hit.get("block_type", "text"), text=hit["text"],
+                expanded_text="", score=float(score),
+            ))
+            continue
         out.append(RetrievedChunk(
             chunk_id=hit["chunk_id"], document_id=doc_id,
             document_title=title_cache[doc_id], heading_path=hit.get("heading_path", ""),
             page_start=hit.get("page_start", 0), page_end=hit.get("page_end", 0),
             block_type=hit.get("block_type", "text"), text=hit["text"],
-            expanded_text=_expand(session, doc_id, ordinal), score=float(score),
+            expanded_text=_expand(session, doc_id, chunk.ordinal), score=float(score),
         ))
     return out

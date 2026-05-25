@@ -31,6 +31,7 @@ services:
       REDIS_URL: redis://redis:6379
       DEVICE: cpu
       EMBEDDER: bge-m3
+      RERANKER: bge
       RAG_INTERNAL_TOKEN: dev-internal-token
     ports: ["8000:8000"]
     volumes: ["uploads:/data/uploads"]
@@ -49,6 +50,7 @@ services:
       REDIS_URL: redis://redis:6379
       DEVICE: cpu
       EMBEDDER: bge-m3
+      RERANKER: bge
       RAG_INTERNAL_TOKEN: dev-internal-token
     volumes: ["uploads:/data/uploads"]
     depends_on:

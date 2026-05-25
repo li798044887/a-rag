@@ -16,4 +16,5 @@ test("retrieveChunks posts to rag /retrieve and returns chunks", async () => {
   const [url, init] = spy.mock.calls[0];
   expect(url).toBe("http://rag:8000/retrieve");
   expect(JSON.parse(init!.body as string).owner_user_id).toBe("u1");
+  expect((init!.headers as Record<string, string>)["x-internal-token"]).toBe("dev-internal-token");
 });

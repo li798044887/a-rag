@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IngestStarted(BaseModel):
@@ -33,8 +33,8 @@ class RetrieveRequest(BaseModel):
     query: str
     rewritten: str | None = None
     owner_user_id: str
-    top_k: int = 6
-    candidate_k: int = 40
+    top_k: int = Field(default=6, ge=1, le=50)
+    candidate_k: int = Field(default=40, ge=1, le=500)
 
 
 class RetrieveResponse(BaseModel):

@@ -46,7 +46,9 @@ class QdrantStore:
     def count(self) -> int:
         return self.client.count(self.collection).count
 
-    def hybrid_search(self, query_vec, owner_user_id: str, limit: int = 40) -> list[dict]:
+    def hybrid_search(self, query_vec: DenseSparse, owner_user_id: str, limit: int = 40) -> list[dict]:
+        if not self.client.collection_exists(self.collection):
+            return []
         flt = models.Filter(must=[models.FieldCondition(
             key="owner_user_id", match=models.MatchValue(value=owner_user_id))])
         res = self.client.query_points(

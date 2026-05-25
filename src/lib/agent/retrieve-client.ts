@@ -29,7 +29,10 @@ export async function retrieveChunks(input: {
       top_k: input.topK ?? 6,
     }),
   });
-  if (!res.ok) throw new Error(`retrieve failed: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`retrieve failed: ${res.status} ${body}`);
+  }
   const data = (await res.json()) as { chunks: Array<Record<string, unknown>> };
   return data.chunks.map((c) => ({
     chunkId: c.chunk_id as string,
