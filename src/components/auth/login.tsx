@@ -5,14 +5,14 @@ import { useState } from "react";
 type Mode = "signin" | "signup" | "reset";
 
 interface LoginProps {
-  onSignIn: (input: { email: string; remember: boolean }) => Promise<void> | void;
+  onSignIn: (input: { email: string; password: string; remember: boolean }) => Promise<void> | void;
   onRegister: (input: { email: string; password: string; name: string }) => Promise<void> | void;
 }
 
 export function Login({ onSignIn, onRegister }: LoginProps) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("hiroshi.tanaka@arag.dev");
-  const [password, setPassword] = useState("••••••••••");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
@@ -25,7 +25,7 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
     setError("");
     try {
       if (mode === "signin") {
-        await onSignIn({ email, remember });
+        await onSignIn({ email, password, remember });
       } else if (mode === "signup") {
         await onRegister({ email, password, name });
       } else {

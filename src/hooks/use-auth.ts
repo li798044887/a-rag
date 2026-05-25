@@ -29,7 +29,7 @@ export function useAuth() {
     };
   }, []);
 
-  const signIn = useCallback(async (input: { email: string; remember: boolean }) => {
+  const signIn = useCallback(async (input: { email: string; password: string; remember: boolean }) => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
