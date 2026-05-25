@@ -8,6 +8,13 @@
       "when": 1779711847759,
       "tag": "0000_flat_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779729480925,
+      "tag": "0001_tearful_mandarin",
+      "breakpoints": true
     }
   ]
 }
