@@ -45,7 +45,7 @@ src/
       upload/route.ts        マルチパートアップロード → チャンクメタ
   proxy.ts                  保護APIのルートレベル認証（旧 middleware）
   components/
-    auth/ chat/ sidebar/ sources/ modals/ uploads/ tweaks/ feedback/ workspace/
+    auth/ chat/ sidebar/ sources/ modals/ uploads/ feedback/ workspace/
     icons.tsx               型付きラインアイコンライブラリ
   hooks/                    use-auth / use-agent / use-uploads / use-tweaks /
                             use-toasts / use-media-query

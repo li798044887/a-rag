@@ -13,7 +13,6 @@ import { SettingsModal } from "@/components/modals/settings-modal";
 import { ShareModal } from "@/components/modals/share-modal";
 import { RightPanel, type RightPanelAction } from "@/components/sources/right-panel";
 import { Sidebar } from "@/components/sidebar/sidebar";
-import { TweaksPanel } from "@/components/tweaks/tweaks-panel";
 import { DropOverlay, UserAttachments } from "@/components/uploads/uploads";
 import { COMPLETED_THREADS, MODELS, SAMPLE_SOURCES, SAMPLE_THREADS, SCOPE_PRESETS } from "@/lib/data";
 import { useAgent } from "@/hooks/use-agent";
@@ -301,7 +300,6 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
       <div className="h-dvh">
         <Login onSignIn={signIn} />
         <ToastViewport toasts={toasts} onDismiss={dismiss} />
-        <TweaksPanel tweaks={tweaks} setTweak={setTweak} />
       </div>
     );
   }
@@ -535,9 +533,10 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
           setSettingsOpen(false);
           push(`${m.label} に切り替えました`, "success");
         }}
+        tweaks={tweaks}
+        setTweak={setTweak}
       />
       <ToastViewport toasts={toasts} onDismiss={dismiss} />
-      <TweaksPanel tweaks={tweaks} setTweak={setTweak} />
     </div>
   );
 }
