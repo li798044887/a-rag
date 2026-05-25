@@ -131,6 +131,7 @@ export interface StagedFile {
   pages?: number | null;
   chunks?: number;
   error?: string;
+  jobId?: string;
 }
 
 // ── Toasts ──────────────────────────────────────────────────────────────────

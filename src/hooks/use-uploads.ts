@@ -61,15 +61,41 @@ export function useUploads(onToast?: PushToast) {
               setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error } : f)));
               return;
             }
-            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 100 } : f)));
-            const data = (await res.json()) as { pages: number | null; chunks: number };
-            // Brief "parsing/chunking" beat before marking ready.
-            setTimeout(() => {
+            const { jobId } = (await res.json()) as { documentId: string; jobId: string };
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 10, jobId } : f)));
+
+            // Poll real progress from the rag service via /api/uploads/:jobId
+            const poll = setInterval(async () => {
+              const r = await fetch(`/api/uploads/${jobId}`).catch(() => null);
+              if (!r || !r.ok) return;
+              const j = (await r.json()) as {
+                status: string; progress: number; page_count?: number | null;
+                chunks?: number; error?: string;
+              };
               setFiles((prev) =>
-                prev.map((f) => (f.id === id ? { ...f, status: "ready", pages: data.pages, chunks: data.chunks } : f)),
+                prev.map((f) =>
+                  f.id === id
+                    ? {
+                        ...f,
+                        progress: j.progress,
+                        pages: j.page_count ?? f.pages,
+                        chunks: j.chunks ?? f.chunks,
+                        status: j.status === "ready" ? "ready" : j.status === "error" ? "error" : "processing",
+                        error: j.error ?? undefined,
+                      }
+                    : f,
+                ),
               );
-              onToast?.(`「${file.name}」を索引化しました`, "success");
-            }, 500);
+              if (j.status === "ready") {
+                clearTimers(id);
+                onToast?.(`「${file.name}」を索引化しました`, "success");
+              }
+              if (j.status === "error") {
+                clearTimers(id);
+                onToast?.(j.error || "索引化に失敗しました", "error");
+              }
+            }, 1000);
+            timers.current[id] = [poll];
           })
           .catch(() => {
             clearTimers(id);
