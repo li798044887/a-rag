@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ARag — Agentic RAG
 
-## Getting Started
+社内ナレッジ（議事録・Wiki・Slack・DB）を横断するエージェント型 RAG アシスタントの
+Next.js 実装。Claude Design で設計された HTML/CSS/JS プロトタイプを、保守性・再利用性・
+拡張性を備えた最新の Next.js（App Router）+ Tailwind v4 のコンポーネント体系として再構築したもの。
 
-First, run the development server:
+## 技術スタック
+
+- **Next.js 16** (App Router, Turbopack) / **React 19**
+- **TypeScript** (strict)
+- **Tailwind CSS v4**（CSS-first `@theme`、`.theme-dark` カスタムバリアント、デザイントークン）
+- **next/font**（Plus Jakarta Sans + JetBrains Mono）
+- **jose** — JWT 認証（HS256, httpOnly cookie, `proxy.ts` でルート保護）
+- **AI SDK (`ai` + `@ai-sdk/anthropic`)** — 回答生成のストリーミング
+
+## 起動
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm dev      # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ログイン画面で任意の認証情報を入力（デモ）すると JWT が発行されます。`.env.local` は任意：
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cp .env.example .env.local
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 変数 | 役割 |
+|---|---|
+| `ARAG_JWT_SECRET` | JWT 署名鍵（本番では必須）。未設定時は開発用の固定値。 |
+| `ANTHROPIC_API_KEY` | 設定すると `summarize` ステップが Claude で実回答を生成。未設定時はキュレート済みのサンプル回答をストリーミング再生。 |
 
-## Learn More
+## アーキテクチャ
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+  app/
+    layout.tsx              フォント・メタdata・テーマbootstrap
+    page.tsx                <Workspace /> をマウント
+    globals.css             Tailwind v4 デザインシステム（トークン/テーマ/keyframe）
+    api/
+      auth/{login,logout,me} JWT 発行・破棄・セッション確認
+      chat/route.ts          エージェント実行を SSE でストリーム
+      upload/route.ts        マルチパートアップロード → チャンクメタ
+  proxy.ts                  保護APIのルートレベル認証（旧 middleware）
+  components/
+    auth/ chat/ sidebar/ sources/ modals/ uploads/ tweaks/ feedback/ workspace/
+    icons.tsx               型付きラインアイコンライブラリ
+  hooks/                    use-auth / use-agent / use-uploads / use-tweaks /
+                            use-toasts / use-media-query
+  lib/
+    types.ts data.ts constants.ts utils.ts file-types.ts auth.ts
+    agent/{run,retriever,steps}.ts   サーバ側オーケストレーション + 取得層
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### エージェントの流れ
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+クライアント（`use-agent`）が `/api/chat` を叩き、サーバ（`lib/agent/run.ts`）が
+`rewrite_query → vector_search → bm25_search → rerank → fetch_document → summarize`
+を順に実行。各ステップと回答トークンを SSE で配信し、UI はツール実行カード＋
+タイプライタ回答＋引用ハイライトとして再構成します。
 
-## Deploy on Vercel
+取得層（`lib/agent/retriever.ts`）はシード資料に対する語彙オーバーラップ検索の
+**差し替え可能なインターフェース**で、本番では pgvector / Qdrant 等に置き換えられます。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## スクリプト
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm dev          開発サーバ
+pnpm build        本番ビルド
+pnpm start        本番起動
+pnpm lint         ESLint
+```

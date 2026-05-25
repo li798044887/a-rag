@@ -1,26 +1,232 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ── Class-based dark mode (the workspace toggles `.theme-dark` on root) ── */
+@custom-variant dark (&:where(.theme-dark, .theme-dark *));
 
+/* ── Design tokens exposed to Tailwind utilities ──────────────────────────
+   Semantic colors map to runtime CSS variables that the theme classes swap.
+   This lets utilities like `bg-surface`, `text-muted`, `border-divider`,
+   `bg-accent` automatically follow the active theme + the user-picked accent. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-jakarta), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* The shell switches column layout at these widths (tablet → overlay drawer,
+     wide → full 3-column). `tablet:` ≥769px, `wide:` ≥1181px. */
+  --breakpoint-tablet: 769px;
+  --breakpoint-wide: 1181px;
+
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-elev: var(--surface-elev);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-muted-2: var(--muted-2);
+  --color-divider: var(--divider);
+  --color-divider-strong: var(--divider-strong);
+  --color-bubble-user: var(--bubble-user);
+  --color-code-bg: var(--code-bg);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-glow: var(--accent-glow);
+
+  --shadow-e1: var(--shadow-1);
+  --shadow-e2: var(--shadow-2);
+  --shadow-e3: var(--shadow-3);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ── Theme palettes ─────────────────────────────────────────────────────── */
+.theme-light {
+  --bg: #faf8f3;
+  --bg-2: #f4f1ea;
+  --surface: #ffffff;
+  --surface-2: #fbf9f4;
+  --surface-elev: #ffffff;
+  --fg: #1f1b16;
+  --fg-2: #2e2a23;
+  --muted: #7a736b;
+  --muted-2: #9a938b;
+  --divider: rgba(31, 27, 22, 0.08);
+  --divider-strong: rgba(31, 27, 22, 0.14);
+  --bubble-user: #efeae0;
+  --code-bg: #f1ecdf;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.07);
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, 0.12);
+}
+
+.theme-dark {
+  --bg: #16151a;
+  --bg-2: #1b1a20;
+  --surface: #1f1e24;
+  --surface-2: #25232b;
+  --surface-elev: #2a2832;
+  --fg: #eeeae0;
+  --fg-2: #dad5c9;
+  --muted: #8e8a85;
+  --muted-2: #5e5b57;
+  --divider: rgba(255, 255, 255, 0.07);
+  --divider-strong: rgba(255, 255, 255, 0.13);
+  --bubble-user: #2c2a33;
+  --code-bg: #15141a;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Accent is user-selectable; default = sage. Soft/glow derived via color-mix
+   so a single --accent change updates every tinted surface. */
+:root {
+  --accent: #3fa77e;
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 25%, transparent);
+  /* Secondary decorative glow for the login backdrop (set per-accent at runtime). */
+  --accent-alt-glow: color-mix(in srgb, #d97757 30%, transparent);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    height: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    color: var(--fg);
+    background: var(--bg);
+  }
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+  }
+  /* Custom scrollbars matching the surface */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--divider-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--divider-strong);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-2);
+    background-clip: content-box;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ── Keyframes (referenced via animate-* utilities below) ───────────────── */
+@keyframes ar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ar-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes ar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes ar-hl-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes ar-toast-in {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes ar-fade-up {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes ar-scale-in {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes ar-pop-in {
+  from {
+    transform: translateY(6px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@theme {
+  --animate-spin-fast: ar-spin 0.7s linear infinite;
+  --animate-blink: ar-blink 1s step-end infinite;
+  --animate-soft-pulse: ar-pulse 1.4s ease-in-out infinite;
+  --animate-hl-pulse: ar-hl-pulse 1.6s ease-out;
+  --animate-toast-in: ar-toast-in 0.24s cubic-bezier(0.3, 0.7, 0.4, 1);
+  --animate-fade-up: ar-fade-up 0.3s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+  --animate-scale-in: ar-scale-in 0.18s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+  --animate-pop-in: ar-pop-in 0.16s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+
+/* Utility: tabular numerals for metrics/timers */
+@utility nums {
+  font-variant-numeric: tabular-nums;
 }
