@@ -166,5 +166,7 @@ export type AgentEvent =
       durationMs: number;
       citationMap: CitationMap;
       sourceIds: string[];
+      sources: Source[];
+      threadId: string;
     }
   | { type: "error"; message: string };

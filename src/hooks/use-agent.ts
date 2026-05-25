@@ -2,8 +2,9 @@
 
 import { useCallback, useRef, useState } from "react";
 import { buildInitialSteps } from "@/lib/agent/steps";
-import { CITATION_MAP, SAMPLE_SOURCES } from "@/lib/data";
-import type { AgentEvent, CitationMap, CompletedThread, ToolCall } from "@/lib/types";
+import type {
+  AgentEvent, CitationMap, CompletedThread, Source, ToolCall,
+} from "@/lib/types";
 
 interface AgentState {
   steps: ToolCall[];
@@ -11,6 +12,8 @@ interface AgentState {
   streaming: boolean; // answer tokens currently arriving
   citationMap: CitationMap;
   sourceIds: string[];
+  sources: Source[];
+  threadId: string;
   tokens: number;
   durationMs: number;
 }
@@ -19,10 +22,12 @@ const EMPTY: AgentState = {
   steps: [],
   answer: "",
   streaming: false,
-  citationMap: CITATION_MAP,
-  sourceIds: SAMPLE_SOURCES.map((s) => s.id),
-  tokens: 428,
-  durationMs: 2624,
+  citationMap: {},
+  sourceIds: [],
+  sources: [],
+  threadId: "",
+  tokens: 0,
+  durationMs: 0,
 };
 
 /** Drives a live agent run over the /api/chat SSE stream and exposes the
@@ -36,23 +41,36 @@ export function useAgent() {
     setState(EMPTY);
   }, []);
 
-  /** Load a finished, pre-baked conversation snapshot (no network). */
-  const loadCompleted = useCallback((thread: CompletedThread) => {
+  /** Load a finished conversation snapshot from the API. */
+  const loadCompleted = useCallback((detail: {
+    completed: CompletedThread;
+    sources: Source[];
+    citationMap: CitationMap;
+    steps: ToolCall[];
+  }) => {
     abortRef.current?.abort();
     setState({
-      steps: buildInitialSteps(thread.query).map((s) => ({ ...s, status: "done" })),
-      answer: thread.answerText,
+      steps: detail.steps.length
+        ? detail.steps.map((s) => ({ ...s, status: "done" as const }))
+        : buildInitialSteps(detail.completed.query).map((s) => ({ ...s, status: "done" as const })),
+      answer: detail.completed.answerText,
       streaming: false,
-      citationMap: CITATION_MAP,
-      sourceIds: SAMPLE_SOURCES.map((s) => s.id),
-      tokens: thread.tokens,
-      durationMs: thread.durationMs,
+      citationMap: detail.citationMap,
+      sourceIds: detail.sources.map((s) => s.id),
+      sources: detail.sources,
+      threadId: "",
+      tokens: detail.completed.tokens,
+      durationMs: detail.completed.durationMs,
     });
   }, []);
 
   /** Start a live run. Resolves to "done" | "cancelled" | "error". */
   const run = useCallback(
-    async (query: string, attachments: string[] = []): Promise<"done" | "cancelled" | "error"> => {
+    async (
+      query: string,
+      attachments: string[] = [],
+      threadId?: string,
+    ): Promise<"done" | "cancelled" | "error"> => {
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
@@ -63,7 +81,7 @@ export function useAgent() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, attachments }),
+          body: JSON.stringify({ query, attachments, threadId }),
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) return "error";
@@ -132,6 +150,8 @@ function applyEvent(
         streaming: false,
         citationMap: event.citationMap,
         sourceIds: event.sourceIds,
+        sources: event.sources,
+        threadId: event.threadId,
         tokens: event.tokens,
         durationMs: event.durationMs,
         // Flip the summarize step to done.
