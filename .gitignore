@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# rag (python)
+rag/.venv/
+rag/__pycache__/
+**/__pycache__/
+*.pyc
+.env
