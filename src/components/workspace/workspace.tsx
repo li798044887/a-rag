@@ -28,7 +28,7 @@ type Phase = "empty" | "running" | "done" | "cancelled";
 
 export function Workspace() {
   const { tweaks, setTweak } = useTweaks();
-  const { user, status, signIn, signOut } = useAuth();
+  const { user, status, signIn, register, signOut } = useAuth();
   const { toasts, push, dismiss } = useToasts();
   const uploads = useUploads(push);
   const agent = useAgent();
@@ -298,7 +298,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
   if (status === "guest" || !user) {
     return (
       <div className="h-dvh">
-        <Login onSignIn={signIn} />
+        <Login onSignIn={signIn} onRegister={register} />
         <ToastViewport toasts={toasts} onDismiss={dismiss} />
       </div>
     );

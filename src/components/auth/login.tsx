@@ -6,12 +6,14 @@ type Mode = "signin" | "signup" | "reset";
 
 interface LoginProps {
   onSignIn: (input: { email: string; remember: boolean }) => Promise<void> | void;
+  onRegister: (input: { email: string; password: string; name: string }) => Promise<void> | void;
 }
 
-export function Login({ onSignIn }: LoginProps) {
+export function Login({ onSignIn, onRegister }: LoginProps) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("hiroshi.tanaka@arag.dev");
   const [password, setPassword] = useState("••••••••••");
+  const [name, setName] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -24,13 +26,19 @@ export function Login({ onSignIn }: LoginProps) {
     try {
       if (mode === "signin") {
         await onSignIn({ email, remember });
+      } else if (mode === "signup") {
+        await onRegister({ email, password, name });
       } else {
-        // Simulated signup/reset round-trip → back to sign-in.
+        // reset mode — simulated round-trip → back to sign-in
         await new Promise((r) => setTimeout(r, 700));
         setMode("signin");
       }
     } catch {
-      setError("サインインに失敗しました。もう一度お試しください。");
+      setError(
+        mode === "signup"
+          ? "登録に失敗しました。もう一度お試しください。"
+          : "サインインに失敗しました。もう一度お試しください。",
+      );
     } finally {
       setBusy(false);
     }
@@ -106,6 +114,21 @@ export function Login({ onSignIn }: LoginProps) {
               className={fieldCls}
             />
           </label>
+
+          {mode === "signup" && (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-fg-2">氏名</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="山田 太郎"
+                autoComplete="name"
+                required
+                className={fieldCls}
+              />
+            </label>
+          )}
 
           {mode !== "reset" && (
             <label className="flex flex-col gap-1.5">

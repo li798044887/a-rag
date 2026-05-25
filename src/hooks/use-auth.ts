@@ -41,11 +41,23 @@ export function useAuth() {
     setStatus("authed");
   }, []);
 
+  const register = useCallback(async (input: { email: string; password: string; name: string }) => {
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error("register failed");
+    const data = (await res.json()) as { user: AppUser };
+    setUser(data.user);
+    setStatus("authed");
+  }, []);
+
   const signOut = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     setUser(null);
     setStatus("guest");
   }, []);
 
-  return { user, status, signIn, signOut };
+  return { user, status, signIn, register, signOut };
 }
