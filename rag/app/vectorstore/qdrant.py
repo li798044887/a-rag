@@ -46,5 +46,29 @@ class QdrantStore:
     def count(self) -> int:
         return self.client.count(self.collection).count
 
+    def hybrid_search(self, query_vec, owner_user_id: str, limit: int = 40) -> list[dict]:
+        flt = models.Filter(must=[models.FieldCondition(
+            key="owner_user_id", match=models.MatchValue(value=owner_user_id))])
+        res = self.client.query_points(
+            self.collection,
+            prefetch=[
+                models.Prefetch(query=query_vec.dense, using=DENSE, limit=limit, filter=flt),
+                models.Prefetch(
+                    query=models.SparseVector(
+                        indices=list(query_vec.sparse.keys()),
+                        values=list(query_vec.sparse.values())),
+                    using=SPARSE, limit=limit, filter=flt),
+            ],
+            query=models.FusionQuery(fusion=models.Fusion.RRF),
+            limit=limit,
+            with_payload=True,
+        )
+        out = []
+        for p in res.points:
+            payload = dict(p.payload or {})
+            payload["score"] = p.score
+            out.append(payload)
+        return out
+
     def drop(self) -> None:
         self.client.delete_collection(self.collection)
