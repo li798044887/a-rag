@@ -335,7 +335,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
         user={user}
       />
 
-      <main className="grid min-h-0 min-w-0 grid-rows-[auto_1fr] overflow-hidden bg-bg">
+      <main className="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr] overflow-hidden bg-bg">
         {/* Header */}
         <header className="sticky top-0 z-[5] flex h-[52px] items-center gap-2 border-b-[0.5px] border-divider bg-bg px-[18px] max-md:gap-1 max-md:px-2.5">
           <button
@@ -419,7 +419,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
         </header>
 
         {/* Body */}
-        <div className="grid min-h-0 min-w-0 grid-rows-[1fr_auto] overflow-hidden">
+        <div className="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[1fr_auto] overflow-hidden">
           <div ref={scrollRef} onScroll={onChatScroll} className="overflow-y-auto overflow-x-hidden scroll-smooth">
             {phase === "empty" ? (
               <EmptyState user={user} onPickPrompt={startRun} />
