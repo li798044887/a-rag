@@ -19,17 +19,18 @@ export interface AragClaims extends JWTPayload {
 
 /** Issue a 24h access token for the given user. */
 export async function signAccessToken(input: {
+  id: string;
   email: string;
+  org: string;
 }): Promise<string> {
-  const sub = "u_" + input.email.split("@")[0].replace(/[^a-z0-9]/gi, "_").toLowerCase();
   return new SignJWT({
     email: input.email,
-    org: "ARag, Inc.",
+    org: input.org,
     role: "member",
     scopes: ["read:kb", "chat", "tools:python"],
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setSubject(sub)
+    .setSubject(input.id)
     .setIssuedAt()
     .setIssuer(ISSUER)
     .setAudience(AUDIENCE)
