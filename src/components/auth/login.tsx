@@ -11,7 +11,7 @@ interface LoginProps {
 
 export function Login({ onSignIn, onRegister }: LoginProps) {
   const [mode, setMode] = useState<Mode>("signin");
-  const [email, setEmail] = useState("hiroshi.tanaka@arag.dev");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [remember, setRemember] = useState(true);

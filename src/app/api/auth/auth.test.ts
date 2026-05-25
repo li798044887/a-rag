@@ -9,6 +9,7 @@ vi.mock("next/headers", () => ({
     Promise.resolve({
       get: (name: string) => (cookieStore.has(name) ? { value: cookieStore.get(name) } : undefined),
       set: (name: string, value: string) => cookieStore.set(name, value),
+      delete: (name: string) => cookieStore.delete(name),
     }),
   ),
 }));

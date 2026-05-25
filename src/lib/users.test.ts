@@ -25,4 +25,6 @@ test("toAppUser derives initials and firstName", async () => {
   const app = toAppUser(found!);
   expect(app.email).toBe(email);
   expect(app.name).toBe("山田 太郎");
+  expect(app.initials).toBe("山太");
+  expect(app.firstName).toBe("太郎");
 });
