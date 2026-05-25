@@ -41,6 +41,7 @@ services:
 
   rag-worker:
     build: ./rag
+    profiles: ["worker"]
     command: ["arq", "app.worker.WorkerSettings"]
     environment:
       DATABASE_URL: postgresql+psycopg://arag:arag@postgres:5432/arag

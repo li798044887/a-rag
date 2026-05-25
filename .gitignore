@@ -46,4 +46,3 @@ rag/.venv/
 rag/__pycache__/
 **/__pycache__/
 *.pyc
-.env
