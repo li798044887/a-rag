@@ -28,6 +28,8 @@ test("runAgent yields steps, streams answer, and finishes with sources+citationM
   expect(answer).toContain("失効");
 
   const done = events.find((e) => e.type === "done");
+  expect(done).toBeDefined();
+  if (!done || done.type !== "done") throw new Error("done event missing");
   expect(done.threadId).toBe("t1");
   expect(done.sources[0].id).toBe("d1");
   expect(done.sources[0].sections[0].id).toBe("c1");

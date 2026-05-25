@@ -14,7 +14,7 @@ import { ShareModal } from "@/components/modals/share-modal";
 import { RightPanel, type RightPanelAction } from "@/components/sources/right-panel";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { DropOverlay, UserAttachments } from "@/components/uploads/uploads";
-import { COMPLETED_THREADS, MODELS, SAMPLE_SOURCES, SAMPLE_THREADS, SCOPE_PRESETS } from "@/lib/data";
+import { MODELS, SCOPE_PRESETS } from "@/lib/data";
 import { useAgent } from "@/hooks/use-agent";
 import { useAuth } from "@/hooks/use-auth";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -22,7 +22,7 @@ import { useToasts } from "@/hooks/use-toasts";
 import { useTweaks } from "@/hooks/use-tweaks";
 import { useUploads } from "@/hooks/use-uploads";
 import { cn } from "@/lib/utils";
-import type { ModelOption, ScopeValue, Source } from "@/lib/types";
+import type { ModelOption, ScopeValue, Source, ThreadSummary } from "@/lib/types";
 
 type Phase = "empty" | "running" | "done" | "cancelled";
 
@@ -53,6 +53,24 @@ export function Workspace() {
   const [userAttachments, setUserAttachments] = useState<typeof uploads.files>([]);
   const [scope, setScope] = useState<ScopeValue>(SCOPE_PRESETS[0]);
   const [shareTarget, setShareTarget] = useState<{ item: Source | null } | null>(null);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+
+  const refreshThreads = useCallback(() => {
+    fetch("/api/threads")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { threads: ThreadSummary[] } | null) => { if (data) setThreads(data.threads); })
+      .catch(() => {});
+  }, []);
+
+  // 認証済みになったらスレッド一覧を取得
+  useEffect(() => {
+    if (status === "authed") {
+      fetch("/api/threads")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { threads: ThreadSummary[] } | null) => { if (data) setThreads(data.threads); })
+        .catch(() => {});
+    }
+  }, [status]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolled = useRef(false);
@@ -107,15 +125,22 @@ export function Workspace() {
       userScrolled.current = false;
       uploads.clear();
 
-      const result = await agent.run(finalQuery, ready.map((f) => f.name));
-      if (result === "done") setPhase("done");
-      else if (result === "cancelled") setPhase("cancelled");
+      const result = await agent.run(
+        finalQuery,
+        ready.map((f) => f.name),
+        activeThreadId !== "th-current" ? activeThreadId : undefined,
+      );
+      if (result === "done") {
+        setPhase("done");
+        // 新規スレッドID を反映し一覧を再取得
+        refreshThreads();
+      } else if (result === "cancelled") setPhase("cancelled");
       else {
         push("実行に失敗しました", "error");
         setPhase("cancelled");
       }
     },
-    [agent, uploads, push],
+    [agent, uploads, push, activeThreadId, refreshThreads],
   );
 
   const stopRun = () => {
@@ -125,7 +150,7 @@ export function Workspace() {
   };
 
   const regenerate = () => {
-    const q = userQuery || COMPLETED_THREADS[activeThreadId]?.query;
+    const q = userQuery;
     if (q) {
       startRun(q);
       push("回答を再生成しています", "info");
@@ -175,15 +200,20 @@ export function Workspace() {
       if (userQuery) setPhase(phase === "cancelled" ? "cancelled" : "done");
       else setPhase("empty");
     } else {
-      const ct = COMPLETED_THREADS[id];
-      if (ct) {
-        setUserQuery(ct.query);
-        setUserAttachments([]);
-        agent.loadCompleted(ct);
-        setPhase("done");
-      } else {
-        setPhase("empty");
-      }
+      // APIからスレッド詳細を取得して履歴を復元
+      fetch(`/api/threads/${id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((detail) => {
+          if (detail) {
+            setUserQuery(detail.completed.query || "");
+            setUserAttachments([]);
+            agent.loadCompleted(detail);
+            setPhase("done");
+          } else {
+            setPhase("empty");
+          }
+        })
+        .catch(() => setPhase("empty"));
     }
   };
 
@@ -219,7 +249,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
       push("エクスポートするスレッドがありません", "info");
       return;
     }
-    const md = `# ${userQuery}\n\n${agent.answer}\n\n---\n\n## 参考資料\n${SAMPLE_SOURCES.map((s, i) => `[${i + 1}] ${s.title} (${s.path})`).join("\n")}\n`;
+    const md = `# ${userQuery}\n\n${agent.answer}\n\n---\n\n## 参考資料\n${agent.sources.map((s, i) => `[${i + 1}] ${s.title} (${s.path})`).join("\n")}\n`;
     triggerDownload(new Blob([md], { type: "text/markdown" }), `arag-thread-${activeThreadId}.md`);
     push("スレッドをMarkdownでエクスポートしました", "success");
   };
@@ -304,7 +334,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
     );
   }
 
-  const threads = SAMPLE_THREADS.map((t) => ({ ...t, active: t.id === activeThreadId }));
+  const threadList = threads.map((t) => ({ ...t, active: t.id === activeThreadId }));
   const backdropVisible = isWide ? false : isMobile ? !sidebarCollapsed || rightPanelShown : rightPanelShown;
 
   return (
@@ -323,7 +353,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((c) => !c)}
-        threads={threads}
+        threads={threadList}
         activeThreadId={activeThreadId}
         onSelectThread={selectThread}
         onNewChat={newChat}
@@ -353,7 +383,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
             ) : (
               <>
                 <span className="truncate">{userQuery.slice(0, 56) || "スレッド"}</span>
-                <span className="font-normal text-[12px] text-muted max-md:hidden">·  {SAMPLE_SOURCES.length} sources</span>
+                <span className="font-normal text-[12px] text-muted max-md:hidden">·  {agent.sources.length} sources</span>
                 {phase === "cancelled" && (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-[#FDEFEA] px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[#B83A1F] dark:bg-[rgba(184,58,31,0.18)]">
                     キャンセル済
@@ -393,7 +423,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                       <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
                       <path d="M10 3v10" stroke="currentColor" strokeWidth="1.4" />
                     </svg>
-                    一次資料 ({SAMPLE_SOURCES.length})
+                    一次資料 ({agent.sources.length})
                   </button>
                 )}
               </>
@@ -455,7 +485,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                     <AnswerFooter
                       tokens={agent.tokens}
                       durationMs={agent.durationMs}
-                      sources={SAMPLE_SOURCES}
+                      sources={agent.sources}
                       onCopy={copyAnswer}
                       onRegenerate={regenerate}
                       onFeedback={(v) => {
@@ -492,7 +522,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
 
       {rightPanelShown && (
         <RightPanel
-          sources={SAMPLE_SOURCES}
+          sources={agent.sources}
           citationMap={agent.citationMap}
           activeSourceId={activeSourceId}
           highlightSectionId={highlightSectionId}
