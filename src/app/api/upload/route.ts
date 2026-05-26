@@ -17,6 +17,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "file required" }, { status: 400 });
   }
 
+  const MAX_BYTES = 50 * 1024 * 1024; // 50MB
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json({ error: "ファイルサイズが上限(50MB)を超えています" }, { status: 413 });
+  }
+
   const fwd = new FormData();
   fwd.append("file", file);
   fwd.append("owner_user_id", claims.sub);

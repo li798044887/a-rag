@@ -1,4 +1,5 @@
 from qdrant_client import QdrantClient, models
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import settings
 from app.embedding.base import DenseSparse
@@ -11,8 +12,9 @@ class QdrantStore:
     def __init__(self, collection: str = "arag_chunks", dim: int = 1024):
         self.collection = collection
         self.dim = dim
-        self.client = QdrantClient(url=settings.qdrant_url)
+        self.client = QdrantClient(url=settings.qdrant_url, timeout=30)
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=0.5, max=4))
     def ensure_collection(self) -> None:
         if self.client.collection_exists(self.collection):
             return
@@ -46,6 +48,7 @@ class QdrantStore:
     def count(self) -> int:
         return self.client.count(self.collection).count
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=0.5, max=4))
     def hybrid_search(self, query_vec: DenseSparse, owner_user_id: str, limit: int = 40) -> list[dict]:
         if not self.client.collection_exists(self.collection):
             return []
