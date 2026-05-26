@@ -58,10 +58,15 @@ export async function POST(req: Request) {
               snippet: sec?.body ?? "",
             };
           });
-          await saveCompletedMessage({
-            threadId: tid, query: q, answerText: answer,
-            tokens: done.tokens, durationMs: done.durationMs, steps, citations: cites,
-          });
+          // 永続化の失敗は done 送出後なのでクライアントへ error を送らずログのみ。
+          try {
+            await saveCompletedMessage({
+              threadId: tid, query: q, answerText: answer,
+              tokens: done.tokens, durationMs: done.durationMs, steps, citations: cites,
+            });
+          } catch (err) {
+            console.error("[chat] persistence failed", err);
+          }
         }
       } catch (err) {
         send({ type: "error", message: err instanceof Error ? err.message : "error" });

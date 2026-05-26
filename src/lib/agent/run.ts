@@ -92,9 +92,18 @@ export async function* runAgent({ query, ownerUserId, threadId }: RunInput): Asy
         "重要な事実には必ず [1] [2] のように出典番号を付け、Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。",
       prompt: `一次資料:\n${context}\n\n質問: ${query}`,
     });
-    for await (const delta of result.textStream) {
-      answer += delta;
-      yield { type: "answer-delta", text: delta };
+    try {
+      for await (const delta of result.textStream) {
+        answer += delta;
+        yield { type: "answer-delta", text: delta };
+      }
+    } catch {
+      // 生成が途中で失敗しても summarize 完了と done イベントへ合流させる。
+      // 既に一部ストリーム済みなら二重表示を避け、未出力時のみ案内を出す。
+      if (!answer) {
+        answer = "回答の生成に失敗しました。時間をおいて再度お試しください。";
+        yield { type: "answer-delta", text: answer };
+      }
     }
   }
 

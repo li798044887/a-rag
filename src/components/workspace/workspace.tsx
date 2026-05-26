@@ -64,13 +64,8 @@ export function Workspace() {
 
   // 認証済みになったらスレッド一覧を取得
   useEffect(() => {
-    if (status === "authed") {
-      fetch("/api/threads")
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data: { threads: ThreadSummary[] } | null) => { if (data) setThreads(data.threads); })
-        .catch(() => {});
-    }
-  }, [status]);
+    if (status === "authed") refreshThreads();
+  }, [status, refreshThreads]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolled = useRef(false);
@@ -212,10 +207,14 @@ export function Workspace() {
             agent.loadCompleted(detail);
             setPhase("done");
           } else {
+            setActiveThreadId("th-current");
             setPhase("empty");
           }
         })
-        .catch(() => setPhase("empty"));
+        .catch(() => {
+          setActiveThreadId("th-current");
+          setPhase("empty");
+        });
     }
   };
 
