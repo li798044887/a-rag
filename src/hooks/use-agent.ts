@@ -6,81 +6,140 @@ import type {
   AgentEvent, CitationMap, CompletedThread, Source, ToolCall,
 } from "@/lib/types";
 
-interface AgentState {
+export type ConvStatus = "running" | "done" | "cancelled" | "error";
+
+/** 1 会話分の状態。スレッドを跨いで並行に保持できるよう threadId をキーにマップで持つ。 */
+export interface ConvState {
+  query: string;
   steps: ToolCall[];
   answer: string;
   streaming: boolean; // answer tokens currently arriving
   citationMap: CitationMap;
   sourceIds: string[];
   sources: Source[];
-  threadId: string;
   tokens: number;
   durationMs: number;
+  status: ConvStatus;
+  attachments: string[];
 }
 
-const EMPTY: AgentState = {
-  steps: [],
-  answer: "",
-  streaming: false,
-  citationMap: {},
-  sourceIds: [],
-  sources: [],
-  threadId: "",
-  tokens: 0,
-  durationMs: 0,
-};
+/** 実 threadId が判明する前（理論上ごく短時間）に使うフォールバックキー。
+ *  実際には /api/chat の X-Thread-Id ヘッダで即座に実 id が分かるためほぼ使われない。 */
+export const LIVE_KEY = "th-current";
 
-/** Drives a live agent run over the /api/chat SSE stream and exposes the
- * reconstructed step list + streamed answer. Also loads pre-baked threads. */
+function emptyConv(query: string, attachments: string[]): ConvState {
+  return {
+    query, steps: [], answer: "", streaming: false, citationMap: {},
+    sourceIds: [], sources: [], tokens: 0, durationMs: 0,
+    status: "running", attachments,
+  };
+}
+
+function reduceConv(c: ConvState, event: AgentEvent): ConvState {
+  switch (event.type) {
+    case "step": {
+      // 既知ステップは更新、未知ステップ（初出の running）は末尾に追加 = 逐次表示。
+      const exists = c.steps.some((s) => s.id === event.step.id);
+      return {
+        ...c,
+        steps: exists
+          ? c.steps.map((s) => (s.id === event.step.id ? { ...s, ...event.step } : s))
+          : [...c.steps, event.step],
+      };
+    }
+    case "answer-start":
+      return { ...c, streaming: true, answer: "" };
+    case "answer-delta":
+      return { ...c, answer: c.answer + event.text };
+    case "done":
+      return {
+        ...c,
+        streaming: false,
+        citationMap: event.citationMap,
+        sourceIds: event.sourceIds,
+        sources: event.sources,
+        tokens: event.tokens,
+        durationMs: event.durationMs,
+        status: "done",
+        steps: c.steps.map((s, i) =>
+          i === c.steps.length - 1 ? { ...s, status: "done", summary: `回答を生成 (${event.tokens} tokens)` } : s,
+        ),
+      };
+    case "error":
+      return { ...c, streaming: false, status: "error" };
+    default:
+      return c;
+  }
+}
+
+/** Drives agent runs over the /api/chat SSE stream, keyed by threadId.
+ *
+ * 各 run は自分の threadId スロットへ書き込み、他スレッドを表示しても中断されない
+ * （実行中の会話は裏で継続し、いつでも戻れる）。表示は workspace が
+ * activeThreadId に対応するスロットを get して描画する。 */
 export function useAgent() {
-  const [state, setState] = useState<AgentState>(EMPTY);
-  const abortRef = useRef<AbortController | null>(null);
+  const [convs, setConvs] = useState<Record<string, ConvState>>({});
+  const controllers = useRef<Record<string, AbortController>>({});
 
-  const reset = useCallback(() => {
-    abortRef.current?.abort();
-    setState(EMPTY);
-  }, []);
+  const get = useCallback((id: string): ConvState | undefined => convs[id], [convs]);
 
-  /** Load a finished conversation snapshot from the API. */
-  const loadCompleted = useCallback((detail: {
+  /** Load a finished conversation snapshot into its slot (live runs は触らない)。 */
+  const loadCompleted = useCallback((id: string, detail: {
     completed: CompletedThread;
     sources: Source[];
     citationMap: CitationMap;
     steps: ToolCall[];
   }) => {
-    abortRef.current?.abort();
-    setState({
-      steps: detail.steps.length
-        ? detail.steps.map((s) => ({ ...s, status: "done" as const }))
-        : buildInitialSteps(detail.completed.query).map((s) => ({ ...s, status: "done" as const })),
-      answer: detail.completed.answerText,
-      streaming: false,
-      citationMap: detail.citationMap,
-      sourceIds: detail.sources.map((s) => s.id),
-      sources: detail.sources,
-      threadId: "",
-      tokens: detail.completed.tokens,
-      durationMs: detail.completed.durationMs,
-    });
+    setConvs((prev) => ({
+      ...prev,
+      [id]: {
+        query: detail.completed.query,
+        steps: detail.steps.length
+          ? detail.steps.map((s) => ({ ...s, status: "done" as const }))
+          : buildInitialSteps(detail.completed.query).map((s) => ({ ...s, status: "done" as const })),
+        answer: detail.completed.answerText,
+        streaming: false,
+        citationMap: detail.citationMap,
+        sourceIds: detail.sources.map((s) => s.id),
+        sources: detail.sources,
+        tokens: detail.completed.tokens,
+        durationMs: detail.completed.durationMs,
+        status: "done",
+        attachments: [],
+      },
+    }));
   }, []);
 
-  /** Start a live run. Resolves to a status plus the resolved threadId
-   * (captured from the `done` event — avoids reading stale hook state). */
+  /** Start a live run. 実 threadId は X-Thread-Id ヘッダから取得し、その時点で
+   *  onThread を呼ぶ（workspace がサイドバー登録 / アクティブ化に使う）。
+   *  実行中も他スレッド表示で中断されない。 */
   const run = useCallback(
     async (
       query: string,
-      attachments: string[] = [],
-      threadId?: string,
-      modelId?: string,
-    ): Promise<{ status: "done" | "cancelled" | "error"; threadId?: string }> => {
-      abortRef.current?.abort();
+      attachments: string[],
+      threadId: string | undefined,
+      modelId: string | undefined,
+      cb: { onThread?: (id: string) => void; onDone?: (id: string, status: ConvStatus) => void } = {},
+    ): Promise<{ status: ConvStatus; threadId: string }> => {
       const ctrl = new AbortController();
-      abortRef.current = ctrl;
+      let key = threadId ?? LIVE_KEY;
+      // 既存スレッドへの追記時のみ、その id で仮スロットを用意（onThread までの空白を防ぐ）。
+      if (threadId) {
+        controllers.current[key] = ctrl;
+        setConvs((prev) => ({ ...prev, [key]: emptyConv(query, attachments) }));
+      }
 
-      // 逐次表示: 送信直後は空。step イベント到着順にカードを追加する（skeleton 先出しはしない）。
-      setState({ ...EMPTY, answer: "", streaming: false });
+      const finish = (status: ConvStatus): { status: ConvStatus; threadId: string } => {
+        setConvs((prev) => {
+          const c = prev[key];
+          if (!c) return prev;
+          return { ...prev, [key]: { ...c, streaming: false, status: c.status === "running" ? status : c.status } };
+        });
+        delete controllers.current[key];
+        cb.onDone?.(key, status);
+        return { status, threadId: key };
+      };
 
-      let doneThreadId: string | undefined;
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -88,12 +147,24 @@ export function useAgent() {
           body: JSON.stringify({ query, attachments, threadId, model: modelId }),
           signal: ctrl.signal,
         });
-        if (!res.ok || !res.body) return { status: "error" };
+
+        // 実 threadId を確定し、スロット・コントローラをそのキーへ確定する。
+        const realId = res.headers.get("X-Thread-Id") || key;
+        if (realId !== key) {
+          controllers.current[realId] = ctrl;
+          delete controllers.current[key];
+          key = realId;
+        } else if (!controllers.current[key]) {
+          controllers.current[key] = ctrl;
+        }
+        setConvs((prev) => ({ ...prev, [key]: prev[key] ?? emptyConv(query, attachments) }));
+        cb.onThread?.(key);
+
+        if (!res.ok || !res.body) return finish("error");
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
-
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -104,75 +175,45 @@ export function useAgent() {
             const line = frame.trim();
             if (!line.startsWith("data:")) continue;
             const event = JSON.parse(line.slice(5).trim()) as AgentEvent;
-            if (event.type === "done") doneThreadId = event.threadId;
-            applyEvent(setState, event);
+            setConvs((prev) => (prev[key] ? { ...prev, [key]: reduceConv(prev[key], event) } : prev));
           }
         }
-        return { status: "done", threadId: doneThreadId };
+        return finish("done");
       } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return { status: "cancelled" };
-        return { status: "error" };
+        if (err instanceof DOMException && err.name === "AbortError") return finish("cancelled");
+        return finish("error");
       }
     },
     [],
   );
 
-  /** Freeze the current run: mark in-flight steps cancelled. */
-  const cancel = useCallback(() => {
-    abortRef.current?.abort();
-    setState((prev) => ({
-      ...prev,
-      streaming: false,
-      steps: prev.steps.map((s) =>
-        s.status === "running" ? { ...s, status: "pending", summary: "キャンセルされました" } : s,
-      ),
-    }));
+  /** Cancel an in-flight run, marking its in-flight steps cancelled. */
+  const cancel = useCallback((id: string) => {
+    controllers.current[id]?.abort();
+    setConvs((prev) => {
+      const c = prev[id];
+      if (!c) return prev;
+      return {
+        ...prev,
+        [id]: {
+          ...c, streaming: false, status: "cancelled",
+          steps: c.steps.map((s) => (s.status === "running" ? { ...s, status: "pending", summary: "キャンセルされました" } : s)),
+        },
+      };
+    });
   }, []);
 
-  return { ...state, run, cancel, reset, loadCompleted };
-}
+  /** Drop a conversation slot (e.g. discard an empty/cancelled draft). */
+  const remove = useCallback((id: string) => {
+    controllers.current[id]?.abort();
+    delete controllers.current[id];
+    setConvs((prev) => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }, []);
 
-function applyEvent(
-  setState: React.Dispatch<React.SetStateAction<AgentState>>,
-  event: AgentEvent,
-) {
-  switch (event.type) {
-    case "step":
-      // 既知ステップは更新、未知ステップ（初出の running）は末尾に追加 = 逐次表示。
-      setState((prev) => {
-        const exists = prev.steps.some((s) => s.id === event.step.id);
-        return {
-          ...prev,
-          steps: exists
-            ? prev.steps.map((s) => (s.id === event.step.id ? { ...s, ...event.step } : s))
-            : [...prev.steps, event.step],
-        };
-      });
-      break;
-    case "answer-start":
-      setState((prev) => ({ ...prev, streaming: true, answer: "" }));
-      break;
-    case "answer-delta":
-      setState((prev) => ({ ...prev, answer: prev.answer + event.text }));
-      break;
-    case "done":
-      setState((prev) => ({
-        ...prev,
-        streaming: false,
-        citationMap: event.citationMap,
-        sourceIds: event.sourceIds,
-        sources: event.sources,
-        threadId: event.threadId,
-        tokens: event.tokens,
-        durationMs: event.durationMs,
-        // Flip the summarize step to done.
-        steps: prev.steps.map((s, i) =>
-          i === prev.steps.length - 1 ? { ...s, status: "done", summary: `回答を生成 (${event.tokens} tokens)` } : s,
-        ),
-      }));
-      break;
-    case "error":
-      setState((prev) => ({ ...prev, streaming: false }));
-      break;
-  }
+  return { convs, get, run, cancel, loadCompleted, remove };
 }

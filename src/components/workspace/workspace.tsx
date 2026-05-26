@@ -50,6 +50,8 @@ export function Workspace() {
 
   const [phase, setPhase] = useState<Phase>("empty");
   const [activeThreadId, setActiveThreadId] = useState("th-current");
+  // 実行中(ライブ)会話の threadId。サイドバーへの即時登録 / アクティブ判定に使う。
+  const [liveId, setLiveId] = useState<string | null>(null);
   const [userQuery, setUserQuery] = useState("");
   const [composerValue, setComposerValue] = useState("");
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({ t4: true, t6: true });
@@ -76,8 +78,25 @@ export function Workspace() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolled = useRef(false);
 
-  const isLive = activeThreadId === "th-current";
+  // 表示中スレッドの会話状態（ライブ実行 or 取得済みスナップショット）。無ければ空。
+  const view = agent.get(activeThreadId);
+  const conv = view ?? {
+    query: "", steps: [], answer: "", streaming: false, citationMap: {},
+    sourceIds: [], sources: [], tokens: 0, durationMs: 0, status: "done" as const, attachments: [],
+  };
+  const isLive = activeThreadId === liveId;
   const rightPanelShown = rightPanelOpen && phase !== "empty";
+
+  // 表示中スレッドの状態に phase を追従させる（ライブ会話を表示中にバックグラウンドで
+  // 完了/中断した場合や、スレッド切替で戻った場合に正しく反映する）。
+  // wasMobile と同じ render-phase パターンで、cascading effect を避ける。
+  const activeStatus = view?.status;
+  const statusKey = activeStatus ? `${activeThreadId}:${activeStatus}` : "";
+  const [syncedStatusKey, setSyncedStatusKey] = useState("");
+  if (statusKey && statusKey !== syncedStatusKey) {
+    setSyncedStatusKey(statusKey);
+    setPhase(activeStatus === "running" ? "running" : activeStatus === "cancelled" ? "cancelled" : "done");
+  }
 
   // Collapse the sidebar when the viewport crosses into mobile (render-phase
   // "previous value" pattern — avoids a cascading effect).
@@ -88,7 +107,7 @@ export function Workspace() {
   }
 
   // Auto-open the source panel once enough of the answer has streamed (desktop).
-  if (!isMobile && !autoOpened && !rightPanelOpen && agent.streaming && agent.answer.length > 60) {
+  if (!isMobile && !autoOpened && !rightPanelOpen && conv.streaming && conv.answer.length > 60) {
     setAutoOpened(true);
     setRightPanelOpen(true);
   }
@@ -98,7 +117,7 @@ export function Workspace() {
     if (userScrolled.current) return;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [agent.answer, agent.steps, phase, activeThreadId]);
+  }, [conv.answer, conv.steps, phase, activeThreadId]);
 
   const onChatScroll = () => {
     const el = scrollRef.current;
@@ -112,7 +131,6 @@ export function Workspace() {
       const ready = uploads.files.filter((f) => f.status === "ready");
       const finalQuery = query || (ready.length ? "添付ファイルについて要点をまとめて" : "");
       if (!finalQuery) return;
-      setActiveThreadId("th-current");
       setUserQuery(finalQuery);
       setUserAttachments(ready);
       setComposerValue("");
@@ -126,29 +144,27 @@ export function Workspace() {
       userScrolled.current = false;
       uploads.clear();
 
-      const { status, threadId } = await agent.run(
-        finalQuery,
-        ready.map((f) => f.name),
-        activeThreadId !== "th-current" ? activeThreadId : undefined,
-        model.id,
-      );
-      if (status === "done") {
-        setPhase("done");
-        // done で確定した threadId をアクティブにし、一覧を再取得。
-        // 以降の質問は同一スレッドへ追記される（別スレッドが乱立しない）。
-        if (threadId) setActiveThreadId(threadId);
-        refreshThreads();
-      } else if (status === "cancelled") setPhase("cancelled");
-      else {
-        push("実行に失敗しました", "error");
-        setPhase("cancelled");
-      }
+      // 完了済みスレッドを表示中なら追記、それ以外（新規 or 実行中）は新規スレッド。
+      const cur = agent.get(activeThreadId);
+      const continueId =
+        activeThreadId !== "th-current" && cur && cur.status !== "running" ? activeThreadId : undefined;
+      if (continueId) setLiveId(continueId);
+
+      // 実行は会話マップ側で継続する。別スレッドへ移動しても中断されない。
+      await agent.run(finalQuery, ready.map((f) => f.name), continueId, model.id, {
+        // 実 threadId 判明時点で即サイドバー登録＋アクティブ化（実行中でも履歴に出す）。
+        onThread: (id) => { setLiveId(id); setActiveThreadId(id); },
+        onDone: (id, status) => {
+          if (status === "error") push("実行に失敗しました", "error");
+          refreshThreads(); // 永続化済みの実スレッドを一覧へ反映（ライブ仮エントリと自動的に重複排除）。
+        },
+      });
     },
     [agent, uploads, push, activeThreadId, refreshThreads, model],
   );
 
   const stopRun = () => {
-    agent.cancel();
+    agent.cancel(activeThreadId);
     setPhase("cancelled");
     push("実行を停止しました", "info");
   };
@@ -163,7 +179,7 @@ export function Workspace() {
 
   const copyAnswer = async () => {
     try {
-      const text = agent.answer.replace(/\*\*/g, "").replace(/\[\d+\]/g, "");
+      const text = conv.answer.replace(/\*\*/g, "").replace(/\[\d+\]/g, "");
       await navigator.clipboard.writeText(text);
       push("回答をコピーしました", "success");
     } catch {
@@ -172,18 +188,18 @@ export function Workspace() {
   };
 
   const newChat = () => {
-    agent.reset();
+    // ライブ実行は中断しない（バックグラウンドで継続、サイドバーから戻れる）。空の下書きへ。
+    setActiveThreadId("th-current");
     setPhase("empty");
     setUserQuery("");
     setComposerValue("");
-    setActiveThreadId("th-current");
     setRightPanelOpen(false);
     setFeedback(null);
     if (isMobile) setSidebarCollapsed(true);
   };
 
   const openCitation = (n: number) => {
-    const c = agent.citationMap[n];
+    const c = conv.citationMap[n];
     if (!c) return;
     setActiveSourceId(c.sourceId);
     setHighlightSectionId(c.sectionId);
@@ -200,9 +216,15 @@ export function Workspace() {
     setRightPanelOpen(false);
     if (isMobile) setSidebarCollapsed(true);
     userScrolled.current = false;
-    if (id === "th-current") {
-      if (userQuery) setPhase(phase === "cancelled" ? "cancelled" : "done");
-      else setPhase("empty");
+
+    const existing = agent.get(id);
+    if (existing) {
+      // ライブ実行中 or 取得済みスナップショット。サーバ取得不要でそのまま表示
+      // （実行中ならライブ進捗が見える）。phase は同期エフェクトが追従。
+      setUserQuery(existing.query);
+    } else if (id === "th-current") {
+      setUserQuery("");
+      setPhase("empty");
     } else {
       // APIからスレッド詳細を取得して履歴を復元
       fetch(`/api/threads/${id}`)
@@ -211,7 +233,7 @@ export function Workspace() {
           if (detail) {
             setUserQuery(detail.completed.query || "");
             setUserAttachments([]);
-            agent.loadCompleted(detail);
+            agent.loadCompleted(id, detail);
             setPhase("done");
           } else {
             setActiveThreadId("th-current");
@@ -257,7 +279,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
       push("エクスポートするスレッドがありません", "info");
       return;
     }
-    const md = `# ${userQuery}\n\n${agent.answer}\n\n---\n\n## 参考資料\n${agent.sources.map((s, i) => `[${i + 1}] ${s.title} (${s.path})`).join("\n")}\n`;
+    const md = `# ${userQuery}\n\n${conv.answer}\n\n---\n\n## 参考資料\n${conv.sources.map((s, i) => `[${i + 1}] ${s.title} (${s.path})`).join("\n")}\n`;
     triggerDownload(new Blob([md], { type: "text/markdown" }), `arag-thread-${activeThreadId}.md`);
     push("スレッドをMarkdownでエクスポートしました", "success");
   };
@@ -342,7 +364,17 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
     );
   }
 
-  const threadList = threads.map((t) => ({ ...t, active: t.id === activeThreadId }));
+  // 実行中(ライブ)会話をサイドバーへ即時表示。完了して refreshThreads でサーバ一覧に
+  // 載ったら自動的に重複排除される（liveId がサーバ一覧に含まれたら仮エントリを出さない）。
+  const liveConv = liveId ? agent.get(liveId) : undefined;
+  const liveEntry: ThreadSummary | null =
+    liveId && liveConv && !threads.some((t) => t.id === liveId)
+      ? { id: liveId, title: liveConv.query || userQuery || "新しいスレッド", updated: "たった今" }
+      : null;
+  const threadList = [
+    ...(liveEntry ? [{ ...liveEntry, active: liveEntry.id === activeThreadId }] : []),
+    ...threads.map((t) => ({ ...t, active: t.id === activeThreadId })),
+  ];
   const backdropVisible = isWide ? false : isMobile ? !sidebarCollapsed || rightPanelShown : rightPanelShown;
 
   return (
@@ -391,7 +423,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
             ) : (
               <>
                 <span className="truncate">{userQuery.slice(0, 56) || "スレッド"}</span>
-                <span className="font-normal text-[12px] text-muted max-md:hidden">·  {agent.sources.length} sources</span>
+                <span className="font-normal text-[12px] text-muted max-md:hidden">·  {conv.sources.length} sources</span>
                 {phase === "cancelled" && (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-[#FDEFEA] px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[#B83A1F] dark:bg-[rgba(184,58,31,0.18)]">
                     キャンセル済
@@ -431,7 +463,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                       <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
                       <path d="M10 3v10" stroke="currentColor" strokeWidth="1.4" />
                     </svg>
-                    一次資料 ({agent.sources.length})
+                    一次資料 ({conv.sources.length})
                   </button>
                 )}
               </>
@@ -472,15 +504,15 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                 <AssistantMessage>
                   {userAttachments.length > 0 && isLive && <UserAttachments files={userAttachments} />}
                   {/* 最初のステップ到着前の空白を埋める「考え中…」。逐次表示の起点。 */}
-                  {phase === "running" && agent.steps.length === 0 && (
+                  {phase === "running" && conv.steps.length === 0 && (
                     <div className="flex items-center gap-2 text-[12.5px] text-muted">
                       <span className="h-3 w-3 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
                       考え中…
                     </div>
                   )}
-                  {agent.steps.length > 0 && (
+                  {conv.steps.length > 0 && (
                     <ToolSteps
-                      steps={agent.steps}
+                      steps={conv.steps}
                       variant={tweaks.toolView}
                       expandedMap={expandedSteps}
                       onToggleStep={(id) => setExpandedSteps((m) => ({ ...m, [id]: !m[id] }))}
@@ -489,10 +521,10 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                   {phase === "cancelled" ? (
                     <CancelledNotice onRetry={regenerate} />
                   ) : (
-                    (agent.answer.length > 0 || agent.streaming) && (
+                    (conv.answer.length > 0 || conv.streaming) && (
                       <StreamingAnswer
-                        text={agent.answer}
-                        streaming={agent.streaming}
+                        text={conv.answer}
+                        streaming={conv.streaming}
                         onCite={openCitation}
                         citationStyle={tweaks.citationStyle}
                       />
@@ -500,9 +532,9 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                   )}
                   {phase === "done" && (
                     <AnswerFooter
-                      tokens={agent.tokens}
-                      durationMs={agent.durationMs}
-                      sources={agent.sources}
+                      tokens={conv.tokens}
+                      durationMs={conv.durationMs}
+                      sources={conv.sources}
                       onCopy={copyAnswer}
                       onRegenerate={regenerate}
                       onFeedback={(v) => {
@@ -540,8 +572,8 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
 
       {rightPanelShown && (
         <RightPanel
-          sources={agent.sources}
-          citationMap={agent.citationMap}
+          sources={conv.sources}
+          citationMap={conv.citationMap}
           activeSourceId={activeSourceId}
           highlightSectionId={highlightSectionId}
           onSetActive={(id) => {

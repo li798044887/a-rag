@@ -81,6 +81,9 @@ export async function POST(req: Request) {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      // クライアントが body 読み取り前に実 threadId を取得し、実行中でもサイドバー履歴へ
+      // 即時登録できるようにする（実行中の会話を見失わないため）。
+      "X-Thread-Id": tid,
     },
   });
 }
