@@ -90,6 +90,24 @@ rag-worker をローカルで起動する場合（docker compose profile を使�
 docker compose --profile worker up -d
 ```
 
+#### 各手順の実行タイミング
+
+上記 1〜4 は実行頻度が異なります（1 が起動してから 2・3・4）。
+
+| 手順 | 内容 | いつ実行するか | 頻度 |
+|---|---|---|---|
+| 1 | `docker compose up -d` | 初回、およびコンテナが落ちている時（Mac 再起動後・`docker compose down` 後） | 作業開始時に「落ちていれば」 |
+| 2 | `alembic upgrade head`（rag） | 初回、および rag 側のマイグレーションが増えた時（`git pull` で `rag/.../versions/` が更新された等） | スキーマ変更時のみ |
+| 3 | `pnpm install` + `drizzle-kit migrate` | 初回、および依存 or web マイグレーションが変わった時 | 変更時のみ |
+| 4 | `pnpm dev` | 毎回（実際に開発する時に動かすフォアグラウンドのプロセス） | 毎回 |
+
+- **初回セットアップ**: 1 → 2 → 3 → 4 を順番にすべて。
+- **普段の作業開始**: コンテナ起動済みなら（`docker ps` で確認）4 だけ。落ちていれば 1 → 4。
+  - `restart: always` を設定していないため、Mac 再起動後は自動起動しません。`docker compose up -d`（または `docker compose start`）が必要です。
+- 2・3 は普段は不要。`git pull` でマイグレーションや依存が増えた時だけ実行（どちらも冪等なので、最新済みなら実行しても何も起きません）。
+
+つまり日常的に毎回叩くのは実質 `docker compose up -d`（落ちてれば）→ `pnpm dev` の 2 つだけです。
+
 ### GPU（NVIDIA + nvidia-container-toolkit が必要）
 
 ```bash
