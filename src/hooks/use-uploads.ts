@@ -108,10 +108,66 @@ export function useUploads(onToast?: PushToast) {
     [onToast],
   );
 
+  const retry = useCallback(
+    (id: string) => {
+      const file = files.find((f) => f.id === id);
+      if (!file?.jobId) return;
+      const { jobId } = file;
+
+      setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 0, error: undefined } : f)));
+
+      fetch(`/api/uploads/${jobId}/retry`, { method: "POST" })
+        .then(async (res) => {
+          if (!res.ok) {
+            const { error } = await res.json().catch(() => ({ error: "再試行に失敗しました" }));
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error } : f)));
+            return;
+          }
+          // Restart polling
+          clearTimers(id);
+          const poll = setInterval(async () => {
+            const r = await fetch(`/api/uploads/${jobId}`).catch(() => null);
+            if (!r || !r.ok) return;
+            const j = (await r.json()) as {
+              status: string; progress: number; page_count?: number | null;
+              chunks?: number; error?: string;
+            };
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.id === id
+                  ? {
+                      ...f,
+                      progress: j.progress,
+                      pages: j.page_count ?? f.pages,
+                      chunks: j.chunks ?? f.chunks,
+                      status: j.status === "ready" ? "ready" : j.status === "error" ? "error" : "processing",
+                      error: j.error ?? undefined,
+                    }
+                  : f,
+              ),
+            );
+            if (j.status === "ready") {
+              clearTimers(id);
+              onToast?.(`「${file.name}」を索引化しました`, "success");
+            }
+            if (j.status === "error") {
+              clearTimers(id);
+              onToast?.(j.error || "索引化に失敗しました", "error");
+            }
+          }, 1000);
+          timers.current[id] = [poll];
+        })
+        .catch(() => {
+          setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: "ネットワークエラー" } : f)));
+        });
+    },
+    [files, onToast],
+  );
+
   const clear = useCallback(() => {
     Object.keys(timers.current).forEach(clearTimers);
     setFiles([]);
   }, []);
 
-  return { files, addFiles, removeFile, clear };
+  return { files, addFiles, removeFile, retry, clear };
 }

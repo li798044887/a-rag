@@ -512,6 +512,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
             attachments={uploads.files}
             onAttachFiles={uploads.addFiles}
             onRemoveAttachment={uploads.removeFile}
+            onRetryAttachment={uploads.retry}
             scope={scope}
             onChangeScope={(s) => {
               setScope(s);

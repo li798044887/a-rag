@@ -5,7 +5,7 @@ import { getFileMeta } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
 import type { StagedFile } from "@/lib/types";
 
-function AttachmentChip({ file, onRemove }: { file: StagedFile; onRemove: (id: string) => void }) {
+function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemove: (id: string) => void; onRetry?: (id: string) => void }) {
   const meta = getFileMeta(file.name);
   return (
     <div
@@ -50,6 +50,14 @@ function AttachmentChip({ file, onRemove }: { file: StagedFile; onRemove: (id: s
             <>
               <span className="text-[#B83A1F]">!</span>
               <span>{file.error || "エラー"}</span>
+              {onRetry && file.jobId && (
+                <button
+                  className="ml-1 rounded-[4px] border-0 bg-transparent px-1.5 py-0.5 text-[10px] font-semibold text-[#B83A1F] hover:bg-[rgba(184,58,31,0.12)]"
+                  onClick={() => onRetry(file.id)}
+                >
+                  再試行
+                </button>
+              )}
             </>
           )}
         </div>
@@ -72,12 +80,12 @@ function AttachmentChip({ file, onRemove }: { file: StagedFile; onRemove: (id: s
   );
 }
 
-export function AttachmentTray({ files, onRemove }: { files: StagedFile[]; onRemove: (id: string) => void }) {
+export function AttachmentTray({ files, onRemove, onRetry }: { files: StagedFile[]; onRemove: (id: string) => void; onRetry?: (id: string) => void }) {
   if (!files.length) return null;
   return (
     <div className="flex max-h-[200px] flex-col gap-1.5 overflow-y-auto px-2 pt-2 max-md:max-h-[156px]">
       {files.map((f) => (
-        <AttachmentChip key={f.id} file={f} onRemove={onRemove} />
+        <AttachmentChip key={f.id} file={f} onRemove={onRemove} onRetry={onRetry} />
       ))}
     </div>
   );

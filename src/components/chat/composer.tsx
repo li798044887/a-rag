@@ -19,6 +19,7 @@ interface Props {
   attachments: StagedFile[];
   onAttachFiles: (files: FileList | null) => void;
   onRemoveAttachment: (id: string) => void;
+  onRetryAttachment?: (id: string) => void;
   scope: ScopeValue;
   onChangeScope: (s: ScopeValue) => void;
 }
@@ -34,6 +35,7 @@ export function Composer({
   attachments,
   onAttachFiles,
   onRemoveAttachment,
+  onRetryAttachment,
   scope,
   onChangeScope,
 }: Props) {
@@ -65,7 +67,7 @@ export function Composer({
           "rounded-[16px] border border-divider-strong bg-surface shadow-e2 transition-[border-color,box-shadow] focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft),var(--shadow-2)] max-md:rounded-[14px]",
         )}
       >
-        <AttachmentTray files={attachments} onRemove={onRemoveAttachment} />
+        <AttachmentTray files={attachments} onRemove={onRemoveAttachment} onRetry={onRetryAttachment} />
         <input
           ref={fileRef}
           type="file"

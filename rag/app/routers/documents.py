@@ -76,3 +76,21 @@ async def create_document(file: UploadFile = File(...), owner_user_id: str = For
         raise HTTPException(status_code=502, detail="ingest enqueue failed") from exc
 
     return result
+
+
+@router.post("/jobs/{job_id}/retry", response_model=IngestStarted,
+             dependencies=[Depends(require_internal_token)])
+async def retry_job(job_id: str):
+    session = SessionLocal()
+    try:
+        from app.models import IngestJob
+        job = session.get(IngestJob, job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="job not found")
+        job.status = "queued"; job.progress = 0; job.error = None; job.stage_detail = ""
+        session.commit()
+        result = IngestStarted(document_id=job.document_id, job_id=job.id)
+    finally:
+        session.close()
+    await enqueue_ingest(result.document_id, result.job_id)
+    return result
