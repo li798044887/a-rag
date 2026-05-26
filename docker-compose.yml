@@ -33,12 +33,19 @@ services:
       EMBEDDER: bge-m3
       RERANKER: bge
       RAG_INTERNAL_TOKEN: dev-internal-token
+      PRELOAD_MODELS: "1"
     ports: ["8000:8000"]
     volumes: ["uploads:/data/uploads"]
     depends_on:
       postgres: { condition: service_healthy }
       qdrant: { condition: service_started }
       redis: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
 
   rag-worker:
     build: ./rag

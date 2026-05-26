@@ -3,6 +3,8 @@ import os
 
 from app.embedding.base import DenseSparse, Embedder
 
+_cache: dict[str, Embedder] = {}
+
 
 class StubEmbedder:
     """テスト/オフライン用の決定的スタブ。"""
@@ -21,9 +23,14 @@ class StubEmbedder:
 
 def get_embedder() -> Embedder:
     kind = os.getenv("EMBEDDER", "bge-m3")
+    if kind in _cache:
+        return _cache[kind]
     if kind == "stub":
-        return StubEmbedder()
-    if kind == "bge-m3":
+        inst: Embedder = StubEmbedder()
+    elif kind == "bge-m3":
         from app.embedding.bge_m3 import BGEM3Embedder
-        return BGEM3Embedder()
-    raise ValueError(f"unknown EMBEDDER: {kind}")
+        inst = BGEM3Embedder()
+    else:
+        raise ValueError(f"unknown EMBEDDER: {kind}")
+    _cache[kind] = inst
+    return inst
