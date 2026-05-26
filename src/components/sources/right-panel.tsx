@@ -57,6 +57,28 @@ export function RightPanel({ sources, citationMap, activeSourceId, highlightSect
     return entry ? entry[0] : "?";
   };
 
+  const panelCls =
+    "grid min-h-0 min-w-0 overflow-hidden border-l-[0.5px] border-divider bg-bg-2 max-wide:fixed max-wide:inset-y-0 max-wide:right-0 max-wide:z-[60] max-wide:w-[min(440px,50vw)] max-wide:border-l-0 max-wide:shadow-[-8px_0_32px_rgba(0,0,0,0.16)] max-md:w-[min(440px,92vw)] wide:static wide:z-auto wide:w-auto wide:shadow-none";
+
+  // sources はストリーミング完了(done)まで空。空状態でクラッシュしないよう placeholder を出す。
+  if (!active) {
+    return (
+      <div className={cn(panelCls, "grid-rows-[auto_1fr]")}>
+        <div className="flex h-[52px] items-center justify-between border-b-[0.5px] border-divider px-4 max-md:px-3.5">
+          <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-fg">一次資料</span>
+          <button className={iconBtn} title="閉じる" onClick={onClose}>
+            <svg viewBox="0 0 16 16" width="12" height="12">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div className="grid place-items-center px-6 text-center text-[12.5px] leading-[1.6] text-muted">
+          回答の生成が完了すると、参照された一次資料がここに表示されます。
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_auto_1fr_auto] overflow-hidden border-l-[0.5px] border-divider bg-bg-2 max-wide:fixed max-wide:inset-y-0 max-wide:right-0 max-wide:z-[60] max-wide:w-[min(440px,50vw)] max-wide:border-l-0 max-wide:shadow-[-8px_0_32px_rgba(0,0,0,0.16)] max-md:w-[min(440px,92vw)] wide:static wide:z-auto wide:w-auto wide:shadow-none">
       {/* Head */}
