@@ -83,11 +83,15 @@ async def create_document(file: UploadFile = File(...), owner_user_id: str = For
 async def retry_job(job_id: str):
     session = SessionLocal()
     try:
-        from app.models import IngestJob
         job = session.get(IngestJob, job_id)
         if not job:
             raise HTTPException(status_code=404, detail="job not found")
+        if job.status not in ("ready", "error"):
+            raise HTTPException(status_code=409, detail=f"job is {job.status}, cannot retry")
         job.status = "queued"; job.progress = 0; job.error = None; job.stage_detail = ""
+        doc = session.get(Document, job.document_id)
+        if doc:
+            doc.status = "queued"
         session.commit()
         result = IngestStarted(document_id=job.document_id, job_id=job.id)
     finally:

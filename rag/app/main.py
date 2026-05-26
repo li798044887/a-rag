@@ -12,11 +12,16 @@ _state = {"models_loaded": False}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if os.getenv("PRELOAD_MODELS") == "1" and settings.embedder != "stub":
-        from app.embedding.factory import get_embedder
-        from app.reranker.factory import get_reranker
-        get_embedder()
-        get_reranker()
-        _state["models_loaded"] = True
+        # preload は best-effort。失敗してもコンテナは落とさず /health は up を返す。
+        # models_loaded は False のまま残り、リクエスト時に遅延ロードを再試行できる。
+        try:
+            from app.embedding.factory import get_embedder
+            from app.reranker.factory import get_reranker
+            get_embedder()
+            get_reranker()
+            _state["models_loaded"] = True
+        except Exception as exc:  # noqa: BLE001
+            print(f"[lifespan] model preload failed, continuing with lazy load: {exc}")
     yield
 
 

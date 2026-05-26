@@ -75,5 +75,12 @@ class QdrantStore:
             out.append(payload)
         return out
 
+    def delete_by_document(self, document_id: str) -> None:
+        if not self.client.collection_exists(self.collection):
+            return
+        self.client.delete(self.collection, points_selector=models.FilterSelector(
+            filter=models.Filter(must=[models.FieldCondition(
+                key="document_id", match=models.MatchValue(value=document_id))])))
+
     def drop(self) -> None:
         self.client.delete_collection(self.collection)

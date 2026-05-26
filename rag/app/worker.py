@@ -35,6 +35,12 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
     try:
         store.ensure_collection()
 
+        # 冪等化: 再実行/再アップロード時に旧チャンク(PG)と旧ベクトル(Qdrant)を掃除。
+        # 初回実行では no-op、再実行ではクリーンに再構築される。
+        session.query(Chunk).filter_by(document_id=doc.id).delete()
+        session.commit()
+        store.delete_by_document(doc.id)
+
         _set(job, doc, session, status="parsing", progress=10, detail="MinerU 解析中")
         out_dir = str(Path(doc.raw_path).with_suffix("")) + "_mineru"
         parsed = parse_fn(doc.raw_path, out_dir)

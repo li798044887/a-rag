@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
 import { uid } from "@/lib/utils";
 import type { StagedFile } from "@/lib/types";
@@ -14,15 +14,62 @@ export function useUploads(onToast?: PushToast) {
   const [files, setFiles] = useState<StagedFile[]>([]);
   const timers = useRef<Record<string, ReturnType<typeof setInterval>[]>>({});
 
-  const clearTimers = (id: string) => {
+  // Keep latest files/onToast in refs so stable callbacks read fresh values
+  // without re-creating on every render (avoids stale closures + re-poll churn).
+  const filesRef = useRef(files);
+  useEffect(() => { filesRef.current = files; }, [files]);
+  const onToastRef = useRef(onToast);
+  useEffect(() => { onToastRef.current = onToast; }, [onToast]);
+
+  const clearTimers = useCallback((id: string) => {
     timers.current[id]?.forEach(clearInterval);
     delete timers.current[id];
-  };
+  }, []);
+
+  /** Polls /api/uploads/:jobId until ready/error, syncing each tick into the
+   * matching StagedFile. Shared by the upload and retry flows. */
+  const startPolling = useCallback(
+    (id: string, jobId: string, fileName: string) => {
+      clearTimers(id);
+      const poll = setInterval(async () => {
+        const r = await fetch(`/api/uploads/${jobId}`).catch(() => null);
+        if (!r || !r.ok) return;
+        const j = (await r.json()) as {
+          status: string; progress: number; page_count?: number | null;
+          chunks?: number; error?: string;
+        };
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === id
+              ? {
+                  ...f,
+                  progress: j.progress,
+                  pages: j.page_count ?? f.pages,
+                  chunks: j.chunks ?? f.chunks,
+                  status: j.status === "ready" ? "ready" : j.status === "error" ? "error" : "processing",
+                  error: j.error ?? undefined,
+                }
+              : f,
+          ),
+        );
+        if (j.status === "ready") {
+          clearTimers(id);
+          onToastRef.current?.(`「${fileName}」を索引化しました`, "success");
+        }
+        if (j.status === "error") {
+          clearTimers(id);
+          onToastRef.current?.(j.error || "索引化に失敗しました", "error");
+        }
+      }, 1000);
+      timers.current[id] = [poll];
+    },
+    [clearTimers],
+  );
 
   const removeFile = useCallback((id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
     clearTimers(id);
-  }, []);
+  }, [clearTimers]);
 
   const addFiles = useCallback(
     (fileList: FileList | File[] | null) => {
@@ -63,39 +110,7 @@ export function useUploads(onToast?: PushToast) {
             }
             const { jobId } = (await res.json()) as { documentId: string; jobId: string };
             setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 10, jobId } : f)));
-
-            // Poll real progress from the rag service via /api/uploads/:jobId
-            const poll = setInterval(async () => {
-              const r = await fetch(`/api/uploads/${jobId}`).catch(() => null);
-              if (!r || !r.ok) return;
-              const j = (await r.json()) as {
-                status: string; progress: number; page_count?: number | null;
-                chunks?: number; error?: string;
-              };
-              setFiles((prev) =>
-                prev.map((f) =>
-                  f.id === id
-                    ? {
-                        ...f,
-                        progress: j.progress,
-                        pages: j.page_count ?? f.pages,
-                        chunks: j.chunks ?? f.chunks,
-                        status: j.status === "ready" ? "ready" : j.status === "error" ? "error" : "processing",
-                        error: j.error ?? undefined,
-                      }
-                    : f,
-                ),
-              );
-              if (j.status === "ready") {
-                clearTimers(id);
-                onToast?.(`「${file.name}」を索引化しました`, "success");
-              }
-              if (j.status === "error") {
-                clearTimers(id);
-                onToast?.(j.error || "索引化に失敗しました", "error");
-              }
-            }, 1000);
-            timers.current[id] = [poll];
+            startPolling(id, jobId, file.name);
           })
           .catch(() => {
             clearTimers(id);
@@ -103,17 +118,18 @@ export function useUploads(onToast?: PushToast) {
           });
       });
 
-      if (rejected.length) onToast?.(`未対応の形式: ${rejected.join(", ")}`, "error");
+      if (rejected.length) onToastRef.current?.(`未対応の形式: ${rejected.join(", ")}`, "error");
     },
-    [onToast],
+    [clearTimers, startPolling],
   );
 
   const retry = useCallback(
     (id: string) => {
-      const file = files.find((f) => f.id === id);
+      const file = filesRef.current.find((f) => f.id === id);
       if (!file?.jobId) return;
-      const { jobId } = file;
+      const { jobId, name } = file;
 
+      clearTimers(id);
       setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 0, error: undefined } : f)));
 
       fetch(`/api/uploads/${jobId}/retry`, { method: "POST" })
@@ -123,51 +139,19 @@ export function useUploads(onToast?: PushToast) {
             setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error } : f)));
             return;
           }
-          // Restart polling
-          clearTimers(id);
-          const poll = setInterval(async () => {
-            const r = await fetch(`/api/uploads/${jobId}`).catch(() => null);
-            if (!r || !r.ok) return;
-            const j = (await r.json()) as {
-              status: string; progress: number; page_count?: number | null;
-              chunks?: number; error?: string;
-            };
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.id === id
-                  ? {
-                      ...f,
-                      progress: j.progress,
-                      pages: j.page_count ?? f.pages,
-                      chunks: j.chunks ?? f.chunks,
-                      status: j.status === "ready" ? "ready" : j.status === "error" ? "error" : "processing",
-                      error: j.error ?? undefined,
-                    }
-                  : f,
-              ),
-            );
-            if (j.status === "ready") {
-              clearTimers(id);
-              onToast?.(`「${file.name}」を索引化しました`, "success");
-            }
-            if (j.status === "error") {
-              clearTimers(id);
-              onToast?.(j.error || "索引化に失敗しました", "error");
-            }
-          }, 1000);
-          timers.current[id] = [poll];
+          startPolling(id, jobId, name);
         })
         .catch(() => {
           setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: "ネットワークエラー" } : f)));
         });
     },
-    [files, onToast],
+    [clearTimers, startPolling],
   );
 
   const clear = useCallback(() => {
     Object.keys(timers.current).forEach(clearTimers);
     setFiles([]);
-  }, []);
+  }, [clearTimers]);
 
   return { files, addFiles, removeFile, retry, clear };
 }
