@@ -1,6 +1,7 @@
 /** localStorage keys + cross-cutting constants. */
 export const THEME_STORAGE_KEY = "arag.tweaks";
 export const SESSION_STORAGE_KEY = "arag.session";
+export const MODEL_STORAGE_KEY = "arag.model";
 
 /** Auth cookie name used by the JWT routes + middleware. */
 export const AUTH_COOKIE = "arag_token";

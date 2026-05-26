@@ -22,6 +22,7 @@ import { useToasts } from "@/hooks/use-toasts";
 import { useTweaks } from "@/hooks/use-tweaks";
 import { useUploads } from "@/hooks/use-uploads";
 import { cn } from "@/lib/utils";
+import { MODEL_STORAGE_KEY } from "@/lib/constants";
 import type { ModelOption, ScopeValue, Source, ThreadSummary } from "@/lib/types";
 
 type Phase = "empty" | "running" | "done" | "cancelled";
@@ -40,7 +41,12 @@ export function Workspace() {
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [model, setModel] = useState<ModelOption>(MODELS[0]);
+  // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。
+  const [model, setModel] = useState<ModelOption>(() => {
+    if (typeof window === "undefined") return MODELS[0];
+    const saved = localStorage.getItem(MODEL_STORAGE_KEY);
+    return MODELS.find((m) => m.id === saved) ?? MODELS[0];
+  });
 
   const [phase, setPhase] = useState<Phase>("empty");
   const [activeThreadId, setActiveThreadId] = useState("th-current");
@@ -124,6 +130,7 @@ export function Workspace() {
         finalQuery,
         ready.map((f) => f.name),
         activeThreadId !== "th-current" ? activeThreadId : undefined,
+        model.id,
       );
       if (status === "done") {
         setPhase("done");
@@ -137,7 +144,7 @@ export function Workspace() {
         setPhase("cancelled");
       }
     },
-    [agent, uploads, push, activeThreadId, refreshThreads],
+    [agent, uploads, push, activeThreadId, refreshThreads, model],
   );
 
   const stopRun = () => {
@@ -562,6 +569,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
         model={model}
         onModelChange={(m) => {
           setModel(m);
+          localStorage.setItem(MODEL_STORAGE_KEY, m.id);
           setSettingsOpen(false);
           push(`${m.label} に切り替えました`, "success");
         }}

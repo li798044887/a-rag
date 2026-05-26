@@ -281,7 +281,6 @@ export const MODELS: ModelOption[] = [
   { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "推奨", desc: "汎用・最も賢い" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", tag: "高速", desc: "高速・低コスト" },
   { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 標準" },
-  { id: "llama-3.3-70b", label: "Llama 3.3 70B", tag: "OSS", desc: "社内ホスティング" },
 ];
 
 export const SCOPE_PRESETS: ScopePreset[] = [

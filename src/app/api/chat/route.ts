@@ -14,8 +14,8 @@ export async function POST(req: Request) {
   const claims = token ? await verifyAccessToken(token) : null;
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { query, threadId } = (await req.json().catch(() => ({}))) as {
-    query?: string; threadId?: string;
+  const { query, threadId, model } = (await req.json().catch(() => ({}))) as {
+    query?: string; threadId?: string; model?: string;
   };
   const q = query || "";
 
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       let done: Extract<AgentEvent, { type: "done" }> | null = null;
 
       try {
-        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid })) {
+        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model })) {
           if (event.type === "answer-delta") answer += event.text;
           if (event.type === "step") {
             const idx = steps.findIndex((s) => s.id === event.step.id);

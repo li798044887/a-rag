@@ -71,6 +71,7 @@ export function useAgent() {
       query: string,
       attachments: string[] = [],
       threadId?: string,
+      modelId?: string,
     ): Promise<{ status: "done" | "cancelled" | "error"; threadId?: string }> => {
       abortRef.current?.abort();
       const ctrl = new AbortController();
@@ -83,7 +84,7 @@ export function useAgent() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, attachments, threadId }),
+          body: JSON.stringify({ query, attachments, threadId, model: modelId }),
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) return { status: "error" };

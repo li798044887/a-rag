@@ -3,9 +3,9 @@
  * rewrite_query は Haiku、検索は rag /retrieve（hybrid+rerank+近傍拡張）、
  * summarize は Sonnet ストリーミング。各ステップを AgentEvent として配信する。 */
 
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, streamText } from "ai";
 import { retrieveChunks, type RetrievedChunk } from "@/lib/agent/retrieve-client";
+import { resolveModels } from "@/lib/agent/models";
 import { buildInitialSteps } from "@/lib/agent/steps";
 import type { AgentEvent, CitationMap, Source, ToolCall } from "@/lib/types";
 
@@ -14,12 +14,17 @@ export interface RunInput {
   ownerUserId: string;
   threadId: string;
   attachments?: string[];
+  /** UI（設定 > モデル）で選択された model id。未指定時は既定モデル。 */
+  modelId?: string;
 }
 
-export async function* runAgent({ query, ownerUserId, threadId }: RunInput): AsyncGenerator<AgentEvent> {
+export async function* runAgent({ query, ownerUserId, threadId, modelId }: RunInput): AsyncGenerator<AgentEvent> {
   const started = Date.now();
   const steps = buildInitialSteps(query);
   const byName = (name: string) => steps.find((s) => s.name === name)!;
+
+  // 選択モデルを解決。キー未設定なら ok:false（reason を summarize で案内）。
+  const resolution = resolveModels(modelId);
 
   async function* runStep(step: ToolCall, work: () => Promise<Partial<ToolCall>>): AsyncGenerator<AgentEvent> {
     yield { type: "step", step: { ...step, status: "running" } };
@@ -28,18 +33,20 @@ export async function* runAgent({ query, ownerUserId, threadId }: RunInput): Asy
     yield { type: "step", step };
   }
 
-  // 1) rewrite_query (Haiku)
+  // 1) rewrite_query（選択モデルプロバイダの安価モデル。キー無しなら原文のまま）
   let rewritten = query;
   for await (const e of runStep(byName("rewrite_query"), async () => {
-    try {
-      const { text } = await generateText({
-        model: anthropic("claude-haiku-4-5"),
-        system: "検索意図を保ちつつ、日本語の検索クエリに簡潔に書き換えてください。説明や引用符は不要、クエリ本文のみ返答。",
-        prompt: query,
-      });
-      rewritten = text.trim() || query;
-    } catch {
-      rewritten = query;
+    if (resolution.ok) {
+      try {
+        const { text } = await generateText({
+          model: resolution.models.rewrite,
+          system: "検索意図を保ちつつ、日本語の検索クエリに簡潔に書き換えてください。説明や引用符は不要、クエリ本文のみ返答。",
+          prompt: query,
+        });
+        rewritten = text.trim() || query;
+      } catch {
+        rewritten = query;
+      }
     }
     return { input: { query }, output: { rewritten }, summary: `「${rewritten}」に書き換え` };
   })) yield e;
@@ -87,17 +94,16 @@ export async function* runAgent({ query, ownerUserId, threadId }: RunInput): Asy
   } else if (chunks.length === 0) {
     answer = "該当する資料が見つかりませんでした。別の言い回しで質問するか、関連ファイルをアップロードしてください。";
     yield { type: "answer-delta", text: answer };
-  } else if (!process.env.ANTHROPIC_API_KEY) {
-    // 検索・引用（右パネルの一次資料）は機能するが、回答生成には API キーが必要。
-    answer =
-      "回答の生成には ANTHROPIC_API_KEY の設定が必要です。検索でヒットした一次資料は右パネルでご確認いただけます。";
+  } else if (!resolution.ok) {
+    // 検索・引用（右パネルの一次資料）は機能するが、回答生成には選択モデルのキーが必要。
+    answer = resolution.reason;
     yield { type: "answer-delta", text: answer };
   } else {
     const context = chunks
       .map((c, i) => `[${i + 1}] ${c.documentTitle} — ${c.headingPath}\n${c.expandedText || c.text}`)
       .join("\n\n");
     const result = streamText({
-      model: anthropic("claude-sonnet-4-5"),
+      model: resolution.models.chat,
       system:
         "あなたは社内ナレッジ検索アシスタントです。提供された一次資料のみに基づき日本語で簡潔に回答してください。" +
         "重要な事実には必ず [1] [2] のように出典番号を付け、Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。",
