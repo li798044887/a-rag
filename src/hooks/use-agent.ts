@@ -77,7 +77,8 @@ export function useAgent() {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
-      setState({ ...EMPTY, steps: buildInitialSteps(query), answer: "", streaming: false });
+      // 逐次表示: 送信直後は空。step イベント到着順にカードを追加する（skeleton 先出しはしない）。
+      setState({ ...EMPTY, answer: "", streaming: false });
 
       let doneThreadId: string | undefined;
       try {
@@ -137,10 +138,16 @@ function applyEvent(
 ) {
   switch (event.type) {
     case "step":
-      setState((prev) => ({
-        ...prev,
-        steps: prev.steps.map((s) => (s.id === event.step.id ? { ...s, ...event.step } : s)),
-      }));
+      // 既知ステップは更新、未知ステップ（初出の running）は末尾に追加 = 逐次表示。
+      setState((prev) => {
+        const exists = prev.steps.some((s) => s.id === event.step.id);
+        return {
+          ...prev,
+          steps: exists
+            ? prev.steps.map((s) => (s.id === event.step.id ? { ...s, ...event.step } : s))
+            : [...prev.steps, event.step],
+        };
+      });
       break;
     case "answer-start":
       setState((prev) => ({ ...prev, streaming: true, answer: "" }));

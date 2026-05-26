@@ -471,12 +471,21 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                 <UserMessage text={userQuery} />
                 <AssistantMessage>
                   {userAttachments.length > 0 && isLive && <UserAttachments files={userAttachments} />}
-                  <ToolSteps
-                    steps={agent.steps}
-                    variant={tweaks.toolView}
-                    expandedMap={expandedSteps}
-                    onToggleStep={(id) => setExpandedSteps((m) => ({ ...m, [id]: !m[id] }))}
-                  />
+                  {/* 最初のステップ到着前の空白を埋める「考え中…」。逐次表示の起点。 */}
+                  {phase === "running" && agent.steps.length === 0 && (
+                    <div className="flex items-center gap-2 text-[12.5px] text-muted">
+                      <span className="h-3 w-3 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
+                      考え中…
+                    </div>
+                  )}
+                  {agent.steps.length > 0 && (
+                    <ToolSteps
+                      steps={agent.steps}
+                      variant={tweaks.toolView}
+                      expandedMap={expandedSteps}
+                      onToggleStep={(id) => setExpandedSteps((m) => ({ ...m, [id]: !m[id] }))}
+                    />
+                  )}
                   {phase === "cancelled" ? (
                     <CancelledNotice onRetry={regenerate} />
                   ) : (

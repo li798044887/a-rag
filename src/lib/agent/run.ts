@@ -5,7 +5,7 @@
 
 import { generateText, streamText } from "ai";
 import { retrieveChunks, type RetrievedChunk } from "@/lib/agent/retrieve-client";
-import { resolveModels } from "@/lib/agent/models";
+import { resolveModels, DEFAULT_MODEL_ID } from "@/lib/agent/models";
 import { buildInitialSteps } from "@/lib/agent/steps";
 import type { AgentEvent, CitationMap, Source, ToolCall } from "@/lib/types";
 
@@ -26,16 +26,21 @@ export async function* runAgent({ query, ownerUserId, threadId, modelId }: RunIn
   // 選択モデルを解決。キー未設定なら ok:false（reason を summarize で案内）。
   const resolution = resolveModels(modelId);
 
-  async function* runStep(step: ToolCall, work: () => Promise<Partial<ToolCall>>): AsyncGenerator<AgentEvent> {
-    yield { type: "step", step: { ...step, status: "running" } };
+  // runningSummary: 実行中に running カードへ出す「現在この段階」の文言。
+  // 逐次表示（client は step イベント到着順にカードを追加）で現在地を示すために使う。
+  async function* runStep(step: ToolCall, runningSummary: string, work: () => Promise<Partial<ToolCall>>): AsyncGenerator<AgentEvent> {
+    yield { type: "step", step: { ...step, status: "running", summary: runningSummary } };
+    const t0 = Date.now();
     const patch = await work();
-    Object.assign(step, patch, { status: "done" as const });
+    // 実測の所要時間で上書き（scaffold のデモ値を残さない）。
+    const durationMs = patch.durationMs ?? Date.now() - t0;
+    Object.assign(step, patch, { status: "done" as const, durationMs });
     yield { type: "step", step };
   }
 
   // 1) rewrite_query（選択モデルプロバイダの安価モデル。キー無しなら原文のまま）
   let rewritten = query;
-  for await (const e of runStep(byName("rewrite_query"), async () => {
+  for await (const e of runStep(byName("rewrite_query"), "クエリを正規化中…", async () => {
     if (resolution.ok) {
       try {
         const { text } = await generateText({
@@ -51,20 +56,35 @@ export async function* runAgent({ query, ownerUserId, threadId, modelId }: RunIn
     return { input: { query }, output: { rewritten }, summary: `「${rewritten}」に書き換え` };
   })) yield e;
 
-  // 2) retrieve（1 ホップで dense/sparse/rerank/近傍拡張）
+  // 2) retrieve（rag /retrieve が dense/sparse/rerank/近傍拡張を1ホップで実行）。
+  //    重い実待ちは vector_search ステップの内側で行い、その間 running カードに
+  //    「密ベクトル検索を実行中…」を出す（逐次表示で現在地を示す）。
+  //    bm25_search / rerank / fetch_document は同じ1回の検索結果の内訳で、
+  //    取得済みデータから即座に確定するため後続で瞬時に done になる。
+  const topK = 6;
   let chunks: RetrievedChunk[] = [];
   let retrieveError = false;
-  try {
-    chunks = await retrieveChunks({ query, rewritten, ownerUserId, topK: 6 });
-  } catch {
-    retrieveError = true;
-  }
 
-  for await (const e of runStep(byName("vector_search"), async () =>
-    ({ output: { backend: "qdrant", mode: "dense" }, summary: "密ベクトル検索を実行" }))) yield e;
-  for await (const e of runStep(byName("bm25_search"), async () =>
-    ({ output: { backend: "qdrant", mode: "sparse" }, summary: "スパース(BM25)検索を実行" }))) yield e;
-  for await (const e of runStep(byName("rerank"), async () => ({
+  for await (const e of runStep(byName("vector_search"), "密ベクトル検索を実行中…", async () => {
+    try {
+      chunks = await retrieveChunks({ query, rewritten, ownerUserId, topK });
+    } catch {
+      retrieveError = true;
+    }
+    return {
+      input: { query: rewritten, top_k: topK, backend: "qdrant", mode: "dense", collection: "arag_chunks" },
+      output: { backend: "qdrant", mode: "dense", hits: chunks.length },
+      summary: "密ベクトル検索を実行",
+    };
+  })) yield e;
+  for await (const e of runStep(byName("bm25_search"), "スパース(BM25)検索を実行中…", async () =>
+    ({
+      input: { query: rewritten, backend: "qdrant", mode: "sparse" },
+      output: { backend: "qdrant", mode: "sparse", hits: chunks.length },
+      summary: "スパース(BM25)検索を実行",
+    }))) yield e;
+  for await (const e of runStep(byName("rerank"), "再順位付け中…", async () => ({
+    input: { model: "bge-reranker-v2-m3", top_n: topK },
     // UI（rerank カード）は output.selected を RerankHit[] として描画する。
     output: {
       kept: chunks.length,
@@ -72,9 +92,14 @@ export async function* runAgent({ query, ownerUserId, threadId, modelId }: RunIn
     },
     summary: `${chunks.length} 件を再順位付け`,
   }))) yield e;
-  const docCount = new Set(chunks.map((c) => c.documentId)).size;
-  for await (const e of runStep(byName("fetch_document"), async () =>
-    ({ output: { documents: docCount }, summary: `${docCount} 件の文書から文脈取得` }))) yield e;
+  const documentIds = [...new Set(chunks.map((c) => c.documentId))];
+  const docCount = documentIds.length;
+  for await (const e of runStep(byName("fetch_document"), "文書を取得中…", async () =>
+    ({
+      input: { document_ids: documentIds },
+      output: { documents: docCount, chunks: chunks.length },
+      summary: `${docCount} 件の文書から文脈取得`,
+    }))) yield e;
 
   // 3) sources / citationMap を構築
   const sources = sourcesFromChunks(chunks);
@@ -82,9 +107,11 @@ export async function* runAgent({ query, ownerUserId, threadId, modelId }: RunIn
   chunks.forEach((c, i) => { citationMap[i + 1] = { sourceId: c.documentId, sectionId: c.chunkId }; });
   const sourceIds = sources.map((s) => s.id);
 
-  // 4) summarize (Sonnet streaming)
+  // 4) summarize (streaming)
   const summarize = byName("summarize");
-  yield { type: "step", step: { ...summarize, status: "running" } };
+  summarize.input = { model: modelId ?? DEFAULT_MODEL_ID };
+  const summarizeStart = Date.now();
+  yield { type: "step", step: { ...summarize, status: "running", summary: "回答を生成中…" } };
   yield { type: "answer-start" };
 
   let answer = "";
@@ -124,7 +151,7 @@ export async function* runAgent({ query, ownerUserId, threadId, modelId }: RunIn
     }
   }
 
-  Object.assign(summarize, { status: "done" as const, summary: "回答を生成" });
+  Object.assign(summarize, { status: "done" as const, summary: "回答を生成", durationMs: Date.now() - summarizeStart });
   yield { type: "step", step: summarize };
 
   const tokens = Math.max(1, Math.round(answer.length / 1.8));
