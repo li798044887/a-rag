@@ -96,3 +96,7 @@ async def ingest_document(ctx: dict, document_id: str, job_id: str) -> None:
 class WorkerSettings:
     functions = [ingest_document]
     redis_settings = redis_settings()
+    # CPU での MinerU 解析 + BGE-M3 埋め込みは数分かかるため、arq 既定の 300s を大幅に延長。
+    # max_tries=1: 長時間ジョブのタイムアウト自動再試行による二重実行を避ける（再試行は /jobs/{id}/retry で明示的に行う）。
+    job_timeout = 3600
+    max_tries = 1
