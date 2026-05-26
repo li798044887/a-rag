@@ -10,9 +10,10 @@ vi.mock("ai", () => ({
 vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
 
 import { runAgent } from "@/lib/agent/run";
+import type { AgentEvent } from "@/lib/types";
 
 test("retrieve failure yields a graceful answer and still finishes", async () => {
-  const events: any[] = [];
+  const events: AgentEvent[] = [];
   for await (const e of runAgent({ query: "x", ownerUserId: "u1", threadId: "t1" })) events.push(e);
   const answer = events.filter((e) => e.type === "answer-delta").map((e) => e.text).join("");
   expect(answer).toContain("接続できませんでした");
