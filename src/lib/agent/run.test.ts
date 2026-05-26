@@ -41,4 +41,11 @@ test("runAgent yields steps, streams answer, and finishes with sources+citationM
   // すべてのステップが done になる
   const steps = events.filter((e) => e.type === "step");
   expect(steps.some((e) => e.step.name === "rewrite_query" && e.step.status === "done")).toBe(true);
+
+  // rerank ステップは UI(ToolStepCard) が描画する output.selected: RerankHit[] を必ず持つ
+  const rerankDone = steps.find((e) => e.step.name === "rerank" && e.step.status === "done");
+  expect(rerankDone).toBeDefined();
+  const selected = (rerankDone!.step.output as { selected?: unknown }).selected;
+  expect(Array.isArray(selected)).toBe(true);
+  expect(selected).toMatchObject([{ id: "c1", score: 0.9, title: "設計.pdf" }]);
 });

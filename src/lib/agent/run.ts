@@ -57,8 +57,14 @@ export async function* runAgent({ query, ownerUserId, threadId }: RunInput): Asy
     ({ output: { backend: "qdrant", mode: "dense" }, summary: "密ベクトル検索を実行" }))) yield e;
   for await (const e of runStep(byName("bm25_search"), async () =>
     ({ output: { backend: "qdrant", mode: "sparse" }, summary: "スパース(BM25)検索を実行" }))) yield e;
-  for await (const e of runStep(byName("rerank"), async () =>
-    ({ output: { kept: chunks.length }, summary: `${chunks.length} 件を再順位付け` }))) yield e;
+  for await (const e of runStep(byName("rerank"), async () => ({
+    // UI（rerank カード）は output.selected を RerankHit[] として描画する。
+    output: {
+      kept: chunks.length,
+      selected: chunks.map((c) => ({ id: c.chunkId, score: c.score, title: c.documentTitle })),
+    },
+    summary: `${chunks.length} 件を再順位付け`,
+  }))) yield e;
   const docCount = new Set(chunks.map((c) => c.documentId)).size;
   for await (const e of runStep(byName("fetch_document"), async () =>
     ({ output: { documents: docCount }, summary: `${docCount} 件の文書から文脈取得` }))) yield e;

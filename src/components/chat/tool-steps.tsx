@@ -111,7 +111,7 @@ function ToolStepCard({ step, expanded, onToggle }: { step: ToolCall; expanded: 
           {step.output && (
             <div>
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">出力</div>
-              {step.name === "rerank" ? (
+              {step.name === "rerank" && Array.isArray(step.output.selected) ? (
                 <div className="flex flex-col gap-[5px] py-1">
                   {(step.output.selected as RerankHit[]).map((s) => (
                     <div key={s.id} className="grid grid-cols-[80px_42px_1fr] items-center gap-2.5 text-[11.5px] max-md:grid-cols-[90px_38px_1fr] max-md:gap-2">
