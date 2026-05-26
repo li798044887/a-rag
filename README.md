@@ -110,7 +110,7 @@ curl -s localhost:8000/health
 | 変数 | 説明 | 既定値 |
 |---|---|---|
 | `ARAG_JWT_SECRET` | JWT 署名鍵（本番では必須） | 開発用固定値 |
-| `ANTHROPIC_API_KEY` | Claude API キー | 未設定時はサンプル回答 |
+| `ANTHROPIC_API_KEY` | Claude API キー（回答生成に必須） | 未設定時は検索・引用は動作するが、回答生成はスキップし案内メッセージを返す |
 | `DATABASE_URL` | web→Postgres 接続（node-postgres 形式） | `postgres://arag:arag@localhost:5432/arag` |
 | `RAG_SERVICE_URL` | web→rag 内部 HTTP | `http://localhost:8000` |
 | `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン | `dev-internal-token` |

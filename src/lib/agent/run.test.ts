@@ -19,6 +19,9 @@ vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
 import { runAgent } from "@/lib/agent/run";
 import type { AgentEvent } from "@/lib/types";
 
+// 生成パス（streamText）を検証するため API キー有りを模す（実呼び出しはモック済み）。
+process.env.ANTHROPIC_API_KEY = "test-key";
+
 test("runAgent yields steps, streams answer, and finishes with sources+citationMap", async () => {
   const events: AgentEvent[] = [];
   for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {

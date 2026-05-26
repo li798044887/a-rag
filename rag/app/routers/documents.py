@@ -80,11 +80,12 @@ async def create_document(file: UploadFile = File(...), owner_user_id: str = For
 
 @router.post("/jobs/{job_id}/retry", response_model=IngestStarted,
              dependencies=[Depends(require_internal_token)])
-async def retry_job(job_id: str):
+async def retry_job(job_id: str, owner_user_id: str | None = None):
     session = SessionLocal()
     try:
         job = session.get(IngestJob, job_id)
-        if not job:
+        # owner_user_id が渡された場合は所有者一致を強制（web 経由の IDOR を防ぐ）。
+        if not job or (owner_user_id is not None and job.owner_user_id != owner_user_id):
             raise HTTPException(status_code=404, detail="job not found")
         if job.status not in ("ready", "error"):
             raise HTTPException(status_code=409, detail=f"job is {job.status}, cannot retry")

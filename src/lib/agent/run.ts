@@ -81,6 +81,11 @@ export async function* runAgent({ query, ownerUserId, threadId }: RunInput): Asy
   } else if (chunks.length === 0) {
     answer = "該当する資料が見つかりませんでした。別の言い回しで質問するか、関連ファイルをアップロードしてください。";
     yield { type: "answer-delta", text: answer };
+  } else if (!process.env.ANTHROPIC_API_KEY) {
+    // 検索・引用（右パネルの一次資料）は機能するが、回答生成には API キーが必要。
+    answer =
+      "回答の生成には ANTHROPIC_API_KEY の設定が必要です。検索でヒットした一次資料は右パネルでご確認いただけます。";
+    yield { type: "answer-delta", text: answer };
   } else {
     const context = chunks
       .map((c, i) => `[${i + 1}] ${c.documentTitle} — ${c.headingPath}\n${c.expandedText || c.text}`)
