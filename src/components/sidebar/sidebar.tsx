@@ -52,10 +52,15 @@ export function Sidebar(props: SidebarProps) {
     );
   }
 
+  // relativeTime() の実出力（たった今 / X分前 / X時間前 / X日前 / X週間前 / Xヶ月前 / X年前）に
+  // 合わせて振り分ける。どれにも当たらないものは「以前」に落とし、スレッドが
+  // どのグループからも漏れて消えないようにする（catch-all）。
+  const isToday = (u: string) => u === "今" || u === "たった今" || u.includes("分前") || u.includes("時間");
+  const isWeek = (u: string) => u === "昨日" || u.includes("日前");
   const groups = [
-    { label: "今日", items: filtered.filter((t) => t.updated === "今" || t.updated.includes("時間")) },
-    { label: "今週", items: filtered.filter((t) => ["昨日", "2日前", "3日前"].includes(t.updated)) },
-    { label: "以前", items: filtered.filter((t) => t.updated.includes("週間") || t.updated === "先週") },
+    { label: "今日", items: filtered.filter((t) => isToday(t.updated)) },
+    { label: "今週", items: filtered.filter((t) => !isToday(t.updated) && isWeek(t.updated)) },
+    { label: "以前", items: filtered.filter((t) => !isToday(t.updated) && !isWeek(t.updated)) },
   ].filter((g) => g.items.length > 0);
 
   return (
