@@ -35,7 +35,9 @@ services:
       RAG_INTERNAL_TOKEN: dev-internal-token
       PRELOAD_MODELS: "1"
     ports: ["8000:8000"]
-    volumes: ["uploads:/data/uploads"]
+    # modelcache: BGE-M3 / reranker / MinerU の重みを永続化し rag↔worker で共有
+    # （再作成のたびに数 GB を再ダウンロードしない）。
+    volumes: ["uploads:/data/uploads", "modelcache:/root/.cache"]
     depends_on:
       postgres: { condition: service_healthy }
       qdrant: { condition: service_started }
@@ -59,7 +61,7 @@ services:
       EMBEDDER: bge-m3
       RERANKER: bge
       RAG_INTERNAL_TOKEN: dev-internal-token
-    volumes: ["uploads:/data/uploads"]
+    volumes: ["uploads:/data/uploads", "modelcache:/root/.cache"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
@@ -69,3 +71,4 @@ volumes:
   qdrantdata:
   redisdata:
   uploads:
+  modelcache:
