@@ -86,10 +86,10 @@ export function useAgent() {
         return { ...prev, [k]: { turns: [...turns, emptyTurn(query, attachments)] } };
       });
 
-      if (threadId) {
-        controllers.current[key] = ctrl;
-        appendTurn(key);
-      }
+      // 楽観的に新しいターンを即追加（新規は LIVE_KEY、既存はそのスレッドへ）。
+      // 新規スレッドの実 id 確定（X-Thread-Id）までの本文空白フラッシュを防ぐ。
+      controllers.current[key] = ctrl;
+      appendTurn(key);
 
       const finish = (status: ConvStatus): { status: ConvStatus; threadId: string } => {
         setConvs((prev) => {
