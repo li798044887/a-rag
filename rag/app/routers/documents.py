@@ -114,6 +114,7 @@ def _fetch_document(document_id: str, req: FetchDocumentRequest) -> FetchDocumen
         around = None
         if req.around_chunk_id:
             center = next((c for c in rows if c.id == req.around_chunk_id), None)
+            # around_chunk_id が見つからない場合は窓掛けせず先頭から返す（意図的フォールバック）
             around = center.ordinal if center else None
         rows = select_chunks(rows, around_ordinal=around)
         return FetchDocumentResponse(

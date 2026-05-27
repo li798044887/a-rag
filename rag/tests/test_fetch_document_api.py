@@ -1,4 +1,7 @@
+from app.config import settings
 from app.documents_service import select_chunks
+from app.routers import documents as documents_router
+from app.schemas import FetchDocumentResponse, FetchedChunk
 
 
 class _C:
@@ -18,11 +21,6 @@ def test_select_chunks_windows_around_ordinal():
     chunks = [_C(i) for i in range(100)]
     out = select_chunks(chunks, around_ordinal=50, window=2, max_chunks=40)
     assert [c.ordinal for c in out] == [48, 49, 50, 51, 52]
-
-
-from app.config import settings
-from app.routers import documents as documents_router
-from app.schemas import FetchDocumentResponse, FetchedChunk
 
 
 def test_fetch_document_requires_token(client):
