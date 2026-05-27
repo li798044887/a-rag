@@ -116,7 +116,8 @@ export function Transcript({
                   <StreamingAnswer text={turn.answer} streaming={turn.streaming} onCite={(n) => onCite(n, idx)} citationStyle={citationStyle} />
                 )
               )}
-              {turn.status === "done" && (
+              {/* フッター操作（コピー/再生成/評価）はスレッド単位の状態を扱うため最新ターンのみに表示。 */}
+              {isLast && turn.status === "done" && (
                 <AnswerFooter
                   tokens={turn.tokens} durationMs={turn.durationMs} sources={turn.sources}
                   onCopy={onCopy} onRegenerate={onRegenerate} onFeedback={onFeedback} feedback={feedback}
