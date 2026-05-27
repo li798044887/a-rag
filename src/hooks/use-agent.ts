@@ -117,20 +117,20 @@ export function useAgent() {
         if (realId !== key) {
           controllers.current[realId] = ctrl;
           delete controllers.current[key];
-          // 仮キーに積んだターンを実キーへ移し替える（新規スレッド時）。
+          // 仮キーのターンを実キーへ移し、ターンが無ければ emptyTurn を1つ用意（空エントリを残さない）。
           setConvs((prev) => {
-            const moved = prev[key]?.turns ?? [];
+            const moved = threadId ? [] : (prev[key]?.turns ?? []);
+            const merged = [...(prev[realId]?.turns ?? []), ...moved];
             const next = { ...prev };
             delete next[key];
-            next[realId] = { turns: [...(prev[realId]?.turns ?? []), ...(threadId ? [] : moved)] };
+            next[realId] = { turns: merged.length ? merged : [emptyTurn(query, attachments)] };
             return next;
           });
           key = realId;
-        } else if (!controllers.current[key]) {
-          controllers.current[key] = ctrl;
+        } else {
+          if (!controllers.current[key]) controllers.current[key] = ctrl;
+          setConvs((prev) => (prev[key]?.turns.length ? prev : { ...prev, [key]: { turns: [emptyTurn(query, attachments)] } }));
         }
-        // 実キー側にターンが無ければ（新規スレッド経路）ここで追加。
-        setConvs((prev) => (prev[key]?.turns.length ? prev : { ...prev, [key]: { turns: [emptyTurn(query, attachments)] } }));
         cb.onThread?.(key);
 
         if (!res.ok || !res.body) return finish("error");
