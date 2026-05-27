@@ -74,6 +74,21 @@ export interface CompletedThread {
   durationMs: number;
 }
 
+/** 1ターン分（ユーザー質問 + エージェント実行 + 回答）。 */
+export interface Turn {
+  query: string;
+  steps: ToolCall[];
+  answer: string;
+  streaming: boolean;
+  citationMap: CitationMap;
+  sourceIds: string[];
+  sources: Source[];
+  tokens: number;
+  durationMs: number;
+  status: "running" | "done" | "cancelled" | "error";
+  attachments: string[];
+}
+
 // ── Models / prompts / scope ────────────────────────────────────────────────
 export interface ModelOption {
   id: string;
