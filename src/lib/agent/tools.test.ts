@@ -15,6 +15,7 @@ vi.mock("@/lib/agent/retrieve-client", () => ({
 
 import { buildTools } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
+import { retrieveChunks, fetchDocument } from "@/lib/agent/retrieve-client";
 
 test("retrieve tool registers citations and returns numbered text", async () => {
   const reg = new CitationRegistry();
@@ -39,4 +40,27 @@ test("fetch_document tool registers citations and records meta", async () => {
   expect(out).toContain("[1]");
   expect(reg.size).toBe(1);
   expect(meta.get("call-2")).toMatchObject({ name: "fetch_document" });
+});
+
+test("retrieve tool falls back when no chunks are returned", async () => {
+  vi.mocked(retrieveChunks).mockResolvedValueOnce([]);
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const out = await tools.retrieve.execute!({ query: "存在しない" }, { toolCallId: "call-3", messages: [] } as never);
+
+  expect(out).toBe("該当する資料は見つかりませんでした。");
+  expect(reg.size).toBe(0);
+});
+
+test("fetch_document tool falls back when no chunks are returned", async () => {
+  vi.mocked(fetchDocument).mockResolvedValueOnce({ documentId: "d1", documentTitle: "X", chunks: [] });
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const out = await tools.fetch_document.execute!(
+    { document_id: "d1" }, { toolCallId: "call-4", messages: [] } as never);
+
+  expect(out).toBe("文書の本文が取得できませんでした。");
+  expect(reg.size).toBe(0);
 });

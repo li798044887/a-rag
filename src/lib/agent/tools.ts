@@ -58,7 +58,8 @@ export function buildTools({ registry, ownerUserId, meta }: BuildToolsInput): To
           });
           return `[${n}] ${doc.documentTitle} — ${c.headingPath}\n${c.text}`;
         });
-        meta.set(toolCallId, { name: "fetch_document", input: { document_id, around_chunk_id },
+        meta.set(toolCallId, { name: "fetch_document",
+          input: { document_id, ...(around_chunk_id ? { around_chunk_id } : {}) },
           summary: `${doc.documentTitle} → ${doc.chunks.length} 段` });
         return lines.length ? lines.join("\n\n") : "文書の本文が取得できませんでした。";
       },
