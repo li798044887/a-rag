@@ -93,6 +93,8 @@ export async function getThreadMessages(threadId: string, userId: string): Promi
   }
 
   const out: ThreadDetail[] = [];
+  // 履歴ウィンドウは最大8ターンと小さいため messageごと1クエリ（N+1）を許容する。
+  // 将来ウィンドウを拡大する場合は inArray で citations を一括取得すべき。
   for (const msg of msgs) {
     const cites = await db.select().from(citations).where(eq(citations.messageId, msg.id));
     const sources = sourcesFromCitations(cites);

@@ -8,6 +8,7 @@ export interface HistoryTurn {
 /** 過去ターン（古い順）を直近 maxTurns に窓掛けして user/assistant メッセージ列へ変換。
  *  回答が空のターン（実行中/失敗）は履歴から除外する。 */
 export function toModelHistory(turns: HistoryTurn[], maxTurns: number): ModelMessage[] {
+  if (maxTurns <= 0) return [];
   const valid = turns.filter((t) => t.answerText.trim().length > 0);
   const windowed = valid.slice(-maxTurns);
   const out: ModelMessage[] = [];

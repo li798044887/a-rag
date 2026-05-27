@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import type { ModelMessage } from "ai";
 import { verifyAccessToken, authCookieName } from "@/lib/auth";
 import { runAgent } from "@/lib/agent/run";
 import { createThread, saveCompletedMessage, getThreadMessages } from "@/lib/threads";
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
   const tid = threadId || (await createThread(claims.sub, q || "新しいスレッド")).id;
 
   // 既存スレッドへの追記なら過去ターンを履歴として読み込む（直近8ターン窓）。
-  let history: import("ai").ModelMessage[] = [];
+  let history: ModelMessage[] = [];
   if (threadId) {
     const prior = await getThreadMessages(tid, claims.sub);
     if (prior) {
