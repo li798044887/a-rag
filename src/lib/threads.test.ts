@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { createUser } from "@/lib/users";
 import {
-  createThread, listThreads, saveCompletedMessage, getThreadDetail,
+  createThread, listThreads, saveCompletedMessage, getThreadDetail, getThreadMessages,
 } from "@/lib/threads";
 
 let userId: string;
@@ -33,4 +33,23 @@ test("create, save message+citations, list, and reconstruct", async () => {
   expect(detail?.completed.answerText).toBe("失効します[1]。");
   expect(detail?.sources[0].id).toBe("d1");
   expect(detail?.citationMap[1]).toMatchObject({ sourceId: "d1", sectionId: "c1" });
+});
+
+test("getThreadMessages returns all turns oldest-first with citations", async () => {
+  const t = await createThread(userId, "履歴テスト");
+  await saveCompletedMessage({
+    threadId: t.id, query: "Q1", answerText: "A1[1]。", tokens: 5, durationMs: 100,
+    steps: [{ id: "s1" }],
+    citations: [{ ordinal: 1, documentId: "d1", documentTitle: "設計.pdf",
+      chunkId: "c1", sectionId: "c1", headingPath: "h", snippet: "本文" }],
+  });
+  await saveCompletedMessage({
+    threadId: t.id, query: "Q2", answerText: "A2。", tokens: 4, durationMs: 90,
+    steps: [], citations: [],
+  });
+
+  const turns = await getThreadMessages(t.id, userId);
+  expect(turns?.map((x) => x.completed.query)).toEqual(["Q1", "Q2"]);
+  expect(turns?.[0].sources[0].id).toBe("d1");
+  expect(turns?.[0].citationMap[1]).toMatchObject({ sourceId: "d1", sectionId: "c1" });
 });

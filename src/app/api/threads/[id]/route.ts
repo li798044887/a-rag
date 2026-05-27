@@ -4,7 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { verifyAccessToken, authCookieName } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { threads } from "@/lib/db/schema";
-import { getThreadDetail } from "@/lib/threads";
+import { getThreadMessages } from "@/lib/threads";
 
 export const runtime = "nodejs";
 
@@ -19,9 +19,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const uid = await userId();
   if (!uid) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
-  const detail = await getThreadDetail(id, uid);
-  if (!detail) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json(detail);
+  const turns = await getThreadMessages(id, uid);
+  if (!turns) return NextResponse.json({ error: "not found" }, { status: 404 });
+  return NextResponse.json({ turns });
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {

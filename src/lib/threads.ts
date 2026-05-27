@@ -78,6 +78,34 @@ export async function getThreadDetail(threadId: string, userId: string): Promise
   };
 }
 
+/** スレッドの全ターンを古い順に復元（各ターン = 1 完了メッセージ）。 */
+export async function getThreadMessages(threadId: string, userId: string): Promise<ThreadDetail[] | null> {
+  const [t] = await db.select().from(threads)
+    .where(and(eq(threads.id, threadId), eq(threads.userId, userId)));
+  if (!t) return null;
+
+  const msgs = await db.select().from(messages)
+    .where(eq(messages.threadId, threadId))
+    .orderBy(messages.createdAt);
+  if (msgs.length === 0) {
+    return [{ completed: { query: t.title, answerText: "", tokens: 0, durationMs: 0 },
+              sources: [], citationMap: {}, steps: [] }];
+  }
+
+  const out: ThreadDetail[] = [];
+  for (const msg of msgs) {
+    const cites = await db.select().from(citations).where(eq(citations.messageId, msg.id));
+    const sources = sourcesFromCitations(cites);
+    const citationMap: CitationMap = {};
+    for (const c of cites) citationMap[c.ordinal] = { sourceId: c.documentId, sectionId: c.sectionId };
+    out.push({
+      completed: { query: msg.query, answerText: msg.answerText, tokens: msg.tokens, durationMs: msg.durationMs },
+      sources, citationMap, steps: msg.steps as ToolCall[],
+    });
+  }
+  return out;
+}
+
 function sourcesFromCitations(cites: Array<typeof citations.$inferSelect>): Source[] {
   const byDoc = new Map<string, Source>();
   for (const c of cites) {
