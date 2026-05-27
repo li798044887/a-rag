@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import type { ToolSet } from "ai";
 
 // retrieve-client はツール経由でのみ使われる。ツールの execute がレジストリ登録する様子を再現するため
@@ -36,10 +36,17 @@ vi.mock("ai", async (orig) => {
 
 vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
 
+import { streamText } from "ai";
 import { runAgent } from "@/lib/agent/run";
 import type { AgentEvent } from "@/lib/types";
 
 process.env.ANTHROPIC_API_KEY = "test-key";
+
+// 各テストでキーやモック差し替えが他テストへ漏れないよう確実に復元する。
+afterEach(() => {
+  process.env.ANTHROPIC_API_KEY = "test-key";
+  vi.mocked(streamText).mockClear();
+});
 
 test("runAgent runs tool loop, streams answer, finishes with sources+citationMap", async () => {
   const events: AgentEvent[] = [];
@@ -63,4 +70,47 @@ test("runAgent runs tool loop, streams answer, finishes with sources+citationMap
   expect(done.sources[0].id).toBe("d1");
   expect(done.sources[0].sections[0].id).toBe("c1");
   expect(done.citationMap[1]).toMatchObject({ sourceId: "d1", sectionId: "c1" });
+});
+
+test("runAgent emits an error step on tool-error and continues to stream the answer", async () => {
+  // ツールがエラーを返す筋書きへ差し替え。エラーステップ配信後も text-delta → finish が続く。
+  vi.mocked(streamText).mockReturnValueOnce({
+    fullStream: (async function* () {
+      yield { type: "tool-error", toolCallId: "call-1", toolName: "retrieve", input: { query: "x" }, error: new Error("boom") };
+      yield { type: "text-delta", id: "t1", text: "復旧しました。" };
+      yield { type: "finish", finishReason: "stop", totalUsage: { totalTokens: 7 } };
+    })(),
+  } as never);
+
+  const events: AgentEvent[] = [];
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
+    events.push(e);
+  }
+
+  const steps = events.filter((e) => e.type === "step");
+  expect(steps.some((e) => e.step.name === "retrieve" && e.step.status === "error")).toBe(true);
+
+  const answer = events.filter((e) => e.type === "answer-delta").map((e) => e.text).join("");
+  expect(answer).toContain("復旧");
+
+  const done = events.find((e) => e.type === "done");
+  expect(done).toBeDefined();
+});
+
+test("runAgent returns the missing-key reason and empty sources when no API key is set", async () => {
+  delete process.env.ANTHROPIC_API_KEY;
+
+  const events: AgentEvent[] = [];
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
+    events.push(e);
+  }
+
+  const answer = events.filter((e) => e.type === "answer-delta").map((e) => e.text).join("");
+  expect(answer).toContain("ANTHROPIC_API_KEY");
+
+  const done = events.find((e) => e.type === "done");
+  if (!done || done.type !== "done") throw new Error("done event missing");
+  expect(done.sources).toEqual([]);
+  expect(done.citationMap).toEqual({});
+  expect(done.threadId).toBe("t1");
 });

@@ -60,13 +60,13 @@ export async function* runAgent({ query, ownerUserId, threadId, history, modelId
   let answerStarted = false;
   let answer = "";
   let answerStepEmitted = false;
-  const answerStart = { t: 0 };
+  let answerStartT = 0;
 
-  const emitAnswerStep = (status: "running" | "done"): AgentEvent => ({
+  const emitAnswerStep = (status: "running" | "done", t: number): AgentEvent => ({
     type: "step",
     step: {
       id: "answer", name: "answer" as ToolName, label: "回答生成", status,
-      durationMs: status === "done" ? Date.now() - answerStart.t : 0,
+      durationMs: status === "done" ? Date.now() - t : 0,
       input: {}, output: null, summary: status === "done" ? "回答を生成" : "回答を生成中…",
     },
   });
@@ -96,6 +96,8 @@ export async function* runAgent({ query, ownerUserId, threadId, history, modelId
         };
         yield { type: "step", step };
       } else if (part.type === "tool-error") {
+        // エラーをステップとして配信しつつループは継続する。SDK がこのエラーをモデルへ渡し、
+        // モデル側で別ツール/別クエリによる回復・フォールバックを試みるため。
         const t0 = stepStart.get(part.toolCallId) ?? Date.now();
         yield {
           type: "step",
@@ -107,10 +109,12 @@ export async function* runAgent({ query, ownerUserId, threadId, history, modelId
           },
         };
       } else if (part.type === "text-delta") {
+        // 中間テキストも回答本文として連結する前提。現行の Claude/GPT はツール呼び出しターンに
+        // 本文を同時出力しないため、最終ステップのテキストのみが流れてくるとみなして許容する。
         if (!answerStarted) {
           answerStarted = true;
-          answerStart.t = Date.now();
-          yield emitAnswerStep("running");
+          answerStartT = Date.now();
+          yield emitAnswerStep("running", answerStartT);
           answerStepEmitted = true;
           yield { type: "answer-start" };
         }
@@ -135,16 +139,18 @@ export async function* runAgent({ query, ownerUserId, threadId, history, modelId
     yield { type: "answer-delta", text: answer };
   }
 
-  if (answerStepEmitted) yield emitAnswerStep("done");
+  if (answerStepEmitted) yield emitAnswerStep("done", answerStartT);
 
+  // 概算（文字数ベース）。将来は finish パーツの totalUsage.totalTokens を使える。
   const tokens = Math.max(1, Math.round(answer.length / 1.8));
+  const sources = registry.toSources();
   yield {
     type: "done",
     tokens,
     durationMs: Date.now() - started,
     citationMap: registry.toCitationMap(),
-    sourceIds: registry.toSources().map((s) => s.id),
-    sources: registry.toSources(),
+    sourceIds: sources.map((s) => s.id),
+    sources,
     threadId,
   };
 }
