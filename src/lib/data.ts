@@ -13,7 +13,6 @@ import type {
   SourceConnector,
   SuggestedPrompt,
   ThreadSummary,
-  ToolCall,
 } from "@/lib/types";
 
 export const SAMPLE_SOURCES: Source[] = [
@@ -124,83 +123,6 @@ export const SAMPLE_SOURCES: Source[] = [
         body: "プロダクト本部はQ2末までにアジャイル運用への移行を完了し、Velocityおよびリリース頻度をベースラインとして確立する。",
       },
     ],
-  },
-];
-
-export const SAMPLE_TOOL_CALLS: ToolCall[] = [
-  {
-    id: "t1",
-    name: "rewrite_query",
-    label: "クエリ正規化",
-    status: "done",
-    durationMs: 48,
-    input: { query: "先月の議事録でアジャイル移行について何が決まったか教えて" },
-    output: {
-      rewritten: "アジャイル移行 議事録 2026-04 決定事項",
-      filters: {
-        date_range: "2026-04-01..2026-04-30",
-        source_types: ["meeting", "wiki", "slack"],
-      },
-    },
-    summary: '"先月" を 2026-04 に解決、ソース種別を3つに絞り込み',
-  },
-  {
-    id: "t2",
-    name: "vector_search",
-    label: "ベクトル検索",
-    status: "done",
-    durationMs: 312,
-    input: { query: "アジャイル移行 議事録 2026-04 決定事項", top_k: 20, index: "kb-internal-v4" },
-    output: { hits: 14, top_score: 0.847 },
-    summary: "14件ヒット (cosine類似度 0.847..0.612)",
-  },
-  {
-    id: "t3",
-    name: "bm25_search",
-    label: "キーワード検索",
-    status: "done",
-    durationMs: 174,
-    input: { query: "アジャイル 移行 スクラム Scrum", top_k: 20 },
-    output: { hits: 9, top_score: 8.42 },
-    summary: "9件ヒット (BM25 スコア 8.42..2.10)",
-  },
-  {
-    id: "t4",
-    name: "rerank",
-    label: "リランキング",
-    status: "done",
-    durationMs: 218,
-    input: { model: "cohere-rerank-v3", candidates: 23, top_n: 5 },
-    output: {
-      selected: [
-        { id: "src-1", score: 0.94, title: "製品MTG 議事録 — 2026-04-12" },
-        { id: "src-2", score: 0.89, title: "Engineering Wiki: アジャイル移行プラン v3" },
-        { id: "src-3", score: 0.81, title: "#product-leadership スレッド" },
-        { id: "src-4", score: 0.62, title: "Q2 OKR ドキュメント" },
-        { id: "src-x", score: 0.41, title: "(他 1件 関連度低)" },
-      ],
-    },
-    summary: "上位4件を採択",
-  },
-  {
-    id: "t5",
-    name: "fetch_document",
-    label: "ドキュメント取得",
-    status: "done",
-    durationMs: 432,
-    input: { ids: ["src-1", "src-2", "src-3", "src-4"] },
-    output: { fetched: 4, total_tokens: 8740 },
-    summary: "本文 8,740 tokens 取得",
-  },
-  {
-    id: "t6",
-    name: "summarize",
-    label: "回答生成",
-    status: "running",
-    durationMs: 1240,
-    input: { model: "claude-sonnet-4-5", max_tokens: 1024 },
-    output: null,
-    summary: "ストリーミング中…",
   },
 ];
 

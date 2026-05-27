@@ -12,6 +12,14 @@ const TOOL_ICONS: Partial<Record<ToolName, React.ReactNode>> = {
       <circle cx="7" cy="7" r="1.5" fill="currentColor" />
     </>
   ),
+  retrieve: (
+    <>
+      <circle cx="7" cy="7" r="4" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+    </>
+  ),
+  answer: <path d="M3 4h10M3 8h10M3 12h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />,
   bm25_search: <path d="M2 4h12M2 8h8M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />,
   rerank: (
     <>
@@ -53,20 +61,6 @@ function StatusIcon({ status }: { status: ToolStatus }) {
     <span className="grid h-[14px] w-[14px] place-items-center rounded-full bg-[#B83A1F] text-[9px] font-bold text-white" aria-label="エラー">
       !
     </span>
-  );
-}
-
-function WrapHead({ title, steps }: { title: string; steps: ToolCall[] }) {
-  return (
-    <div className="flex items-center justify-between border-b-[0.5px] border-divider px-3.5 py-2.5 max-md:px-3">
-      <span className="inline-flex items-center gap-2 text-[12px] font-semibold text-fg">
-        <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-        {title}
-      </span>
-      <span className="font-mono text-[11px] text-muted">
-        {steps.length} ステップ · {formatMs(steps.reduce((a, s) => a + (s.durationMs || 0), 0))}
-      </span>
-    </div>
   );
 }
 
@@ -208,36 +202,21 @@ interface Props {
 }
 
 export function ToolSteps({ steps, variant, expandedMap, onToggleStep }: Props) {
-  const wrapCls = "overflow-hidden rounded-[14px] border-[0.5px] border-divider-strong bg-surface-2";
-
-  if (variant === "log") {
-    return (
-      <div className={wrapCls}>
-        <WrapHead title="ツール実行ログ" steps={steps} />
-        <ToolStepLog steps={steps} />
-      </div>
-    );
-  }
+  if (variant === "log") return <ToolStepLog steps={steps} />;
   if (variant === "timeline") {
     return (
-      <div className={wrapCls}>
-        <WrapHead title="実行タイムライン" steps={steps} />
-        <div className="px-3.5 pb-3 pt-2 max-md:px-3">
-          {steps.map((s, i) => (
-            <ToolStepTimeline key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} isLast={i === steps.length - 1} />
-          ))}
-        </div>
+      <div className="px-3.5 pb-3 pt-2 max-md:px-3">
+        {steps.map((s, i) => (
+          <ToolStepTimeline key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} isLast={i === steps.length - 1} />
+        ))}
       </div>
     );
   }
   return (
-    <div className={wrapCls}>
-      <WrapHead title="エージェント実行" steps={steps} />
-      <div className="flex flex-col">
-        {steps.map((s) => (
-          <ToolStepCard key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} />
-        ))}
-      </div>
+    <div className="flex flex-col">
+      {steps.map((s) => (
+        <ToolStepCard key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} />
+      ))}
     </div>
   );
 }

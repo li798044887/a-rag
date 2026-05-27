@@ -4,16 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Login } from "@/components/auth/login";
 import { Composer } from "@/components/chat/composer";
 import { EmptyState } from "@/components/chat/empty-state";
-import { AnswerFooter, CancelledNotice } from "@/components/chat/answer-footer";
-import { AssistantMessage, StreamingAnswer, UserMessage } from "@/components/chat/messages";
-import { ToolSteps } from "@/components/chat/tool-steps";
+import { Transcript } from "@/components/chat/messages";
 import { ToastViewport } from "@/components/feedback/toast-viewport";
 import { HelpModal } from "@/components/modals/help-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { ShareModal } from "@/components/modals/share-modal";
 import { RightPanel, type RightPanelAction } from "@/components/sources/right-panel";
 import { Sidebar } from "@/components/sidebar/sidebar";
-import { DropOverlay, UserAttachments } from "@/components/uploads/uploads";
+import { DropOverlay } from "@/components/uploads/uploads";
 import { MODELS, SCOPE_PRESETS } from "@/lib/data";
 import { useAgent } from "@/hooks/use-agent";
 import { useAuth } from "@/hooks/use-auth";
@@ -23,7 +21,7 @@ import { useTweaks } from "@/hooks/use-tweaks";
 import { useUploads } from "@/hooks/use-uploads";
 import { cn } from "@/lib/utils";
 import { MODEL_STORAGE_KEY } from "@/lib/constants";
-import type { ModelOption, ScopeValue, Source, ThreadSummary } from "@/lib/types";
+import type { CitationMap, ModelOption, ScopeValue, Source, ThreadSummary, ToolCall, Turn } from "@/lib/types";
 
 type Phase = "empty" | "running" | "done" | "cancelled";
 
@@ -80,17 +78,26 @@ export function Workspace() {
 
   // 表示中スレッドの会話状態（ライブ実行 or 取得済みスナップショット）。無ければ空。
   const view = agent.get(activeThreadId);
-  const conv = view ?? {
-    query: "", steps: [], answer: "", streaming: false, citationMap: {},
-    sourceIds: [], sources: [], tokens: 0, durationMs: 0, status: "done" as const, attachments: [],
-  };
+  const turns = view?.turns ?? [];
+  const lastTurn = turns[turns.length - 1];
   const isLive = activeThreadId === liveId;
   const rightPanelShown = rightPanelOpen && phase !== "empty";
+
+  // 右パネル/ヘッダが参照する「アクティブな引用が属するターン」。既定は末尾ターンへ追従。
+  const [activeCiteTurn, setActiveCiteTurn] = useState(0);
+  const lastTurnIdx = turns.length - 1;
+  const [syncedCiteKey, setSyncedCiteKey] = useState("");
+  const citeKey = `${activeThreadId}:${lastTurnIdx}`;
+  if (citeKey !== syncedCiteKey) {
+    setSyncedCiteKey(citeKey);
+    setActiveCiteTurn(lastTurnIdx < 0 ? 0 : lastTurnIdx);
+  }
+  const citeTurn = turns[activeCiteTurn] ?? lastTurn;
 
   // 表示中スレッドの状態に phase を追従させる（ライブ会話を表示中にバックグラウンドで
   // 完了/中断した場合や、スレッド切替で戻った場合に正しく反映する）。
   // wasMobile と同じ render-phase パターンで、cascading effect を避ける。
-  const activeStatus = view?.status;
+  const activeStatus = lastTurn?.status;
   const statusKey = activeStatus ? `${activeThreadId}:${activeStatus}` : "";
   const [syncedStatusKey, setSyncedStatusKey] = useState("");
   if (statusKey && statusKey !== syncedStatusKey) {
@@ -107,7 +114,7 @@ export function Workspace() {
   }
 
   // Auto-open the source panel once enough of the answer has streamed (desktop).
-  if (!isMobile && !autoOpened && !rightPanelOpen && conv.streaming && conv.answer.length > 60) {
+  if (!isMobile && !autoOpened && !rightPanelOpen && lastTurn?.streaming && (lastTurn?.answer.length ?? 0) > 60) {
     setAutoOpened(true);
     setRightPanelOpen(true);
   }
@@ -117,7 +124,7 @@ export function Workspace() {
     if (userScrolled.current) return;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [conv.answer, conv.steps, phase, activeThreadId]);
+  }, [lastTurn?.answer, lastTurn?.steps?.length, phase, activeThreadId]);
 
   const onChatScroll = () => {
     const el = scrollRef.current;
@@ -146,8 +153,9 @@ export function Workspace() {
 
       // 完了済みスレッドを表示中なら追記、それ以外（新規 or 実行中）は新規スレッド。
       const cur = agent.get(activeThreadId);
+      const curLast = cur?.turns[cur.turns.length - 1];
       const continueId =
-        activeThreadId !== "th-current" && cur && cur.status !== "running" ? activeThreadId : undefined;
+        activeThreadId !== "th-current" && cur && curLast?.status !== "running" ? activeThreadId : undefined;
       if (continueId) setLiveId(continueId);
 
       // 実行は会話マップ側で継続する。別スレッドへ移動しても中断されない。
@@ -179,7 +187,7 @@ export function Workspace() {
 
   const copyAnswer = async () => {
     try {
-      const text = conv.answer.replace(/\*\*/g, "").replace(/\[\d+\]/g, "");
+      const text = (lastTurn?.answer ?? "").replace(/\*\*/g, "").replace(/\[\d+\]/g, "");
       await navigator.clipboard.writeText(text);
       push("回答をコピーしました", "success");
     } catch {
@@ -198,9 +206,11 @@ export function Workspace() {
     if (isMobile) setSidebarCollapsed(true);
   };
 
-  const openCitation = (n: number) => {
-    const c = conv.citationMap[n];
+  const openCitation = (n: number, turnIdx: number) => {
+    const turn = turns[turnIdx];
+    const c = turn?.citationMap[n];
     if (!c) return;
+    setActiveCiteTurn(turnIdx);
     setActiveSourceId(c.sourceId);
     setHighlightSectionId(c.sectionId);
     setRightPanelOpen(true);
@@ -221,7 +231,8 @@ export function Workspace() {
     if (existing) {
       // ライブ実行中 or 取得済みスナップショット。サーバ取得不要でそのまま表示
       // （実行中ならライブ進捗が見える）。phase は同期エフェクトが追従。
-      setUserQuery(existing.query);
+      const exTurns = existing.turns;
+      setUserQuery(exTurns[exTurns.length - 1]?.query ?? "");
     } else if (id === "th-current") {
       setUserQuery("");
       setPhase("empty");
@@ -229,11 +240,18 @@ export function Workspace() {
       // APIからスレッド詳細を取得して履歴を復元
       fetch(`/api/threads/${id}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((detail) => {
-          if (detail) {
-            setUserQuery(detail.completed.query || "");
+        .then((data: { turns: Turn[] | { completed: { query: string; answerText: string; tokens: number; durationMs: number }; sources: Source[]; citationMap: CitationMap; steps: ToolCall[] }[] } | null) => {
+          if (data && data.turns) {
+            const loaded = data.turns.map((d) => ("answer" in d ? d as Turn : {
+              query: d.completed.query, steps: (d.steps ?? []).map((s) => ({ ...s, status: "done" as const })),
+              answer: d.completed.answerText, streaming: false, citationMap: d.citationMap,
+              sourceIds: d.sources.map((s) => s.id), sources: d.sources,
+              tokens: d.completed.tokens, durationMs: d.completed.durationMs,
+              status: "done" as const, attachments: [],
+            }));
             setUserAttachments([]);
-            agent.loadCompleted(id, detail);
+            agent.loadCompleted(id, loaded);
+            setUserQuery(loaded[loaded.length - 1]?.query || "");
             setPhase("done");
           } else {
             setActiveThreadId("th-current");
@@ -279,7 +297,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
       push("エクスポートするスレッドがありません", "info");
       return;
     }
-    const md = `# ${userQuery}\n\n${conv.answer}\n\n---\n\n## 参考資料\n${conv.sources.map((s, i) => `[${i + 1}] ${s.title} (${s.path})`).join("\n")}\n`;
+    const md = `# ${userQuery}\n\n${lastTurn?.answer ?? ""}\n\n---\n\n## 参考資料\n${(lastTurn?.sources ?? []).map((s, i) => `[${i + 1}] ${s.title} (${s.path})`).join("\n")}\n`;
     triggerDownload(new Blob([md], { type: "text/markdown" }), `arag-thread-${activeThreadId}.md`);
     push("スレッドをMarkdownでエクスポートしました", "success");
   };
@@ -369,7 +387,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
   const liveConv = liveId ? agent.get(liveId) : undefined;
   const liveEntry: ThreadSummary | null =
     liveId && liveConv && !threads.some((t) => t.id === liveId)
-      ? { id: liveId, title: liveConv.query || userQuery || "新しいスレッド", updated: "たった今" }
+      ? { id: liveId, title: liveConv.turns[0]?.query || userQuery || "新しいスレッド", updated: "たった今" }
       : null;
   const threadList = [
     ...(liveEntry ? [{ ...liveEntry, active: liveEntry.id === activeThreadId }] : []),
@@ -423,7 +441,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
             ) : (
               <>
                 <span className="truncate">{userQuery.slice(0, 56) || "スレッド"}</span>
-                <span className="font-normal text-[12px] text-muted max-md:hidden">·  {conv.sources.length} sources</span>
+                <span className="font-normal text-[12px] text-muted max-md:hidden">·  {(citeTurn?.sources ?? []).length} sources</span>
                 {phase === "cancelled" && (
                   <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-[#FDEFEA] px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[#B83A1F] dark:bg-[rgba(184,58,31,0.18)]">
                     キャンセル済
@@ -463,7 +481,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                       <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
                       <path d="M10 3v10" stroke="currentColor" strokeWidth="1.4" />
                     </svg>
-                    一次資料 ({conv.sources.length})
+                    一次資料 ({(citeTurn?.sources ?? []).length})
                   </button>
                 )}
               </>
@@ -500,51 +518,23 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                   tweaks.density === "compact" && "gap-4 px-5 pb-10 pt-[18px]",
                 )}
               >
-                <UserMessage text={userQuery} />
-                <AssistantMessage>
-                  {userAttachments.length > 0 && isLive && <UserAttachments files={userAttachments} />}
-                  {/* 最初のステップ到着前の空白を埋める「考え中…」。逐次表示の起点。 */}
-                  {phase === "running" && conv.steps.length === 0 && (
-                    <div className="flex items-center gap-2 text-[12.5px] text-muted">
-                      <span className="h-3 w-3 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
-                      考え中…
-                    </div>
-                  )}
-                  {conv.steps.length > 0 && (
-                    <ToolSteps
-                      steps={conv.steps}
-                      variant={tweaks.toolView}
-                      expandedMap={expandedSteps}
-                      onToggleStep={(id) => setExpandedSteps((m) => ({ ...m, [id]: !m[id] }))}
-                    />
-                  )}
-                  {phase === "cancelled" ? (
-                    <CancelledNotice onRetry={regenerate} />
-                  ) : (
-                    (conv.answer.length > 0 || conv.streaming) && (
-                      <StreamingAnswer
-                        text={conv.answer}
-                        streaming={conv.streaming}
-                        onCite={openCitation}
-                        citationStyle={tweaks.citationStyle}
-                      />
-                    )
-                  )}
-                  {phase === "done" && (
-                    <AnswerFooter
-                      tokens={conv.tokens}
-                      durationMs={conv.durationMs}
-                      sources={conv.sources}
-                      onCopy={copyAnswer}
-                      onRegenerate={regenerate}
-                      onFeedback={(v) => {
-                        setFeedback((prev) => (prev === v ? null : v));
-                        if (feedback !== v) push(v === "up" ? "フィードバックを送信しました" : "改善要望を受け付けました", "success");
-                      }}
-                      feedback={feedback}
-                    />
-                  )}
-                </AssistantMessage>
+                <Transcript
+                  turns={turns}
+                  toolView={tweaks.toolView}
+                  expandedSteps={expandedSteps}
+                  onToggleStep={(id) => setExpandedSteps((m) => ({ ...m, [id]: !m[id] }))}
+                  onCite={openCitation}
+                  citationStyle={tweaks.citationStyle}
+                  onCopy={copyAnswer}
+                  onRegenerate={regenerate}
+                  onFeedback={(v) => {
+                    setFeedback((prev) => (prev === v ? null : v));
+                    if (feedback !== v) push(v === "up" ? "フィードバックを送信しました" : "改善要望を受け付けました", "success");
+                  }}
+                  feedback={feedback}
+                  liveAttachments={userAttachments}
+                  isLiveLastTurn={isLive}
+                />
               </div>
             )}
           </div>
@@ -572,8 +562,8 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
 
       {rightPanelShown && (
         <RightPanel
-          sources={conv.sources}
-          citationMap={conv.citationMap}
+          sources={citeTurn?.sources ?? []}
+          citationMap={citeTurn?.citationMap ?? {}}
           activeSourceId={activeSourceId}
           highlightSectionId={highlightSectionId}
           onSetActive={(id) => {
