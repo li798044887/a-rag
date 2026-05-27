@@ -30,11 +30,13 @@ export type ToolStatus = "pending" | "running" | "done" | "error";
 
 export type ToolName =
   | "rewrite_query"
+  | "retrieve"
   | "vector_search"
   | "bm25_search"
   | "rerank"
   | "fetch_document"
   | "summarize"
+  | "answer"
   | "web_search"
   | "python_sandbox"
   | "sql_query";
