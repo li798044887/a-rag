@@ -16,6 +16,10 @@ interface SidebarProps {
   onOpenHelp: () => void;
   onSignOut: () => void;
   onToggleTheme: () => void;
+  onRenameThread: (id: string, title: string) => void | Promise<void>;
+  onDeleteThread: (id: string) => void | Promise<void>;
+  onToggleStar: (id: string, pinned: boolean) => void | Promise<void>;
+  onAddToProject: (id: string) => void;
   dark: boolean;
   user: AppUser;
 }
@@ -23,9 +27,20 @@ interface SidebarProps {
 const drawerBase =
   "max-tablet:fixed max-tablet:inset-y-0 max-tablet:left-0 max-tablet:z-[60] max-tablet:w-[284px] max-tablet:max-w-[86vw] max-tablet:border-r-0 max-tablet:shadow-[8px_0_32px_rgba(0,0,0,0.18)] max-tablet:transition-transform max-tablet:duration-[240ms] max-tablet:ease-[cubic-bezier(0.2,0.8,0.2,1)]";
 
+interface MenuAnchor {
+  id: string;
+  rect: { left: number; top: number; bottom: number; right: number };
+}
+
 export function Sidebar(props: SidebarProps) {
-  const { collapsed, onToggle, threads, activeThreadId, onSelectThread, onNewChat } = props;
+  const {
+    collapsed, onToggle, threads, activeThreadId, onSelectThread, onNewChat,
+    onRenameThread, onDeleteThread, onToggleStar, onAddToProject,
+  } = props;
   const [filter, setFilter] = useState("");
+  const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const filtered = threads.filter((t) => !filter || t.title.toLowerCase().includes(filter.toLowerCase()));
 
@@ -57,11 +72,36 @@ export function Sidebar(props: SidebarProps) {
   // どのグループからも漏れて消えないようにする（catch-all）。
   const isToday = (u: string) => u === "今" || u === "たった今" || u.includes("分前") || u.includes("時間");
   const isWeek = (u: string) => u === "昨日" || u.includes("日前");
+  const pinned = filtered.filter((t) => t.pinned);
+  const rest = filtered.filter((t) => !t.pinned);
   const groups = [
-    { label: "今日", items: filtered.filter((t) => isToday(t.updated)) },
-    { label: "今週", items: filtered.filter((t) => !isToday(t.updated) && isWeek(t.updated)) },
-    { label: "以前", items: filtered.filter((t) => !isToday(t.updated) && !isWeek(t.updated)) },
+    { label: "ピン留め", items: pinned },
+    { label: "今日", items: rest.filter((t) => isToday(t.updated)) },
+    { label: "今週", items: rest.filter((t) => !isToday(t.updated) && isWeek(t.updated)) },
+    { label: "以前", items: rest.filter((t) => !isToday(t.updated) && !isWeek(t.updated)) },
   ].filter((g) => g.items.length > 0);
+
+  const beginRename = (t: ThreadSummary) => {
+    setMenuAnchor(null);
+    setRenameId(t.id);
+    setRenameValue(t.title);
+  };
+  const commitRename = async () => {
+    const id = renameId;
+    const next = renameValue.trim();
+    setRenameId(null);
+    setRenameValue("");
+    if (!id || !next) return;
+    const original = threads.find((x) => x.id === id);
+    if (!original || next === original.title) return;
+    await onRenameThread(id, next);
+  };
+  const cancelRename = () => {
+    setRenameId(null);
+    setRenameValue("");
+  };
+
+  const menuThread = menuAnchor ? threads.find((t) => t.id === menuAnchor.id) ?? null : null;
 
   return (
     <aside
@@ -123,20 +163,19 @@ export function Sidebar(props: SidebarProps) {
               {g.label}
             </div>
             {g.items.map((t) => (
-              <button
+              <ThreadRow
                 key={t.id}
-                title={t.title}
-                onClick={() => onSelectThread(t.id)}
-                className={cn(
-                  "relative my-px flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors",
-                  t.id === activeThreadId
-                    ? "bg-surface font-medium text-fg shadow-e1"
-                    : "bg-transparent text-fg-2 hover:bg-divider",
-                )}
-              >
-                <span className="min-w-0 flex-1 truncate">{t.title}</span>
-                {t.id === activeThreadId && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
-              </button>
+                thread={t}
+                active={t.id === activeThreadId}
+                renaming={renameId === t.id}
+                renameValue={renameValue}
+                menuOpen={menuAnchor?.id === t.id}
+                onRenameChange={setRenameValue}
+                onRenameCommit={commitRename}
+                onRenameCancel={cancelRename}
+                onSelect={() => onSelectThread(t.id)}
+                onOpenMenu={(rect) => setMenuAnchor({ id: t.id, rect })}
+              />
             ))}
           </div>
         ))}
@@ -146,14 +185,226 @@ export function Sidebar(props: SidebarProps) {
           <div className="px-2 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-2">
             コレクション
           </div>
-          <CollectionItem icon="star" label="スター付き" count="12" />
+          <CollectionItem icon="star" label="スター付き" count={String(pinned.length)} />
           <CollectionItem icon="folder" label="プロジェクト" count="4" />
           <CollectionItem icon="database" label="データソース" count="8" />
         </div>
       </div>
 
       <SidebarFooter {...props} />
+
+      {menuAnchor && menuThread && (
+        <ThreadMenu
+          thread={menuThread}
+          anchor={menuAnchor.rect}
+          onClose={() => setMenuAnchor(null)}
+          onStar={() => {
+            const target = menuThread;
+            setMenuAnchor(null);
+            onToggleStar(target.id, !target.pinned);
+          }}
+          onRename={() => beginRename(menuThread)}
+          onAddProject={() => {
+            const target = menuThread;
+            setMenuAnchor(null);
+            onAddToProject(target.id);
+          }}
+          onDelete={() => {
+            const target = menuThread;
+            setMenuAnchor(null);
+            onDeleteThread(target.id);
+          }}
+        />
+      )}
     </aside>
+  );
+}
+
+interface ThreadRowProps {
+  thread: ThreadSummary;
+  active: boolean;
+  renaming: boolean;
+  renameValue: string;
+  menuOpen: boolean;
+  onRenameChange: (v: string) => void;
+  onRenameCommit: () => void;
+  onRenameCancel: () => void;
+  onSelect: () => void;
+  onOpenMenu: (rect: { left: number; top: number; bottom: number; right: number }) => void;
+}
+
+function ThreadRow({
+  thread, active, renaming, renameValue, menuOpen,
+  onRenameChange, onRenameCommit, onRenameCancel,
+  onSelect, onOpenMenu,
+}: ThreadRowProps) {
+  if (renaming) {
+    return (
+      <div className="my-px flex w-full items-center gap-2 rounded-md bg-surface px-2 py-1 shadow-e1">
+        {thread.pinned && (
+          <span className="shrink-0 text-accent">
+            <Icon name="starFilled" size={11} />
+          </span>
+        )}
+        <input
+          autoFocus
+          value={renameValue}
+          onChange={(e) => onRenameChange(e.target.value)}
+          onBlur={onRenameCommit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onRenameCommit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onRenameCancel();
+            }
+          }}
+          className="min-w-0 flex-1 border-0 bg-transparent py-1 text-[12.5px] text-fg outline-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "group/row relative my-px flex w-full items-stretch rounded-md transition-colors",
+        active ? "bg-surface shadow-e1" : "bg-transparent hover:bg-divider",
+        menuOpen && "bg-divider",
+      )}
+    >
+      <button
+        title={thread.title}
+        onClick={onSelect}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pl-2 pr-8 text-left text-[12.5px] transition-colors",
+          active ? "font-medium text-fg" : "text-fg-2",
+        )}
+      >
+        {thread.pinned && (
+          <span className="shrink-0 text-accent">
+            <Icon name="starFilled" size={11} />
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+      </button>
+      {active && (
+        <span
+          className={cn(
+            "pointer-events-none absolute right-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-accent transition-opacity",
+            "group-hover/row:opacity-0",
+            menuOpen && "opacity-0",
+          )}
+        />
+      )}
+      <button
+        type="button"
+        aria-label="スレッド操作メニュー"
+        onClick={(e) => {
+          e.stopPropagation();
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          onOpenMenu({ left: rect.left, top: rect.top, bottom: rect.bottom, right: rect.right });
+        }}
+        className={cn(
+          "absolute right-1 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-md border-0 bg-transparent text-muted opacity-0 transition-opacity hover:bg-bg-2 hover:text-fg focus-visible:opacity-100 group-hover/row:opacity-100",
+          menuOpen && "bg-bg-2 text-fg opacity-100",
+        )}
+      >
+        <Icon name="more" size={13} />
+      </button>
+    </div>
+  );
+}
+
+interface ThreadMenuProps {
+  thread: ThreadSummary;
+  anchor: { left: number; top: number; bottom: number; right: number };
+  onClose: () => void;
+  onStar: () => void;
+  onRename: () => void;
+  onAddProject: () => void;
+  onDelete: () => void;
+}
+
+function ThreadMenu({ thread, anchor, onClose, onStar, onRename, onAddProject, onDelete }: ThreadMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>(() => ({
+    left: anchor.right + 4,
+    top: anchor.top,
+    width: 200,
+    visibility: "hidden",
+  }));
+
+  // Re-position after mount: prefer right of trigger, fall back to left or below.
+  useEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = anchor.right + 4;
+    if (left + w > vw - 8) left = Math.max(8, anchor.left - w - 4);
+    let top = anchor.top;
+    if (top + h > vh - 8) top = Math.max(8, vh - h - 8);
+    setStyle({ left, top, width: w });
+  }, [anchor]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const itemCls =
+    "group/mi flex w-full items-center gap-3 rounded-[7px] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] text-fg transition-colors hover:bg-divider";
+  const iconCls = "inline-flex w-[18px] shrink-0 items-center justify-center text-muted group-hover/mi:text-fg";
+
+  return (
+    <div
+      ref={menuRef}
+      role="menu"
+      style={style}
+      className="fixed z-[90] flex min-w-[200px] animate-pop-in flex-col rounded-xl border-[0.5px] border-divider-strong bg-surface p-1.5 shadow-e3"
+    >
+      <button className={itemCls} role="menuitem" onClick={onStar}>
+        <span className={iconCls}>
+          <Icon name={thread.pinned ? "starFilled" : "star"} size={14} />
+        </span>
+        <span className="min-w-0 flex-1">{thread.pinned ? "スターを外す" : "スター"}</span>
+      </button>
+      <button className={itemCls} role="menuitem" onClick={onRename}>
+        <span className={iconCls}>
+          <Icon name="pencil" size={14} />
+        </span>
+        <span className="min-w-0 flex-1">名前を変更</span>
+      </button>
+      <button className={itemCls} role="menuitem" onClick={onAddProject}>
+        <span className={iconCls}>
+          <Icon name="inbox" size={14} />
+        </span>
+        <span className="min-w-0 flex-1">プロジェクトに追加</span>
+      </button>
+      <div className="mx-1.5 my-1 h-px bg-divider" />
+      <button
+        className={cn(itemCls, "text-[#B83A1F] hover:bg-[#FDEFEA] dark:hover:bg-[rgba(184,58,31,0.16)]")}
+        role="menuitem"
+        onClick={onDelete}
+      >
+        <span className="inline-flex w-[18px] shrink-0 items-center justify-center text-[#B83A1F]">
+          <Icon name="trash" size={14} />
+        </span>
+        <span className="min-w-0 flex-1">削除</span>
+      </button>
+    </div>
   );
 }
 

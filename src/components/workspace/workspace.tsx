@@ -218,6 +218,88 @@ export function Workspace() {
     setRightPanelOpen(true);
   };
 
+  const renameThread = useCallback(
+    async (id: string, title: string) => {
+      const prev = threads;
+      setThreads((cur) => cur.map((t) => (t.id === id ? { ...t, title } : t)));
+      try {
+        const res = await fetch(`/api/threads/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        });
+        if (!res.ok) throw new Error("failed");
+        push("スレッド名を変更しました", "success");
+      } catch {
+        setThreads(prev);
+        push("名前の変更に失敗しました", "error");
+      }
+    },
+    [threads, push],
+  );
+
+  const toggleStar = useCallback(
+    async (id: string, pinned: boolean) => {
+      const prev = threads;
+      setThreads((cur) => cur.map((t) => (t.id === id ? { ...t, pinned } : t)));
+      try {
+        const res = await fetch(`/api/threads/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pinned }),
+        });
+        if (!res.ok) throw new Error("failed");
+        push(pinned ? "スターを付けました" : "スターを外しました", "success");
+      } catch {
+        setThreads(prev);
+        push("スターの更新に失敗しました", "error");
+      }
+    },
+    [threads, push],
+  );
+
+  const deleteThread = useCallback(
+    async (id: string) => {
+      const target = threads.find((t) => t.id === id);
+      const ok = await confirm({
+        title: "スレッドを削除しますか？",
+        description: target ? `「${target.title}」は元に戻せません。` : "この操作は元に戻せません。",
+        confirmLabel: "削除",
+        cancelLabel: "キャンセル",
+        tone: "danger",
+      });
+      if (!ok) return;
+      const prev = threads;
+      setThreads((cur) => cur.filter((t) => t.id !== id));
+      // アクティブだったスレッドを消したら下書きへ戻す。
+      if (id === activeThreadId) {
+        setActiveThreadId("th-current");
+        setPhase("empty");
+        setUserQuery("");
+        setRightPanelOpen(false);
+        setFeedback(null);
+      }
+      if (id === liveId) {
+        agent.cancel(id);
+        setLiveId(null);
+      }
+      agent.remove(id);
+      try {
+        const res = await fetch(`/api/threads/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("failed");
+        push("スレッドを削除しました", "success");
+      } catch {
+        setThreads(prev);
+        push("削除に失敗しました", "error");
+      }
+    },
+    [threads, activeThreadId, liveId, agent, push, confirm],
+  );
+
+  const addToProject = useCallback(() => {
+    push("プロジェクト機能は近日公開予定です", "info");
+  }, [push]);
+
   const selectThread = (id: string) => {
     if (id === activeThreadId) {
       if (isMobile) setSidebarCollapsed(true);
@@ -421,6 +503,10 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
         onOpenHelp={() => setHelpOpen(true)}
         onSignOut={signOut}
         onToggleTheme={() => setTweak("dark", !tweaks.dark)}
+        onRenameThread={renameThread}
+        onDeleteThread={deleteThread}
+        onToggleStar={toggleStar}
+        onAddToProject={addToProject}
         dark={tweaks.dark}
         user={user}
       />
