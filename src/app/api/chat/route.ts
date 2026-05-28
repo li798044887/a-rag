@@ -1,7 +1,6 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { ModelMessage } from "ai";
-import { verifyAccessToken, authCookieName } from "@/lib/auth";
+import { getSessionClaims } from "@/lib/auth";
 import { runAgent } from "@/lib/agent/run";
 import { createThread, saveCompletedMessage, getThreadMessages } from "@/lib/threads";
 import { toModelHistory } from "@/lib/agent/history";
@@ -11,9 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const jar = await cookies();
-  const token = jar.get(authCookieName)?.value;
-  const claims = token ? await verifyAccessToken(token) : null;
+  const claims = await getSessionClaims();
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { query, threadId, model } = (await req.json().catch(() => ({}))) as {

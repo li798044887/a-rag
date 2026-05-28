@@ -9,6 +9,8 @@ export const users = pgTable("users", {
   org: text("org").notNull().default("ARag, Inc."),
   initials: text("initials").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  /** 全デバイスサインアウト時刻。これ以前に発行(iat)された JWT は無効。 */
+  tokenRevokedAt: timestamp("token_revoked_at", { withTimezone: true }),
 });
 
 export type UserRow = typeof users.$inferSelect;

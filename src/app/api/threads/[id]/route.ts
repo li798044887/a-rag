@@ -1,7 +1,6 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
-import { verifyAccessToken, authCookieName } from "@/lib/auth";
+import { getSessionClaims } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { threads } from "@/lib/db/schema";
 import { getThreadMessages } from "@/lib/threads";
@@ -9,10 +8,7 @@ import { getThreadMessages } from "@/lib/threads";
 export const runtime = "nodejs";
 
 async function userId(): Promise<string | null> {
-  const jar = await cookies();
-  const token = jar.get(authCookieName)?.value;
-  const claims = token ? await verifyAccessToken(token) : null;
-  return claims?.sub ?? null;
+  return (await getSessionClaims())?.sub ?? null;
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {

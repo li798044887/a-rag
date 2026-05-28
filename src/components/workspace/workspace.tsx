@@ -15,6 +15,7 @@ import { DropOverlay } from "@/components/uploads/uploads";
 import { MODELS, SCOPE_PRESETS } from "@/lib/data";
 import { useAgent } from "@/hooks/use-agent";
 import { useAuth } from "@/hooks/use-auth";
+import { useConfirm } from "@/hooks/use-confirm";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useToasts } from "@/hooks/use-toasts";
 import { useTweaks } from "@/hooks/use-tweaks";
@@ -27,8 +28,9 @@ type Phase = "empty" | "running" | "done" | "cancelled";
 
 export function Workspace() {
   const { tweaks, setTweak } = useTweaks();
-  const { user, status, signIn, register, signOut } = useAuth();
+  const { user, claims, status, signIn, register, signOut, setRemember, revokeAllSessions } = useAuth();
   const { toasts, push, dismiss } = useToasts();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const uploads = useUploads(push);
   const agent = useAgent();
 
@@ -606,8 +608,36 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
         }}
         tweaks={tweaks}
         setTweak={setTweak}
+        user={user}
+        claims={claims}
+        onSetRemember={async (v) => {
+          try {
+            await setRemember(v);
+            push(v ? "セッションを保存します" : "セッション保存を解除しました", "success");
+          } catch {
+            push("セッション設定の更新に失敗しました", "error");
+          }
+        }}
+        onRevokeAllSessions={async () => {
+          const ok = await confirm({
+            title: "すべてのデバイスからサインアウトしますか？",
+            description: "現在のデバイスを含むすべてのセッションが失効します。",
+            confirmLabel: "サインアウト",
+            cancelLabel: "キャンセル",
+            tone: "danger",
+          });
+          if (!ok) return;
+          try {
+            await revokeAllSessions();
+            push("全デバイスからサインアウトしました", "success");
+            setSettingsOpen(false);
+          } catch {
+            push("サインアウトに失敗しました", "error");
+          }
+        }}
       />
       <ToastViewport toasts={toasts} onDismiss={dismiss} />
+      {confirmDialog}
     </div>
   );
 }

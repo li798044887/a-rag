@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { MODELS } from "@/lib/data";
 import { ACCENT_PRESETS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import type { ModelOption, Tweaks } from "@/lib/types";
+import type { SessionClaims } from "@/hooks/use-auth";
+import type { AppUser, ModelOption, Tweaks } from "@/lib/types";
 
 interface Props {
   open: boolean;
@@ -14,6 +15,10 @@ interface Props {
   onModelChange: (m: ModelOption) => void;
   tweaks: Tweaks;
   setTweak: <K extends keyof Tweaks>(key: K, value: Tweaks[K]) => void;
+  user: AppUser;
+  claims: SessionClaims | null;
+  onSetRemember: (value: boolean) => Promise<void> | void;
+  onRevokeAllSessions: () => Promise<void> | void;
 }
 
 type Section = "model" | "sources" | "agent" | "appearance" | "security" | "account";
@@ -46,17 +51,45 @@ const CONNECTORS: { name: string; desc: string; enabled: boolean; icon: IconName
   { name: "Linear", desc: "12 teams", enabled: false, icon: "linear" },
 ];
 
-const JWT_SAMPLE = `{
-  "sub": "u_hiroshi_tanaka",
-  "email": "hiroshi.tanaka@arag.dev",
-  "org": "ARag, Inc.",
-  "role": "member",
-  "scopes": ["read:kb", "chat", "tools:python"],
-  "iat": 1747900800,
-  "exp": 1747987200,
-  "iss": "auth.arag.internal",
-  "aud": "rag-api"
-}`;
+/** JWT クレームを読みやすい順に並べて JSON 表示する。null/undefined は省略。 */
+function renderClaims(claims: SessionClaims | null): string {
+  if (!claims) return "{\n  // セッションを読み込み中…\n}";
+  const ordered: Record<string, unknown> = {
+    sub: claims.sub,
+    email: claims.email,
+    org: claims.org,
+    role: claims.role,
+    scopes: claims.scopes,
+    rem: claims.rem,
+    iat: claims.iat,
+    exp: claims.exp,
+    iss: claims.iss,
+    aud: claims.aud,
+  };
+  for (const key of Object.keys(ordered)) {
+    if (ordered[key] === null || ordered[key] === undefined) delete ordered[key];
+  }
+  return JSON.stringify(ordered, null, 2);
+}
+
+/** exp(秒) − 現在 を「Xh Ym」形式に。期限切れは「期限切れ」。 */
+function formatRemaining(expSec: number | null | undefined): string {
+  if (!expSec) return "—";
+  const diffSec = expSec - Math.floor(Date.now() / 1000);
+  if (diffSec <= 0) return "期限切れ";
+  const h = Math.floor(diffSec / 3600);
+  const m = Math.floor((diffSec % 3600) / 60);
+  if (h >= 1) return `${h}h ${m}m`;
+  const s = diffSec % 60;
+  return `${m}m ${s}s`;
+}
+
+function formatLifetime(claims: SessionClaims | null): string {
+  if (!claims?.iat || !claims?.exp) return "—";
+  const totalSec = claims.exp - claims.iat;
+  const h = Math.round(totalSec / 3600);
+  return `${h}時間`;
+}
 
 /** Accessible on/off switch (button so width/height apply in any layout context). */
 function Switch({ on, onToggle, label }: { on: boolean; onToggle: () => void; label?: string }) {
@@ -102,7 +135,18 @@ function Segmented({
   );
 }
 
-export function SettingsModal({ open, onClose, model, onModelChange, tweaks, setTweak }: Props) {
+export function SettingsModal({
+  open,
+  onClose,
+  model,
+  onModelChange,
+  tweaks,
+  setTweak,
+  user,
+  claims,
+  onSetRemember,
+  onRevokeAllSessions,
+}: Props) {
   const [section, setSection] = useState<Section>(() =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches ? "account" : "model",
   );
@@ -112,16 +156,48 @@ export function SettingsModal({ open, onClose, model, onModelChange, tweaks, set
     Object.fromEntries(CONNECTORS.map((c) => [c.name, c.enabled])),
   );
   const [agentCfg, setAgentCfg] = useState({ maxSteps: 12, parallelTools: 3, requireCitations: true, admitUnknown: true });
-  const [storeRefreshToken, setStoreRefreshToken] = useState(true);
   const [jwtCopied, setJwtCopied] = useState(false);
+  const [rememberPending, setRememberPending] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  // 「残り時間」を 30 秒ごとに再計算（モーダル開いている間のみ）。
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    if (!open || section !== "security") return;
+    const id = window.setInterval(() => setNowTick((n) => n + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, [open, section]);
+  // nowTick を参照することで eslint と再描画を成立させる（値自体は使わない）。
+  void nowTick;
+
+  const claimsJson = renderClaims(claims);
 
   const copyJwt = async () => {
     try {
-      await navigator.clipboard.writeText(JWT_SAMPLE);
+      await navigator.clipboard.writeText(claimsJson);
       setJwtCopied(true);
       setTimeout(() => setJwtCopied(false), 1500);
     } catch {
       /* clipboard unavailable (e.g. insecure context) — no-op */
+    }
+  };
+
+  const handleRememberToggle = async () => {
+    if (!claims || rememberPending) return;
+    setRememberPending(true);
+    try {
+      await onSetRemember(!claims.rem);
+    } finally {
+      setRememberPending(false);
+    }
+  };
+
+  const handleRevokeAll = async () => {
+    if (revoking) return;
+    setRevoking(true);
+    try {
+      await onRevokeAllSessions();
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -333,20 +409,39 @@ export function SettingsModal({ open, onClose, model, onModelChange, tweaks, set
                 <div className="rounded-[10px] border-[0.5px] border-divider bg-surface-2 p-3">
                   <div className="mb-2 flex items-center justify-between font-mono text-[11.5px] text-muted">
                     <span>現在のJWT (デコード)</span>
-                    <button type="button" onClick={copyJwt} className="border-0 bg-transparent font-mono text-[11px] font-semibold text-accent hover:underline">
+                    <button
+                      type="button"
+                      onClick={copyJwt}
+                      disabled={!claims}
+                      className="border-0 bg-transparent font-mono text-[11px] font-semibold text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    >
                       {jwtCopied ? "コピーしました" : "コピー"}
                     </button>
                   </div>
-                  <pre className="m-0 rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 font-mono text-[11px] leading-[1.6] text-fg-2">{JWT_SAMPLE}</pre>
+                  <pre className="m-0 max-h-[180px] overflow-auto rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 font-mono text-[11px] leading-[1.6] text-fg-2">{claimsJson}</pre>
                 </div>
-                <Field label="トークン有効期限">
-                  <span className="font-mono text-[12px] text-muted">24時間 (残り 18h 24m)</span>
+                <Field label="トークン有効期限" hint="exp 到達時に自動で再ログインが必要になります">
+                  <span className="font-mono text-[12px] text-muted">
+                    {formatLifetime(claims)} (残り {formatRemaining(claims?.exp)})
+                  </span>
                 </Field>
-                <Field label="Refresh Token を保存">
-                  <Switch on={storeRefreshToken} onToggle={() => setStoreRefreshToken((v) => !v)} label="Refresh Token を保存" />
+                <Field
+                  label="Refresh Token を保存"
+                  hint="ON: ブラウザを閉じても 30 日間サインインを保持 / OFF: 終了で破棄"
+                >
+                  <Switch
+                    on={Boolean(claims?.rem) && !rememberPending}
+                    onToggle={handleRememberToggle}
+                    label="Refresh Token を保存"
+                  />
                 </Field>
-                <button className="h-8 self-start rounded-lg border-[0.5px] border-[#B83A1F] bg-transparent px-3.5 text-[12px] font-medium text-[#B83A1F] hover:bg-[#B83A1F] hover:text-white">
-                  全デバイスでサインアウト
+                <button
+                  type="button"
+                  onClick={handleRevokeAll}
+                  disabled={revoking || !claims}
+                  className="h-8 self-start rounded-lg border-[0.5px] border-[#B83A1F] bg-transparent px-3.5 text-[12px] font-medium text-[#B83A1F] hover:bg-[#B83A1F] hover:text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[#B83A1F]"
+                >
+                  {revoking ? "サインアウト中…" : "全デバイスでサインアウト"}
                 </button>
               </div>
             )}
@@ -354,14 +449,14 @@ export function SettingsModal({ open, onClose, model, onModelChange, tweaks, set
             {section === "account" && (
               <div className="flex flex-col gap-3.5">
                 <div className="mb-1 flex items-center gap-3.5">
-                  <div className="grid h-12 w-12 place-items-center rounded-full bg-accent text-[16px] font-semibold text-white">HT</div>
+                  <div className="grid h-12 w-12 place-items-center rounded-full bg-accent text-[16px] font-semibold text-white">{user.initials}</div>
                   <div>
-                    <div className="text-[14.5px] font-semibold">田中 寛志</div>
-                    <div className="font-mono text-[11.5px] text-muted">hiroshi.tanaka@arag.dev</div>
+                    <div className="text-[14.5px] font-semibold">{user.name}</div>
+                    <div className="font-mono text-[11.5px] text-muted">{user.email}</div>
                   </div>
                 </div>
                 <Field label="表示名">
-                  <input type="text" defaultValue="田中 寛志" className={fieldInput} />
+                  <input type="text" defaultValue={user.name} className={fieldInput} />
                 </Field>
                 <Field label="言語">
                   <select defaultValue="ja" className={fieldInput}>
