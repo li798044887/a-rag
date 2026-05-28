@@ -32,7 +32,7 @@ export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate
           <svg viewBox="0 0 16 16" width="11" height="11">
             <path d="M3 4h10M3 8h10M3 12h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
           </svg>
-          {tokens} tokens
+          {tokens >= 1000 ? `${(tokens / 1000).toFixed(1).replace(/\.0$/, "")}k` : tokens} tokens
         </span>
         <span className={chipCls}>
           <svg viewBox="0 0 16 16" width="11" height="11">

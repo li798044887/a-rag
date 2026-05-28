@@ -3,7 +3,7 @@
  * 1つのモデルに retrieve / fetch_document を渡し stopWhen でループ。
  * fullStream のパーツを AgentEvent へマッピングする。引用は CitationRegistry で番号統合。 */
 
-import { streamText, stepCountIs, type ModelMessage } from "ai";
+import { streamText, stepCountIs, type LanguageModelUsage, type ModelMessage } from "ai";
 import { resolveModels, DEFAULT_MODEL_ID } from "@/lib/agent/models";
 import { buildTools, type ToolCallMeta } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
@@ -29,6 +29,7 @@ const MAX_STEPS = 6;
 
 export async function* runAgent({ query, ownerUserId, threadId, history, modelId }: RunInput): AsyncGenerator<AgentEvent> {
   const started = Date.now();
+  const modelLabel = modelId ?? DEFAULT_MODEL_ID;
   const resolution = resolveModels(modelId);
 
   // キー未設定: 検索も生成もできないため理由を返して終了。
@@ -61,13 +62,24 @@ export async function* runAgent({ query, ownerUserId, threadId, history, modelId
   let answer = "";
   let answerStepEmitted = false;
   let answerStartT = 0;
+  // streamText の finish パートから取れた実トークン使用量。取れなかったら文字数で概算する。
+  let totalUsage: LanguageModelUsage | undefined;
 
-  const emitAnswerStep = (status: "running" | "done", t: number): AgentEvent => ({
+  const emitAnswerStep = (status: "running" | "done", t: number, usage?: LanguageModelUsage): AgentEvent => ({
     type: "step",
     step: {
       id: "answer", name: "answer" as ToolName, label: "回答生成", status,
       durationMs: status === "done" ? Date.now() - t : 0,
-      input: {}, output: null, summary: status === "done" ? "回答を生成" : "回答を生成中…",
+      input: { model: modelLabel },
+      output: status === "done"
+        ? {
+            inputTokens: usage?.inputTokens ?? null,
+            outputTokens: usage?.outputTokens ?? null,
+            totalTokens: usage?.totalTokens ?? null,
+            cachedInputTokens: usage?.inputTokenDetails?.cacheReadTokens ?? null,
+          }
+        : null,
+      summary: status === "done" ? "回答を生成" : "回答を生成中…",
     },
   });
 
@@ -120,6 +132,8 @@ export async function* runAgent({ query, ownerUserId, threadId, history, modelId
         }
         answer += part.text;
         yield { type: "answer-delta", text: part.text };
+      } else if (part.type === "finish") {
+        totalUsage = part.totalUsage;
       }
     }
   } catch {
@@ -139,10 +153,10 @@ export async function* runAgent({ query, ownerUserId, threadId, history, modelId
     yield { type: "answer-delta", text: answer };
   }
 
-  if (answerStepEmitted) yield emitAnswerStep("done", answerStartT);
+  if (answerStepEmitted) yield emitAnswerStep("done", answerStartT, totalUsage);
 
-  // 概算（文字数ベース）。将来は finish パーツの totalUsage.totalTokens を使える。
-  const tokens = Math.max(1, Math.round(answer.length / 1.8));
+  // 実トークンが取れていればそれを優先。プロバイダが usage を返さない場合のみ文字数で概算。
+  const tokens = totalUsage?.totalTokens ?? totalUsage?.outputTokens ?? Math.max(1, Math.round(answer.length / 1.8));
   const sources = registry.toSources();
   yield {
     type: "done",
