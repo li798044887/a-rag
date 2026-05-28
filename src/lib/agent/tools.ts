@@ -23,7 +23,8 @@ export function buildTools({ registry, ownerUserId, meta }: BuildToolsInput): To
     retrieve: tool({
       description:
         "社内ナレッジから関連箇所を検索する。ユーザーの質問に答えるために必要な事実を集めるとき、" +
-        "また会話の文脈を踏まえた具体的なクエリで何度でも呼べる。",
+        "また会話の文脈を踏まえた具体的なクエリで何度でも呼べる。" +
+        "各ヒットには doc_id / chunk_id が付くので、深掘りしたいときは doc_id を fetch_document に渡す。",
       inputSchema: z.object({
         query: z.string().describe("検索クエリ（会話文脈を解決した自己完結な日本語）"),
       }),
@@ -34,7 +35,7 @@ export function buildTools({ registry, ownerUserId, meta }: BuildToolsInput): To
             documentId: c.documentId, documentTitle: c.documentTitle, chunkId: c.chunkId,
             headingPath: c.headingPath, snippet: c.text,
           });
-          return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${c.expandedText || c.text}`;
+          return `[${n}] ${c.documentTitle} — ${c.headingPath} (doc_id=${c.documentId} chunk_id=${c.chunkId})\n${c.expandedText || c.text}`;
         });
         meta.set(toolCallId, { name: "retrieve", input: { query },
           summary: `「${query}」→ ${chunks.length} 件` });
@@ -44,10 +45,10 @@ export function buildTools({ registry, ownerUserId, meta }: BuildToolsInput): To
     fetch_document: tool({
       description:
         "特定の文書の全文（または指定チャンク周辺）を取得して深掘りする。" +
-        "retrieve の結果から得た document_id を指定する。",
+        "retrieve 結果に表示された doc_id をそのまま document_id に渡す（引用番号 [n] ではない）。",
       inputSchema: z.object({
-        document_id: z.string().describe("retrieve 結果に含まれる文書ID"),
-        around_chunk_id: z.string().optional().describe("この chunk の周辺だけ欲しいときに指定"),
+        document_id: z.string().describe("retrieve 結果の doc_id（UUID）。引用番号 [n] ではない"),
+        around_chunk_id: z.string().optional().describe("retrieve 結果の chunk_id。その周辺だけ欲しいときに指定"),
       }),
       execute: async ({ document_id, around_chunk_id }, { toolCallId }) => {
         const doc = await fetchDocument({ documentId: document_id, ownerUserId, aroundChunkId: around_chunk_id });

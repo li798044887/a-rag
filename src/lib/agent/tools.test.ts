@@ -42,6 +42,18 @@ test("fetch_document tool registers citations and records meta", async () => {
   expect(meta.get("call-2")).toMatchObject({ name: "fetch_document" });
 });
 
+test("retrieve output exposes document_id and chunk_id so the model can call fetch_document", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const out = (await tools.retrieve.execute!(
+    { query: "認証" }, { toolCallId: "call-ids", messages: [] } as never)) as string;
+
+  // モデルが fetch_document に渡せるよう、本物の ID が本文に現れること。
+  expect(out).toContain("d1");
+  expect(out).toContain("c1");
+});
+
 test("retrieve tool falls back when no chunks are returned", async () => {
   vi.mocked(retrieveChunks).mockResolvedValueOnce([]);
   const reg = new CitationRegistry();
