@@ -135,18 +135,20 @@ function ToolInputBlock({ step }: { step: ToolCall }) {
     );
   }
   if (step.name === "fetch_document") {
-    const did = step.input.document_id;
-    const around = step.input.around_chunk_id;
+    const ref = step.input.ref;
+    const document = step.input.document;
     return (
       <div className="space-y-[3px] rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] text-fg-2">
-        <div>
-          <span className="text-muted-2">document_id: </span>
-          <span className="text-fg">{String(did)}</span>
-        </div>
-        {around != null && (
+        {ref != null && (
           <div>
-            <span className="text-muted-2">around_chunk_id: </span>
-            <span className="text-fg">{String(around)}</span>
+            <span className="text-muted-2">出典: </span>
+            <span className="text-fg">[{String(ref)}]</span>
+          </div>
+        )}
+        {document != null && (
+          <div>
+            <span className="text-muted-2">文書: </span>
+            <span className="text-fg">{String(document)}</span>
           </div>
         )}
       </div>

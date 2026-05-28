@@ -30,28 +30,44 @@ test("retrieve tool registers citations and returns numbered text", async () => 
   expect(meta.get("call-1")).toMatchObject({ name: "retrieve", summary: expect.stringContaining("1") });
 });
 
-test("fetch_document tool registers citations and records meta", async () => {
+test("fetch_document resolves a citation ref to the real document/chunk ids", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
   const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
-  const out = await tools.fetch_document.execute!(
-    { document_id: "d1" }, { toolCallId: "call-2", messages: [] } as never);
+  // 先に retrieve して [1] を登録（chunkId=c1, documentId=d1）。
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-r", messages: [] } as never);
 
-  expect(out).toContain("[1]");
-  expect(reg.size).toBe(1);
+  const out = await tools.fetch_document.execute!(
+    { ref: 1 }, { toolCallId: "call-2", messages: [] } as never);
+
+  // [1] の実 ID へ解決して fetchDocument を呼ぶこと。
+  expect(vi.mocked(fetchDocument)).toHaveBeenCalledWith(
+    expect.objectContaining({ documentId: "d1", aroundChunkId: "c1" }));
+  expect(out).toContain("[");
   expect(meta.get("call-2")).toMatchObject({ name: "fetch_document" });
 });
 
-test("retrieve output exposes document_id and chunk_id so the model can call fetch_document", async () => {
+test("fetch_document errors when the ref was never retrieved", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+
+  const out = (await tools.fetch_document.execute!(
+    { ref: 99 }, { toolCallId: "call-x", messages: [] } as never)) as string;
+
+  expect(out).toContain("retrieve");
+});
+
+test("retrieve output does not leak raw uuids (only [n] is shown)", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
   const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
   const out = (await tools.retrieve.execute!(
     { query: "認証" }, { toolCallId: "call-ids", messages: [] } as never)) as string;
 
-  // モデルが fetch_document に渡せるよう、本物の ID が本文に現れること。
-  expect(out).toContain("d1");
-  expect(out).toContain("c1");
+  expect(out).toContain("[1]");
+  expect(out).not.toContain("doc_id=");
+  expect(out).not.toContain("d1");
 });
 
 test("retrieve tool falls back when no chunks are returned", async () => {
@@ -70,9 +86,10 @@ test("fetch_document tool falls back when no chunks are returned", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
   const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-r2", messages: [] } as never);
+
   const out = await tools.fetch_document.execute!(
-    { document_id: "d1" }, { toolCallId: "call-4", messages: [] } as never);
+    { ref: 1 }, { toolCallId: "call-4", messages: [] } as never);
 
   expect(out).toBe("文書の本文が取得できませんでした。");
-  expect(reg.size).toBe(0);
 });

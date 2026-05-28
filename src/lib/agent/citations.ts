@@ -22,6 +22,12 @@ export class CitationRegistry {
     return n;
   }
 
+  /** 引用番号 [n] から登録済みの出典を引く。未登録なら undefined。 */
+  resolve(n: number): CitationInput | undefined {
+    if (!Number.isInteger(n) || n < 1) return undefined;
+    return this.order[n - 1];
+  }
+
   /** document 単位に束ねた Source[]（登録順を保持）。 */
   toSources(): Source[] {
     const byDoc = new Map<string, Source>();
