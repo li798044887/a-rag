@@ -62,6 +62,9 @@ export function Workspace() {
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({ t4: true, t6: true });
   const [activeSourceId, setActiveSourceId] = useState("src-1");
   const [highlightSectionId, setHighlightSectionId] = useState<string | null>("s1-2");
+  // ターン index をキーにしたフィードバック（クライアントのみ・スレッド切替/新規でリセット）。
+  // turns は末尾追加か prefix 切り詰め（再生成）しか起きないため index は安定。挿入/並べ替えを
+  // 導入する場合は安定 ID キーへ移行すること。
   const [feedback, setFeedback] = useState<Record<number, "up" | "down">>({});
   const [userAttachments, setUserAttachments] = useState<typeof uploads.files>([]);
   const [scope, setScope] = useState<ScopeValue>(SCOPE_PRESETS[0]);
@@ -212,6 +215,12 @@ export function Workspace() {
   };
 
   const regenerate = (turnIdx: number) => {
+    // 実行中の再生成は禁止。許すと truncateFrom が進行中ターンを state から切り落とす一方、
+    // その fetch は中断されず、孤立したストリームが再生成ターンへ書き込んで破損する。
+    if (phase === "running") {
+      push("実行中は再生成できません", "info");
+      return;
+    }
     startRun("", { regenerateFrom: turnIdx });
     push("回答を再生成しています", "info");
   };
