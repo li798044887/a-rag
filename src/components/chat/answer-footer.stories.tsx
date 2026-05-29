@@ -6,6 +6,7 @@ import { SAMPLE_SOURCES } from "@/lib/data";
 const meta = {
   title: "Chat/AnswerFooter",
   component: AnswerFooter,
+  tags: ["ai-generated"],
   parameters: { layout: "padded" },
   args: {
     tokens: 5432,

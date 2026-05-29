@@ -14,6 +14,7 @@ const user: AppUser = {
 const meta = {
   title: "Chat/EmptyState",
   component: EmptyState,
+  tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: { user, onPickPrompt: fn() },
 } satisfies Meta<typeof EmptyState>;

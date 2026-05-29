@@ -15,6 +15,7 @@ const sampleAttachments: StagedFile[] = [
 const meta = {
   title: "Chat/Composer",
   component: Composer,
+  tags: ["ai-generated"],
   parameters: { layout: "padded" },
   args: {
     value: "",

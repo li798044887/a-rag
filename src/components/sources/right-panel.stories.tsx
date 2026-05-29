@@ -6,6 +6,7 @@ import { SAMPLE_SOURCES, CITATION_MAP } from "@/lib/data";
 const meta = {
   title: "Sources/RightPanel",
   component: RightPanel,
+  tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: {
     sources: SAMPLE_SOURCES,

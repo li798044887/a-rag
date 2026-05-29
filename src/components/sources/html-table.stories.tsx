@@ -16,6 +16,7 @@ const sampleHtml = `
 const meta = {
   title: "Sources/HtmlTable",
   component: HtmlTable,
+  tags: ["ai-generated"],
   parameters: { layout: "padded" },
   args: { html: sampleHtml },
 } satisfies Meta<typeof HtmlTable>;

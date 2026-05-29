@@ -5,6 +5,7 @@ import { HelpModal } from "@/components/modals/help-modal";
 const meta = {
   title: "Modals/HelpModal",
   component: HelpModal,
+  tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: { open: true, onClose: fn() },
 } satisfies Meta<typeof HelpModal>;

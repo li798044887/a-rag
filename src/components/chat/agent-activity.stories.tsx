@@ -6,6 +6,7 @@ import { SAMPLE_STEPS, RUNNING_STEPS } from "@/components/chat/__fixtures__/tool
 const meta = {
   title: "Chat/AgentActivity",
   component: AgentActivity,
+  tags: ["ai-generated"],
   parameters: { layout: "padded" },
   args: {
     steps: SAMPLE_STEPS,

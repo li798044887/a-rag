@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { fn } from "storybook/test";
+import { expect, fn } from "storybook/test";
 import { ConfirmModal } from "@/components/modals/confirm-modal";
 
 const meta = {
   title: "Modals/ConfirmModal",
   component: ConfirmModal,
+  tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: {
     open: true,
@@ -22,6 +23,11 @@ export const Default: Story = {
     description: "削除すると元に戻せません。",
     confirmLabel: "削除",
     cancelLabel: "キャンセル",
+  },
+  // 確定ボタンの click が onConfirm を呼ぶこと（レンダーだけでは証明できない挙動）。
+  play: async ({ args, canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "削除" }));
+    await expect(args.onConfirm).toHaveBeenCalled();
   },
 };
 

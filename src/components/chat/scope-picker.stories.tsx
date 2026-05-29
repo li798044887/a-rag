@@ -10,6 +10,7 @@ const initialScope: ScopeValue = { ...SCOPE_PRESETS[0] };
 const meta = {
   title: "Chat/ScopePicker",
   component: ScopePicker,
+  tags: ["ai-generated"],
   parameters: { layout: "centered" },
   // 実際の anchorRef は render 内で差し替える。型を満たすための既定値。
   args: {

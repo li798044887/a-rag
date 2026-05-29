@@ -30,6 +30,7 @@ const claims: SessionClaims = {
 const meta = {
   title: "Modals/SettingsModal",
   component: SettingsModal,
+  tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: {
     open: true,

@@ -7,6 +7,7 @@ import type { Turn } from "@/lib/types";
 
 const meta = {
   title: "Chat/Messages",
+  tags: ["ai-generated"],
   parameters: { layout: "padded" },
 } satisfies Meta;
 

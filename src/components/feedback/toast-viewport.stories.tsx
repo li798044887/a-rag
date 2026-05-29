@@ -12,6 +12,7 @@ const toasts: Toast[] = [
 const meta = {
   title: "Feedback/ToastViewport",
   component: ToastViewport,
+  tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: { toasts, onDismiss: fn() },
 } satisfies Meta<typeof ToastViewport>;

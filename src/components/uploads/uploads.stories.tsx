@@ -12,6 +12,7 @@ const files: StagedFile[] = [
 
 const meta = {
   title: "Uploads",
+  tags: ["ai-generated"],
   parameters: { layout: "padded" },
 } satisfies Meta;
 

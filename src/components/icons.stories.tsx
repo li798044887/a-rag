@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 
 const ICON_NAMES: IconName[] = [
@@ -16,6 +17,7 @@ const ICON_NAMES: IconName[] = [
 const meta = {
   title: "Foundations/Icons",
   component: Icon,
+  tags: ["ai-generated"],
   parameters: { layout: "centered" },
   // render のみの Story でも必須 arg を満たすため meta レベルで既定値を持つ。
   args: { name: "search", size: 24 },
@@ -48,6 +50,24 @@ export const Gallery: Story = {
       ))}
     </div>
   ),
+};
+
+/** プロジェクト唯一の CSS ロード検証。globals.css の `--accent` が効いていれば
+ *  `bg-accent` タイルは #3fa77e = rgb(63, 167, 126) に解決される。
+ *  これが失敗する＝共有 preview が CSS を読み込めていない、ということ。 */
+export const CssCheck: Story = {
+  render: () => (
+    <div
+      data-testid="accent-tile"
+      className="grid h-14 w-14 place-items-center rounded-2xl bg-accent text-white"
+    >
+      <BrandMark size={24} />
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    const tile = canvas.getByTestId("accent-tile");
+    await expect(getComputedStyle(tile).backgroundColor).toBe("rgb(63, 167, 126)");
+  },
 };
 
 /** ブランドマーク（24×24）。アクセントタイル上での見え方を確認。 */

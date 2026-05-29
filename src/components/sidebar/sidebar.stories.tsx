@@ -9,6 +9,7 @@ const user = DEFAULT_USER satisfies AppUser;
 const meta = {
   title: "Sidebar",
   component: Sidebar,
+  tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: {
     collapsed: false,

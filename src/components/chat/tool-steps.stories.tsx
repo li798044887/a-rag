@@ -6,6 +6,7 @@ import { SAMPLE_STEPS } from "@/components/chat/__fixtures__/tool-calls";
 const meta = {
   title: "Chat/ToolSteps",
   component: ToolSteps,
+  tags: ["ai-generated"],
   parameters: { layout: "padded" },
   args: {
     steps: SAMPLE_STEPS,

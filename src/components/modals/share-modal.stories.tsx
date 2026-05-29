@@ -6,6 +6,7 @@ import { SAMPLE_SOURCES } from "@/lib/data";
 const meta = {
   title: "Modals/ShareModal",
   component: ShareModal,
+  tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: {
     open: true,
