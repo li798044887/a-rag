@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { citations, messages, threads } from "@/lib/db/schema";
 import type {
@@ -106,6 +106,28 @@ export async function getThreadMessages(threadId: string, userId: string): Promi
     });
   }
   return out;
+}
+
+/** createdAt 昇順で fromIndex 番目以降のメッセージを削除する（引用は FK cascade で同時削除）。
+ *  所有者が一致しない / 対象が無ければ何もしない。fromIndex<=0 で全メッセージ削除。 */
+export async function deleteMessagesFrom(
+  threadId: string,
+  userId: string,
+  fromIndex: number,
+): Promise<void> {
+  const [t] = await db.select().from(threads)
+    .where(and(eq(threads.id, threadId), eq(threads.userId, userId)));
+  if (!t) return;
+
+  const rows = await db.select({ id: messages.id }).from(messages)
+    .where(eq(messages.threadId, threadId))
+    .orderBy(messages.createdAt);
+
+  const targets = rows.slice(Math.max(0, fromIndex)).map((r) => r.id);
+  if (targets.length === 0) return;
+
+  await db.delete(messages).where(inArray(messages.id, targets));
+  await db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId));
 }
 
 function sourcesFromCitations(cites: Array<typeof citations.$inferSelect>): Source[] {
