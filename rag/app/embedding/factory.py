@@ -12,6 +12,7 @@ class StubEmbedder:
     """テスト/オフライン用の決定的スタブ。"""
     def __init__(self, dim: int = 8):
         self.dim = dim
+        self.name = "stub"
 
     def embed(self, texts: list[str]) -> list[DenseSparse]:
         out = []
