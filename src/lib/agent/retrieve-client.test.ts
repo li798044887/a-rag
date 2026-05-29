@@ -55,3 +55,25 @@ test("retrieveChunksStream parses NDJSON: forwards stages and returns result chu
   expect(stages[1].count).toBe(3);
   expect(chunks[0].chunkId).toBe("c1");
 });
+
+test("retrieveChunksStream forwards detail fields (hits/selected/model/dims)", async () => {
+  const ndjson =
+    '{"stage":"embed","status":"done","ms":1,"model":"BAAI/bge-m3","dims":1024}\n' +
+    '{"stage":"vector_search","status":"done","ms":2,"count":1,"hits":[{"title":"t","heading":"H","score":0.8}]}\n' +
+    '{"stage":"rerank","status":"done","ms":3,"count":1,"model":"BAAI/bge-reranker-v2-m3","top_n":6,"selected":[{"id":"c1","score":0.04,"title":"t"}]}\n' +
+    '{"stage":"result","chunks":[]}\n';
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(ndjson, { status: 200 }));
+  process.env.RAG_SERVICE_URL = "http://rag:8000";
+
+  const stages: RetrieveStageEvent[] = [];
+  await retrieveChunksStream({ query: "q", ownerUserId: "u1", onStage: (e) => stages.push(e) });
+
+  const embed = stages.find((s) => s.stage === "embed")!;
+  expect(embed.model).toBe("BAAI/bge-m3");
+  expect(embed.dims).toBe(1024);
+  const vs = stages.find((s) => s.stage === "vector_search")!;
+  expect(vs.hits).toEqual([{ title: "t", heading: "H", score: 0.8 }]);
+  const rr = stages.find((s) => s.stage === "rerank")!;
+  expect(rr.top_n).toBe(6);
+  expect(rr.selected).toEqual([{ id: "c1", score: 0.04, title: "t" }]);
+});

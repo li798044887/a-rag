@@ -58,6 +58,11 @@ export interface RetrieveStageEvent {
   ms?: number;
   count?: number;
   message?: string;
+  model?: string;
+  dims?: number;
+  top_n?: number;
+  hits?: { title: string; heading: string; score: number }[];
+  selected?: { id: string; score: number; title: string }[];
 }
 
 /** /retrieve/stream を読み、段階イベントを onStage に流し、最終 result の chunks を返す。 */
