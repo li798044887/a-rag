@@ -44,14 +44,31 @@ def _timed(fn, *args) -> tuple:
     return fn(*args), int((time.perf_counter() - s) * 1000)
 
 
+def _hit_rows(session: Session, hits: list[dict], title_cache: dict[str, str]) -> list[dict]:
+    rows = []
+    for h in hits:
+        doc_id = h["document_id"]
+        if doc_id not in title_cache:
+            doc = session.get(Document, doc_id)
+            title_cache[doc_id] = doc.filename if doc else doc_id
+        rows.append({"title": title_cache[doc_id],
+                     "heading": h.get("heading_path", ""),
+                     "score": float(h.get("score", 0.0))})
+    return rows
+
+
 def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, reranker: Reranker,
                     *, query: str, owner_user_id: str, top_k: int = 6,
                     candidate_k: int = 40) -> Iterator[dict]:
+    title_cache: dict[str, str] = {}
+    reranker_name = getattr(reranker, "name", "?")
+
     # 1) embed（1回の呼び出しで dense+sparse の両方を得る）
     yield {"stage": "embed", "status": "start"}
     t = time.perf_counter()
     qv = embedder.embed([query])[0]
-    yield {"stage": "embed", "status": "done", "ms": _ms(t)}
+    yield {"stage": "embed", "status": "done", "ms": _ms(t),
+           "model": getattr(embedder, "name", "?"), "dims": len(qv.dense)}
 
     # 2) dense / sparse 検索を並行実行（性能大前提）。両 start を先に出す。
     yield {"stage": "vector_search", "status": "start"}
@@ -60,15 +77,18 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
         f_dense = ex.submit(_timed, store.dense_search, qv.dense, owner_user_id, candidate_k)
         f_sparse = ex.submit(_timed, store.sparse_search, qv.sparse, owner_user_id, candidate_k)
         dense_hits, dense_ms = f_dense.result()
-        yield {"stage": "vector_search", "status": "done", "ms": dense_ms, "count": len(dense_hits)}
+        yield {"stage": "vector_search", "status": "done", "ms": dense_ms,
+               "count": len(dense_hits), "hits": _hit_rows(session, dense_hits, title_cache)}
         sparse_hits, sparse_ms = f_sparse.result()
-        yield {"stage": "bm25_search", "status": "done", "ms": sparse_ms, "count": len(sparse_hits)}
+        yield {"stage": "bm25_search", "status": "done", "ms": sparse_ms,
+               "count": len(sparse_hits), "hits": _hit_rows(session, sparse_hits, title_cache)}
 
     if not dense_hits and not sparse_hits:
         yield {"stage": "rerank", "status": "start"}
-        yield {"stage": "rerank", "status": "done", "ms": 0, "count": 0}
+        yield {"stage": "rerank", "status": "done", "ms": 0, "count": 0,
+               "model": reranker_name, "top_n": top_k, "selected": []}
         yield {"stage": "expand", "status": "start"}
-        yield {"stage": "expand", "status": "done", "ms": 0}
+        yield {"stage": "expand", "status": "done", "ms": 0, "count": 0}
         yield {"stage": "result", "chunks": []}
         return
 
@@ -80,15 +100,19 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
     tr = time.perf_counter()
     scores = reranker.score(query, [h["text"] for h in merged])
     ranked = sorted(zip(merged, scores), key=lambda x: x[1], reverse=True)[:top_k]
-    yield {"stage": "rerank", "status": "done", "ms": _ms(tr), "count": len(ranked)}
+    selected = [{"id": h["chunk_id"], "score": float(s),
+                 "title": title_cache.get(h["document_id"], h["document_id"])}
+                for h, s in ranked]
+    yield {"stage": "rerank", "status": "done", "ms": _ms(tr), "count": len(ranked),
+           "model": reranker_name, "top_n": top_k, "selected": selected}
 
     # 5) expand + RetrievedChunk 構築
     yield {"stage": "expand", "status": "start"}
     te = time.perf_counter()
-    title_cache: dict[str, str] = {}
     out: list[RetrievedChunk] = []
     for hit, score in ranked:
         doc_id = hit["document_id"]
+        # 候補は _hit_rows で解決済みのため通常はキャッシュヒット。念のための防御的フォールバック。
         if doc_id not in title_cache:
             doc = session.get(Document, doc_id)
             title_cache[doc_id] = doc.filename if doc else doc_id
@@ -100,7 +124,7 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
             page_start=hit.get("page_start", 0), page_end=hit.get("page_end", 0),
             block_type=hit.get("block_type", "text"), text=hit["text"],
             expanded_text=expanded, score=float(score)))
-    yield {"stage": "expand", "status": "done", "ms": _ms(te)}
+    yield {"stage": "expand", "status": "done", "ms": _ms(te), "count": len(out)}
     yield {"stage": "result", "chunks": out}
 
 
