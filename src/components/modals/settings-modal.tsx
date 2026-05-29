@@ -268,7 +268,7 @@ export function SettingsModal({
                   </button>
                 ))}
                 <div className="mt-3.5 rounded-lg border-[0.5px] border-divider bg-surface-2 px-3 py-2.5 text-[11.5px] leading-[1.55] text-muted">
-                  すべてのモデルは社内VPC内のプロキシ経由で呼び出されます。プロンプト・回答はログに保存されますが、モデル提供元には送信されません。
+                  プロンプト・回答はログに保存されますが、モデル提供元に利用・または学習されることがありません。
                 </div>
               </div>
             )}
