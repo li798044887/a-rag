@@ -408,16 +408,8 @@ export function Workspace() {
   };
 
   const openSourceTab = (src: Source) => {
-    const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${src.title} · ARag</title>
-<style>body{font:15px/1.7 -apple-system,system-ui,sans-serif;max-width:760px;margin:48px auto;padding:0 24px;color:#1f1b16;background:#faf8f3}header{padding-bottom:18px;border-bottom:0.5px solid #1f1b1622;margin-bottom:24px}h1{font-size:24px;letter-spacing:-0.01em;margin:0 0 8px}.meta{color:#7a736b;font-size:13px;font-family:ui-monospace,monospace}h2{font-size:15px;margin:24px 0 8px}pre{white-space:pre-wrap;font:inherit;margin:0;color:#2e2a23}.badge{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#3FA77E;background:#3FA77E22;padding:2px 8px;border-radius:999px;margin-bottom:14px;font-family:ui-monospace,monospace}</style></head><body>
-<div class="badge">ARag · Primary Source</div><header><h1>${src.title}</h1><div class="meta">${src.author} · ${src.path}</div></header>
-${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt;")}</pre>`).join("")}
-</body></html>`;
-    const win = window.open("", "_blank");
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-    } else push("ポップアップがブロックされています", "error");
+    const win = window.open(`/api/documents/${encodeURIComponent(src.id)}/raw`, "_blank");
+    if (!win) push("ポップアップがブロックされています", "error");
   };
 
   const handleRPAction = (kind: RightPanelAction, src: Source) => {
