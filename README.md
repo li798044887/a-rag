@@ -69,49 +69,68 @@ cp .env.example .env.local
 
 ### CPU（既定）
 
+この手順で、ログイン/登録、ファイルアップロード、RAG 索引化まで動く状態になります。
+
 ```bash
-# 1. インフラ起動
-docker compose up -d
+# 1. インフラ + RAG API + RAG worker 起動
+#    rag-worker はアップロード後の索引化に必須です。
+docker compose --profile worker up -d
 
-# 2. rag マイグレーション
-docker compose exec rag uv run alembic upgrade head
+# 2. rag 側マイグレーション
+#    documents / chunks / ingest_jobs を作成します。
+docker compose exec -T rag uv run alembic upgrade head
 
-# 3. web 依存インストール + マイグレーション
+# 3. web 依存インストール
 pnpm install
+
+# 4. web 側マイグレーション
+#    users / threads / messages / citations を作成します。
 pnpm drizzle-kit migrate
 
-# 4. web 開発サーバ
+# 5. web 開発サーバ
 pnpm dev   # http://localhost:3000
 ```
 
-rag-worker をローカルで起動する場合（docker compose profile を使う場合は不要）:
+このリポジトリには `docker-compose.override.yml` があり、ホスト側 Postgres ポートは `5433` に変更されています。
+そのため、`.env.local` の `DATABASE_URL` は次の値にしてください。
+
+```env
+DATABASE_URL=postgres://arag:arag@localhost:5433/arag
+RAG_SERVICE_URL=http://localhost:8000
+RAG_INTERNAL_TOKEN=dev-internal-token
+```
+
+起動後の確認:
 
 ```bash
-docker compose --profile worker up -d
+docker compose ps
+docker compose exec -T postgres psql -U arag -d arag -c "\dt"
+curl -s localhost:8000/health
 ```
 
 #### 各手順の実行タイミング
 
-上記 1〜4 は実行頻度が異なります（1 が起動してから 2・3・4）。
+上記 1〜5 は実行頻度が異なります（1 が起動してから 2・3・4・5）。
 
 | 手順 | 内容 | いつ実行するか | 頻度 |
 |---|---|---|---|
-| 1 | `docker compose up -d` | 初回、およびコンテナが落ちている時（Mac 再起動後・`docker compose down` 後） | 作業開始時に「落ちていれば」 |
-| 2 | `alembic upgrade head`（rag） | 初回、および rag 側のマイグレーションが増えた時（`git pull` で `rag/.../versions/` が更新された等） | スキーマ変更時のみ |
-| 3 | `pnpm install` + `drizzle-kit migrate` | 初回、および依存 or web マイグレーションが変わった時 | 変更時のみ |
-| 4 | `pnpm dev` | 毎回（実際に開発する時に動かすフォアグラウンドのプロセス） | 毎回 |
+| 1 | `docker compose --profile worker up -d` | 初回、およびコンテナが落ちている時（PC 再起動後・`docker compose down` 後） | 作業開始時に「落ちていれば」 |
+| 2 | `alembic upgrade head`（rag） | 初回、および rag 側のマイグレーションが増えた時（`git pull` で `rag/alembic/versions/` が更新された等） | スキーマ変更時のみ |
+| 3 | `pnpm install` | 初回、および依存が変わった時 | 依存変更時のみ |
+| 4 | `drizzle-kit migrate`（web） | 初回、および web 側のマイグレーションが増えた時（`drizzle/` が更新された等） | スキーマ変更時のみ |
+| 5 | `pnpm dev` | 毎回（実際に開発する時に動かすフォアグラウンドのプロセス） | 毎回 |
 
-- **初回セットアップ**: 1 → 2 → 3 → 4 を順番にすべて。
-- **普段の作業開始**: コンテナ起動済みなら（`docker ps` で確認）4 だけ。落ちていれば 1 → 4。
-  - `restart: always` を設定していないため、Mac 再起動後は自動起動しません。`docker compose up -d`（または `docker compose start`）が必要です。
-- 2・3 は普段は不要。`git pull` でマイグレーションや依存が増えた時だけ実行（どちらも冪等なので、最新済みなら実行しても何も起きません）。
+- **初回セットアップ**: 1 → 2 → 3 → 4 → 5 を順番にすべて。
+- **普段の作業開始**: コンテナ起動済みなら（`docker compose ps` で確認）5 だけ。落ちていれば 1 → 5。
+  - `restart: always` を設定していないため、PC 再起動後は自動起動しません。`docker compose --profile worker up -d`（または `docker compose --profile worker start`）が必要です。
+- 2・4 は普段は不要。`git pull` でマイグレーションが増えた時だけ実行してください（最新済みなら何も起きません）。
 
-つまり日常的に毎回叩くのは実質 `docker compose up -d`（落ちてれば）→ `pnpm dev` の 2 つだけです。
+つまり日常的に毎回叩くのは実質 `docker compose --profile worker up -d`（落ちてれば）→ `pnpm dev` の 2 つだけです。
 
 ### GPU（NVIDIA + nvidia-container-toolkit が必要）
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d
 ```
 
 `/health` で `"device": "cuda"` が返ることを確認:
@@ -129,7 +148,7 @@ curl -s localhost:8000/health
 |---|---|---|
 | `ARAG_JWT_SECRET` | JWT 署名鍵（本番では必須） | 開発用固定値 |
 | `ANTHROPIC_API_KEY` | Claude API キー（回答生成に必須） | 未設定時は検索・引用は動作するが、回答生成はスキップし案内メッセージを返す |
-| `DATABASE_URL` | web→Postgres 接続（node-postgres 形式） | `postgres://arag:arag@localhost:5432/arag` |
+| `DATABASE_URL` | web→Postgres 接続（node-postgres 形式）。このリポジトリのローカル override では host 側 Postgres が `5433` | `postgres://arag:arag@localhost:5433/arag` |
 | `RAG_SERVICE_URL` | web→rag 内部 HTTP | `http://localhost:8000` |
 | `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン | `dev-internal-token` |
 
@@ -158,6 +177,34 @@ pnpm e2e          Playwright E2E（要フルスタック起動）
 ```
 
 ## トラブルシュート
+
+### `relation "users" does not exist`
+
+web 側の Drizzle マイグレーションが未適用です。Postgres が起動してから実行してください。
+
+```bash
+pnpm drizzle-kit migrate
+```
+
+`docker-compose.override.yml` を使うローカル環境では、`.env.local` の `DATABASE_URL` が `localhost:5433` を指している必要があります。
+Windows で `sh is not recognized` や pnpm のリンク解決エラーが出る場合は、同じ環境（PowerShell なら PowerShell、WSL なら WSL）で `pnpm install` をやり直してから再実行してください。
+
+### `relation "documents" does not exist`
+
+rag 側の Alembic マイグレーションが未適用です。`documents` / `chunks` / `ingest_jobs` がないと、アップロード時に「索引化の開始に失敗しました」になります。
+
+```bash
+docker compose exec -T rag uv run alembic upgrade head
+```
+
+### アップロード後に処理が進まない
+
+`rag-worker` が起動していない可能性があります。worker は Redis キューからジョブを取り出して、MinerU 解析、チャンク化、埋め込み、Qdrant 登録を行います。
+
+```bash
+docker compose --profile worker up -d rag-worker
+docker compose logs -f rag-worker
+```
 
 ### MinerU が遅い（CPU 環境）
 
