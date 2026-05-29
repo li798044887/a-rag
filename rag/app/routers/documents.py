@@ -22,7 +22,7 @@ def _upload_dir() -> Path:
 async def enqueue_ingest(document_id: str, job_id: str) -> None:
     pool = await create_pool(redis_settings())
     try:
-        await pool.enqueue_job("ingest_document", document_id, job_id)
+        await pool.enqueue_job("ingest_document", document_id, job_id, _job_id=job_id)
     finally:
         await pool.aclose()
 

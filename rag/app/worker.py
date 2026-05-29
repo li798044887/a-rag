@@ -93,9 +93,42 @@ async def ingest_document(ctx: dict, document_id: str, job_id: str) -> None:
         session.close()
 
 
+async def requeue_interrupted_jobs(ctx: dict) -> None:
+    """Worker 再起動時、DB と Redis キューのズレを修復する。"""
+    redis = ctx["redis"]
+    session = SessionLocal()
+    try:
+        jobs = (
+            session.query(IngestJob)
+            .filter(IngestJob.status.in_(("queued", "parsing", "chunking", "embedding", "indexing")))
+            .all()
+        )
+        for job in jobs:
+            job.status = "queued"
+            job.progress = 0
+            job.stage_detail = ""
+            job.error = None
+            doc = session.get(Document, job.document_id)
+            if doc:
+                doc.status = "queued"
+            await redis.enqueue_job(
+                "ingest_document",
+                job.document_id,
+                job.id,
+                _job_id=job.id,
+            )
+        session.commit()
+    finally:
+        session.close()
+
+
 class WorkerSettings:
     functions = [ingest_document]
+    on_startup = requeue_interrupted_jobs
     redis_settings = redis_settings()
+    # MinerU / embedding / Qdrant upsert are CPU- and memory-heavy.
+    # Keep local ingestion stable by processing documents one at a time.
+    max_jobs = 1
     # CPU での MinerU 解析 + BGE-M3 埋め込みは数分かかるため、arq 既定の 300s を大幅に延長。
     # max_tries=1: 長時間ジョブのタイムアウト自動再試行による二重実行を避ける（再試行は /jobs/{id}/retry で明示的に行う）。
     job_timeout = 3600
