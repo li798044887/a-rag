@@ -532,7 +532,7 @@ function UserMenu({ open, anchorRef, onClose, user, dark, onOpenSettings, onOpen
         <span className={iconCls}>
           <Icon name={dark ? "sun" : "moon"} size={14} />
         </span>
-        <span className="min-w-0 flex-1">{dark ? "ライトモードへ" : "ダークモードへ"}</span>
+        <span className="min-w-0 flex-1">{dark ? "ライトモード" : "ダークモード"}</span>
       </button>
       <button className={itemCls} role="menuitem" onClick={onOpenHelp}>
         <span className={iconCls}>
