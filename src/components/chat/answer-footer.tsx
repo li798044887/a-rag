@@ -40,7 +40,13 @@ export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate
           type="button"
           onClick={onOpenSources}
           title="このターンの一次資料を表示"
-          className={cn(chipCls, "cursor-pointer hover:text-fg", sourcesActive && "border-accent bg-accent-soft text-accent")}
+          className={cn(
+            chipCls,
+            "cursor-pointer",
+            sourcesActive
+              ? "border-accent bg-accent-soft text-accent hover:bg-accent/20"
+              : "hover:border-divider-strong hover:text-fg"
+          )}
         >
           <svg viewBox="0 0 16 16" width="11" height="11">
             <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
