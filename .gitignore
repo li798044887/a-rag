@@ -54,3 +54,4 @@ rag/__pycache__/
 *.pyc
 /sample
 /test-results
+/.vscode
