@@ -140,10 +140,6 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
           <span className="min-w-[32px] font-mono text-[9.5px] uppercase tracking-[0.05em] text-muted-2">パス</span>
           <code className="break-all font-mono text-[11px] text-fg-2">{active.path}</code>
         </div>
-        <div className="flex items-baseline gap-2 text-[11px]">
-          <span className="min-w-[32px] font-mono text-[9.5px] uppercase tracking-[0.05em] text-muted-2">出典</span>
-          <span className="text-[11px] text-fg-2">{active.author}</span>
-        </div>
       </div>
 
       {/* Body */}
