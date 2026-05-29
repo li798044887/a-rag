@@ -116,8 +116,24 @@ export function Sidebar(props: SidebarProps) {
         <div className="flex items-center gap-2 text-[14px] font-bold tracking-[-0.01em]">
           <div className="grid h-[22px] w-[22px] place-items-center rounded-md bg-accent text-white">
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
-              <path d="M4 6c0-1.1.9-2 2-2h8l6 6v8c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V6z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-              <circle cx="12" cy="13" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path
+                d="M7 4.5h6.5L17 8v11.5H7V4.5z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M13.5 4.5V8H17"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="12" cy="13" r="2.8" fill="none" stroke="currentColor" strokeWidth="2" />
+              <path d="M14.1 15.1 16.6 17.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
           <span>ARag</span>

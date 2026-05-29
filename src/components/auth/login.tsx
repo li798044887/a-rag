@@ -79,9 +79,24 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
         <div className="mb-8 flex items-center gap-3">
           <div className="grid h-9 w-9 place-items-center rounded-[10px] bg-accent text-white shadow-[0_2px_6px_var(--accent-glow)]">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-              <path d="M4 6c0-1.1.9-2 2-2h8l6 6v8c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V6z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-              <circle cx="12" cy="13" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M14.2 15.2 16 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path
+                d="M7 4.5h6.5L17 8v11.5H7V4.5z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M13.5 4.5V8H17"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="12" cy="13" r="2.8" fill="none" stroke="currentColor" strokeWidth="2" />
+              <path d="M14.1 15.1 16.6 17.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
           <div>
