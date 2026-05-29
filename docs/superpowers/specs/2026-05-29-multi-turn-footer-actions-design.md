@@ -24,12 +24,13 @@
 - 共有はスレッド全体として扱う（現状の `item: null` 挙動を維持。実質変更なし）。
 - 過去ターンの「再生成」は **そのターンを再生成し、それ以降のターンを破棄**（ChatGPT 風、会話の分岐は持たない）。
 - 👍👎フィードバックは **クライアントのみ保持**（サーバ永続化しない。現状踏襲）。ターン別に持つ。
+- 一次資料パネルは引き続き「アクティブ引用ターン追従」だが、**どのターンの出典かを明示する UX**（案A）を追加する（後述セクション8）。
 
 ## 非スコープ
 
 - フィードバックのサーバ永続化・新規スキーマ。
 - 会話の分岐（ブランチ）管理。
-- 一次資料パネルの件数表示の変更（現状の「アクティブ引用ターン追従」を維持）。
+- パネルで全ターン出典を集約表示する方式（案B）・ヘッダ件数ボタンの撤廃（案C）は不採用。
 
 ## アーキテクチャ / 変更点
 
@@ -100,7 +101,8 @@ const appendTurn = (k: string) => setConvs((prev) => {
   - 各ターンを `## 質問\n{query}\n\n{answer}` の形で連結。
   - 出典は全ターン分を集約し `id` で重複排除して `## 参考資料` に一覧化。
   - スレッドが空（`turns.length === 0`）ならトーストで通知（従来の `userQuery` 空チェックを置換）。
-- 一次資料ヘッダ件数・共有ボタンは変更なし。
+- 共有ボタンは変更なし。一次資料ヘッダ件数・パネル UX はセクション8。
+- 出典パネルをターンへ紐づけて開くハンドラ `openSourcesForTurn(turnIdx)` を追加：`setActiveCiteTurn(turnIdx)`、`setActiveSourceId(該当ターンの先頭 source.id)`、`setHighlightSectionId(null)`、`setRightPanelOpen(true)`。
 
 ### 6. `components/chat/messages.tsx`
 
@@ -108,13 +110,40 @@ const appendTurn = (k: string) => setConvs((prev) => {
 - `onCopy` / `onRegenerate` / `onFeedback` を per-turn 化し `turnIdx` を渡す。
   - `onCopy={() => onCopy(idx)}`、`onRegenerate={() => onRegenerate(idx)}`、`onFeedback={(v) => onFeedback(v, idx)}`。
   - `feedback={feedbackMap[idx] ?? null}`。
-- `Transcript` の props 型を更新（`onCopy: (turnIdx) => void` 等、`feedback` を `Record<number,...>` に）。
+- フッターの「N sources」チップから出典パネルを開けるよう `onOpenSources={() => onOpenSources(idx)}` を渡す。
+- パネルが開いていてアクティブ引用ターン = `idx` のとき、そのフッターを `active` 状態にするため `sourcesActive={rightPanelOpen && activeCiteTurn === idx}` を渡す。
+- `Transcript` の props 型を更新（`onCopy: (turnIdx) => void` 等、`feedback` を `Record<number,...>`、`onOpenSources`・`activeCiteTurn`・`rightPanelOpen` を追加）。
 - `CancelledNotice` の `onRetry` は引き続き最後のターン（cancelled は常に末尾）に対応するので `() => onRegenerate(idx)`。
 
 ### 7. `components/chat/answer-footer.tsx`
 
-- `AnswerFooter` の props 型自体は据え置き可能（`onCopy: () => void` 等）。呼び出し側（`messages.tsx`）でクロージャに `idx` を閉じ込めるため、コンポーネント本体は変更最小（必要なら無変更）。
-- 再生成ボタンは実行中（スレッドに running ターンがある間）は無効化を検討（`messages.tsx` 側で `running` を渡すか、`done` ターンのみ表示なので実害は小さい）。実装時に判断。
+- props に `onOpenSources: () => void` と `sourcesActive: boolean` を追加。
+- 「N sources」`<span>` チップを `<button>` 化し `onClick={onOpenSources}`。`sourcesActive` のとき accent 系のボーダー/文字色でアクティブ表示（既存 chip スタイルにアクティブ variant を足す）。他のチップ（時間・トークン）は非インタラクティブのまま。
+- `onCopy` / `onRegenerate` / `onFeedback` は据え置き（呼び出し側がクロージャで `idx` を閉じ込める）。
+- 再生成ボタンは `done` ターンのみ表示のため実行中の押下は基本的に発生しない。実装時に必要なら無効化を検討。
+
+### 8. 一次資料パネルの UX（案A：ターンに明示紐づけ）
+
+「アクティブ引用ターン」がどのターンか分からない問題を、追加的な3つの手当てで解消する（既存挙動は壊さない）。
+
+1. **フッターの出典チップを入口にする**（セクション6・7）。各ターンの「N sources」チップをクリックすると、そのターンの出典でパネルが開く（`openSourcesForTurn(idx)`）。本文中の `[n]` クリック（既存 `openCitation`）と並ぶ、より発見しやすい導線。
+2. **パネルヘッダにターン文脈を表示**（`components/sources/right-panel.tsx`）。タイトル行「一次資料 + 件数」の直下に、対象ターンの質問スニペットを muted で表示する。例：`「組織再編の論点は？」の出典`。
+   - `RightPanel` に `contextQuery?: string` prop を追加し、`workspace.tsx` から `citeTurn?.query` を渡す。
+   - 1ターンしか無い会話でも表示してよい（害がなく一貫する）。長文はトランケート。
+3. **アクティブターンの可視化**（セクション6）。パネル表示中、対象ターンのフッター出典チップを accent のアクティブ状態にして、会話側とパネルの対応を一目で示す（`sourcesActive`）。
+
+ヘッダの「一次資料 (N)」グローバルボタンは現状どおり `citeTurn`（アクティブ引用ターン、既定は末尾）追従を維持する。パネルヘッダのラベルとチップのアクティブ表示で曖昧さが解消されるため、件数の意味も明確になる。
+
+レイアウト（パネルヘッダ）：
+
+```
+┌───────────────────────────┐
+│ □ 一次資料  (2)        ↗  ✕ │  ← 既存のタイトル行
+│ 「組織再編の論点は？」の出典     │  ← 追加：ターン文脈（muted, truncate）
+├───────────────────────────┤
+│ [1] 商法xxx                │
+│ [2] 定款yyy                │
+```
 
 ## データフロー（再生成）
 
@@ -144,3 +173,4 @@ const appendTurn = (k: string) => setConvs((prev) => {
 - 👍👎が回答ごとに独立して切り替わる（スレッド切替・新規でリセット）。
 - 過去ターンの再生成で、その質問が再実行され、それ以降のターンが画面・DB 双方から消える。リロードしても破棄ターンは復活しない。
 - Markdown エクスポートが全ターンの Q&A と集約済み出典を含む。
+- 各ターンのフッター出典チップから、そのターンの出典でパネルを開ける。パネルヘッダに対象ターンの質問スニペットが表示され、会話側では対象ターンのチップがアクティブ表示になる。
