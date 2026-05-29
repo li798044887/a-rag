@@ -10,6 +10,8 @@ export interface SourceSection {
   heading: string;
   body: string;
   highlight?: boolean;
+  blockType?: string;
+  page?: number;
 }
 
 export interface Source {
