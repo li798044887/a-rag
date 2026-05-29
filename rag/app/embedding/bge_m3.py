@@ -1,3 +1,5 @@
+import threading
+
 from app.config import settings
 from app.embedding.base import DenseSparse
 
@@ -9,9 +11,13 @@ class BGEM3Embedder:
         from FlagEmbedding import BGEM3FlagModel
         use_fp16 = settings.device == "cuda"
         self.model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=use_fp16, device=settings.device)
+        # PyTorch + HuggingFace fast tokenizer はスレッド非安全。同期 (def) ルートは
+        # スレッドプールで実行されるため、並列 retrieve から同時推論されると 2 件目が落ちる。直列化する。
+        self._lock = threading.Lock()
 
     def embed(self, texts: list[str]) -> list[DenseSparse]:
-        out = self.model.encode(texts, return_dense=True, return_sparse=True)
+        with self._lock:
+            out = self.model.encode(texts, return_dense=True, return_sparse=True)
         dense = out["dense_vecs"]
         sparse = out["lexical_weights"]
         return [
