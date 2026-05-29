@@ -217,6 +217,26 @@ const glyphs = {
   send: <path d="M8 13V3M8 3l-4 4M8 3l4 4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />,
   arrowUp: <path d="M4 10l4-5 4 5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />,
   menu: <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />,
+  more: (
+    <>
+      <circle cx="8" cy="3.5" r="1" fill="currentColor" />
+      <circle cx="8" cy="8" r="1" fill="currentColor" />
+      <circle cx="8" cy="12.5" r="1" fill="currentColor" />
+    </>
+  ),
+  pencil: (
+    <>
+      <path d="M2.5 13.5l1-3 7.2-7.2a1 1 0 011.4 0l1.6 1.6a1 1 0 010 1.4L6.5 13.5l-4 .5z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" />
+      <path d="M9.8 4l2.2 2.2" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M2.5 4.5h11M6 4.5V3a1 1 0 011-1h2a1 1 0 011 1v1.5M4.5 4.5l.7 8.5a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 7.5v4M9 7.5v4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+    </>
+  ),
+  starFilled: <path d="M8 2l1.85 4 4.15.4-3.1 2.8.9 4.1L8 11.2 4.2 13.3l.9-4.1L2 6.4l4.15-.4L8 2z" fill="currentColor" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
 
   // ── Misc ─────────────────────────────────────────────────────────────
   sun: (

@@ -87,6 +87,8 @@ export function Composer({
           onChange={(e) => onChange(e.target.value)}
           placeholder={running ? "エージェントが実行中です…" : "質問するか、ファイルをドロップして訪ねてください…"}
           onKeyDown={(e) => {
+            // IME 変換確定の Enter（isComposing / keyCode 229）は送信しない
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
             if (e.key === "Enter" && !e.shiftKey && !running) {
               e.preventDefault();
               if (canSubmit) onSubmit();

@@ -30,11 +30,13 @@ export type ToolStatus = "pending" | "running" | "done" | "error";
 
 export type ToolName =
   | "rewrite_query"
+  | "retrieve"
   | "vector_search"
   | "bm25_search"
   | "rerank"
   | "fetch_document"
   | "summarize"
+  | "answer"
   | "web_search"
   | "python_sandbox"
   | "sql_query";
@@ -70,6 +72,21 @@ export interface CompletedThread {
   answerText: string;
   tokens: number;
   durationMs: number;
+}
+
+/** 1ターン分（ユーザー質問 + エージェント実行 + 回答）。 */
+export interface Turn {
+  query: string;
+  steps: ToolCall[];
+  answer: string;
+  streaming: boolean;
+  citationMap: CitationMap;
+  sourceIds: string[];
+  sources: Source[];
+  tokens: number;
+  durationMs: number;
+  status: "running" | "done" | "cancelled" | "error";
+  attachments: string[];
 }
 
 // ── Models / prompts / scope ────────────────────────────────────────────────

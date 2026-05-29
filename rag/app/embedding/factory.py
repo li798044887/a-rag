@@ -1,9 +1,11 @@
 import hashlib
 import os
+import threading
 
 from app.embedding.base import DenseSparse, Embedder
 
 _cache: dict[str, Embedder] = {}
+_lock = threading.Lock()
 
 
 class StubEmbedder:
@@ -25,12 +27,16 @@ def get_embedder() -> Embedder:
     kind = os.getenv("EMBEDDER", "bge-m3")
     if kind in _cache:
         return _cache[kind]
-    if kind == "stub":
-        inst: Embedder = StubEmbedder()
-    elif kind == "bge-m3":
-        from app.embedding.bge_m3 import BGEM3Embedder
-        inst = BGEM3Embedder()
-    else:
-        raise ValueError(f"unknown EMBEDDER: {kind}")
-    _cache[kind] = inst
-    return inst
+    # 並列初回リクエストが同じ重いモデルを二重ロードしないよう double-checked locking で直列化。
+    with _lock:
+        if kind in _cache:
+            return _cache[kind]
+        if kind == "stub":
+            inst: Embedder = StubEmbedder()
+        elif kind == "bge-m3":
+            from app.embedding.bge_m3 import BGEM3Embedder
+            inst = BGEM3Embedder()
+        else:
+            raise ValueError(f"unknown EMBEDDER: {kind}")
+        _cache[kind] = inst
+        return inst

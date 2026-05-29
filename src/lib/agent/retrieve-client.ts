@@ -47,3 +47,54 @@ export async function retrieveChunks(input: {
     score: c.score as number,
   }));
 }
+
+export interface FetchedDocChunk {
+  chunkId: string;
+  ordinal: number;
+  headingPath: string;
+  pageStart: number;
+  pageEnd: number;
+  blockType: string;
+  text: string;
+}
+
+export interface FetchedDocument {
+  documentId: string;
+  documentTitle: string;
+  chunks: FetchedDocChunk[];
+}
+
+export async function fetchDocument(input: {
+  documentId: string;
+  ownerUserId: string;
+  aroundChunkId?: string;
+}): Promise<FetchedDocument> {
+  const res = await ragFetch(`/documents/${encodeURIComponent(input.documentId)}/chunks`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      owner_user_id: input.ownerUserId,
+      around_chunk_id: input.aroundChunkId ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`fetchDocument failed: ${res.status} ${body}`);
+  }
+  const data = (await res.json()) as {
+    document_id: string; document_title: string; chunks: Array<Record<string, unknown>>;
+  };
+  return {
+    documentId: data.document_id,
+    documentTitle: data.document_title,
+    chunks: data.chunks.map((c) => ({
+      chunkId: c.chunk_id as string,
+      ordinal: c.ordinal as number,
+      headingPath: c.heading_path as string,
+      pageStart: c.page_start as number,
+      pageEnd: c.page_end as number,
+      blockType: c.block_type as string,
+      text: c.text as string,
+    })),
+  };
+}

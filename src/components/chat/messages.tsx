@@ -1,7 +1,10 @@
 "use client";
 
 import { CitedText } from "@/components/chat/cited-text";
-import type { CitationStyle } from "@/lib/types";
+import { AgentActivity } from "@/components/chat/agent-activity";
+import { AnswerFooter, CancelledNotice } from "@/components/chat/answer-footer";
+import { UserAttachments } from "@/components/uploads/uploads";
+import type { CitationStyle, StagedFile, Turn, ToolView } from "@/lib/types";
 
 export function UserMessage({ text }: { text: string }) {
   return (
@@ -62,5 +65,68 @@ export function StaticAnswer({
     <div className="text-[14.5px] text-fg-2">
       <CitedText text={text} onCite={onCite} citationStyle={citationStyle} />
     </div>
+  );
+}
+
+export function Transcript({
+  turns, toolView, expandedSteps, onToggleStep, onCite, citationStyle,
+  onCopy, onRegenerate, onFeedback, feedback, liveAttachments, isLiveLastTurn,
+}: {
+  turns: Turn[];
+  toolView: ToolView;
+  expandedSteps: Record<string, boolean>;
+  onToggleStep: (id: string) => void;
+  // どのターンの引用かを特定するため turn index を渡す。
+  onCite: (n: number, turnIdx: number) => void;
+  citationStyle: CitationStyle;
+  onCopy: () => void;
+  onRegenerate: () => void;
+  onFeedback: (v: "up" | "down") => void;
+  feedback: "up" | "down" | null;
+  liveAttachments: StagedFile[];
+  isLiveLastTurn: boolean;
+}) {
+  return (
+    <>
+      {turns.map((turn, idx) => {
+        const isLast = idx === turns.length - 1;
+        const running = turn.status === "running";
+        return (
+          <div key={idx} data-turn={idx} className="flex flex-col gap-6 max-md:gap-[18px]">
+            <UserMessage text={turn.query} />
+            <AssistantMessage>
+              {isLast && isLiveLastTurn && liveAttachments.length > 0 && <UserAttachments files={liveAttachments} />}
+              {running && turn.steps.length === 0 && (
+                <div className="flex items-center gap-2 text-[12.5px] text-muted">
+                  <span className="h-3 w-3 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
+                  考え中…
+                </div>
+              )}
+              <AgentActivity
+                steps={turn.steps}
+                variant={toolView}
+                running={running}
+                expandedMap={expandedSteps}
+                onToggleStep={onToggleStep}
+              />
+              {turn.status === "cancelled" ? (
+                <CancelledNotice onRetry={onRegenerate} />
+              ) : (
+                (turn.answer.length > 0 || turn.streaming) && (
+                  <StreamingAnswer text={turn.answer} streaming={turn.streaming} onCite={(n) => onCite(n, idx)} citationStyle={citationStyle} />
+                )
+              )}
+              {/* フッター操作（コピー/再生成/評価）はスレッド単位の状態を扱うため最新ターンのみに表示。 */}
+              {isLast && turn.status === "done" && (
+                <AnswerFooter
+                  tokens={turn.tokens} durationMs={turn.durationMs} sources={turn.sources}
+                  onCopy={onCopy} onRegenerate={onRegenerate} onFeedback={onFeedback} feedback={feedback}
+                />
+              )}
+            </AssistantMessage>
+          </div>
+        );
+      })}
+    </>
   );
 }

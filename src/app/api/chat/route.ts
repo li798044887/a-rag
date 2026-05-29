@@ -1,17 +1,16 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { verifyAccessToken, authCookieName } from "@/lib/auth";
+import type { ModelMessage } from "ai";
+import { getSessionClaims } from "@/lib/auth";
 import { runAgent } from "@/lib/agent/run";
-import { createThread, saveCompletedMessage } from "@/lib/threads";
+import { createThread, saveCompletedMessage, getThreadMessages } from "@/lib/threads";
+import { toModelHistory } from "@/lib/agent/history";
 import type { AgentEvent, ToolCall } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const jar = await cookies();
-  const token = jar.get(authCookieName)?.value;
-  const claims = token ? await verifyAccessToken(token) : null;
+  const claims = await getSessionClaims();
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { query, threadId, model } = (await req.json().catch(() => ({}))) as {
@@ -21,6 +20,18 @@ export async function POST(req: Request) {
 
   // スレッドを確定（無ければ作成、タイトルは query から）
   const tid = threadId || (await createThread(claims.sub, q || "新しいスレッド")).id;
+
+  // 既存スレッドへの追記なら過去ターンを履歴として読み込む（直近8ターン窓）。
+  let history: ModelMessage[] = [];
+  if (threadId) {
+    const prior = await getThreadMessages(tid, claims.sub);
+    if (prior) {
+      history = toModelHistory(
+        prior.map((p) => ({ query: p.completed.query, answerText: p.completed.answerText })),
+        8,
+      );
+    }
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -33,7 +44,7 @@ export async function POST(req: Request) {
       let done: Extract<AgentEvent, { type: "done" }> | null = null;
 
       try {
-        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model })) {
+        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history })) {
           if (event.type === "answer-delta") answer += event.text;
           if (event.type === "step") {
             const idx = steps.findIndex((s) => s.id === event.step.id);

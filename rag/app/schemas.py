@@ -39,3 +39,24 @@ class RetrieveRequest(BaseModel):
 
 class RetrieveResponse(BaseModel):
     chunks: list[RetrievedChunk]
+
+
+class FetchedChunk(BaseModel):
+    chunk_id: str
+    ordinal: int
+    heading_path: str
+    page_start: int
+    page_end: int
+    block_type: str
+    text: str
+
+
+class FetchDocumentRequest(BaseModel):
+    owner_user_id: str
+    around_chunk_id: str | None = None
+
+
+class FetchDocumentResponse(BaseModel):
+    document_id: str
+    document_title: str
+    chunks: list[FetchedChunk]

@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { signAccessToken, authCookieName } from "@/lib/auth";
+import { signAccessToken, setSessionCookie } from "@/lib/auth";
 import { findUserByEmail, verifyPassword, toAppUser } from "@/lib/users";
 
 export async function POST(req: Request) {
@@ -19,15 +18,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "認証情報が正しくありません" }, { status: 401 });
   }
 
-  const token = await signAccessToken({ id: user.id, email: user.email, org: user.org });
-  const jar = await cookies();
-  jar.set(authCookieName, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    ...(remember ? { maxAge: 60 * 60 * 24 * 30 } : {}),
-  });
+  const rememberMe = Boolean(remember);
+  const token = await signAccessToken({ id: user.id, email: user.email, org: user.org, remember: rememberMe });
+  await setSessionCookie(token, rememberMe);
 
   return NextResponse.json({ user: toAppUser(user) });
 }

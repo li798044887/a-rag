@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.config import settings
 from app.db import SessionLocal
-from app.models import Document, IngestJob
+from app.documents_service import select_chunks
+from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
-from app.schemas import IngestStarted
+from app.schemas import FetchDocumentRequest, FetchDocumentResponse, FetchedChunk, IngestStarted
 from app.security import require_internal_token
 
 router = APIRouter()
@@ -99,3 +100,33 @@ async def retry_job(job_id: str, owner_user_id: str | None = None):
         session.close()
     await enqueue_ingest(result.document_id, result.job_id)
     return result
+
+
+def _fetch_document(document_id: str, req: FetchDocumentRequest) -> FetchDocumentResponse:
+    session = SessionLocal()
+    try:
+        doc = session.get(Document, document_id)
+        if not doc or doc.owner_user_id != req.owner_user_id:
+            raise HTTPException(status_code=404, detail="document not found")
+        rows = (session.query(Chunk)
+                .filter(Chunk.document_id == document_id)
+                .order_by(Chunk.ordinal).all())
+        around = None
+        if req.around_chunk_id:
+            center = next((c for c in rows if c.id == req.around_chunk_id), None)
+            # around_chunk_id が見つからない場合は窓掛けせず先頭から返す（意図的フォールバック）
+            around = center.ordinal if center else None
+        rows = select_chunks(rows, around_ordinal=around)
+        return FetchDocumentResponse(
+            document_id=doc.id, document_title=doc.filename,
+            chunks=[FetchedChunk(chunk_id=c.id, ordinal=c.ordinal, heading_path=c.heading_path,
+                                 page_start=c.page_start, page_end=c.page_end,
+                                 block_type=c.block_type, text=c.text) for c in rows])
+    finally:
+        session.close()
+
+
+@router.post("/documents/{document_id}/chunks", response_model=FetchDocumentResponse,
+             dependencies=[Depends(require_internal_token)])
+def fetch_document_chunks(document_id: str, req: FetchDocumentRequest):
+    return _fetch_document(document_id, req)

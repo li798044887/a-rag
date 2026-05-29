@@ -15,6 +15,13 @@
       "when": 1779729480925,
       "tag": "0001_tearful_mandarin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779987335410,
+      "tag": "0002_token_revoked_at",
+      "breakpoints": true
     }
   ]
 }

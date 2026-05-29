@@ -1,33 +1,18 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { buildInitialSteps } from "@/lib/agent/steps";
-import type {
-  AgentEvent, CitationMap, CompletedThread, Source, ToolCall,
-} from "@/lib/types";
+import type { AgentEvent, Turn } from "@/lib/types";
 
 export type ConvStatus = "running" | "done" | "cancelled" | "error";
 
-/** 1 会話分の状態。スレッドを跨いで並行に保持できるよう threadId をキーにマップで持つ。 */
+/** スレッドの会話状態 = ターンの配列。 */
 export interface ConvState {
-  query: string;
-  steps: ToolCall[];
-  answer: string;
-  streaming: boolean; // answer tokens currently arriving
-  citationMap: CitationMap;
-  sourceIds: string[];
-  sources: Source[];
-  tokens: number;
-  durationMs: number;
-  status: ConvStatus;
-  attachments: string[];
+  turns: Turn[];
 }
 
-/** 実 threadId が判明する前（理論上ごく短時間）に使うフォールバックキー。
- *  実際には /api/chat の X-Thread-Id ヘッダで即座に実 id が分かるためほぼ使われない。 */
 export const LIVE_KEY = "th-current";
 
-function emptyConv(query: string, attachments: string[]): ConvState {
+export function emptyTurn(query: string, attachments: string[]): Turn {
   return {
     query, steps: [], answer: "", streaming: false, citationMap: {},
     sourceIds: [], sources: [], tokens: 0, durationMs: 0,
@@ -35,84 +20,55 @@ function emptyConv(query: string, attachments: string[]): ConvState {
   };
 }
 
-function reduceConv(c: ConvState, event: AgentEvent): ConvState {
+/** 1ターンに対する AgentEvent の畳み込み（純関数・テスト対象）。 */
+export function reduceTurn(t: Turn, event: AgentEvent): Turn {
   switch (event.type) {
     case "step": {
-      // 既知ステップは更新、未知ステップ（初出の running）は末尾に追加 = 逐次表示。
-      const exists = c.steps.some((s) => s.id === event.step.id);
+      const exists = t.steps.some((s) => s.id === event.step.id);
       return {
-        ...c,
+        ...t,
         steps: exists
-          ? c.steps.map((s) => (s.id === event.step.id ? { ...s, ...event.step } : s))
-          : [...c.steps, event.step],
+          ? t.steps.map((s) => (s.id === event.step.id ? { ...s, ...event.step } : s))
+          : [...t.steps, event.step],
       };
     }
     case "answer-start":
-      return { ...c, streaming: true, answer: "" };
+      return { ...t, streaming: true, answer: "" };
     case "answer-delta":
-      return { ...c, answer: c.answer + event.text };
+      return { ...t, answer: t.answer + event.text };
     case "done":
       return {
-        ...c,
-        streaming: false,
-        citationMap: event.citationMap,
-        sourceIds: event.sourceIds,
-        sources: event.sources,
-        tokens: event.tokens,
-        durationMs: event.durationMs,
-        status: "done",
-        steps: c.steps.map((s, i) =>
-          i === c.steps.length - 1 ? { ...s, status: "done", summary: `回答を生成 (${event.tokens} tokens)` } : s,
-        ),
+        ...t, streaming: false, citationMap: event.citationMap, sourceIds: event.sourceIds,
+        sources: event.sources, tokens: event.tokens, durationMs: event.durationMs, status: "done",
       };
     case "error":
-      return { ...c, streaming: false, status: "error" };
+      return { ...t, streaming: false, status: "error" };
     default:
-      return c;
+      return t;
   }
 }
 
 /** Drives agent runs over the /api/chat SSE stream, keyed by threadId.
- *
- * 各 run は自分の threadId スロットへ書き込み、他スレッドを表示しても中断されない
- * （実行中の会話は裏で継続し、いつでも戻れる）。表示は workspace が
- * activeThreadId に対応するスロットを get して描画する。 */
+ *  各スレッドは turns 配列を保持し、新しい run は末尾ターンへ畳み込む。 */
 export function useAgent() {
   const [convs, setConvs] = useState<Record<string, ConvState>>({});
   const controllers = useRef<Record<string, AbortController>>({});
 
   const get = useCallback((id: string): ConvState | undefined => convs[id], [convs]);
 
-  /** Load a finished conversation snapshot into its slot (live runs は触らない)。 */
-  const loadCompleted = useCallback((id: string, detail: {
-    completed: CompletedThread;
-    sources: Source[];
-    citationMap: CitationMap;
-    steps: ToolCall[];
-  }) => {
-    setConvs((prev) => ({
-      ...prev,
-      [id]: {
-        query: detail.completed.query,
-        steps: detail.steps.length
-          ? detail.steps.map((s) => ({ ...s, status: "done" as const }))
-          : buildInitialSteps(detail.completed.query).map((s) => ({ ...s, status: "done" as const })),
-        answer: detail.completed.answerText,
-        streaming: false,
-        citationMap: detail.citationMap,
-        sourceIds: detail.sources.map((s) => s.id),
-        sources: detail.sources,
-        tokens: detail.completed.tokens,
-        durationMs: detail.completed.durationMs,
-        status: "done",
-        attachments: [],
-      },
-    }));
+  /** 完了済みスレッドの全ターンを slot へロード（live runs は触らない）。 */
+  const loadCompleted = useCallback((id: string, turns: Turn[]) => {
+    setConvs((prev) => ({ ...prev, [id]: { turns } }));
   }, []);
 
-  /** Start a live run. 実 threadId は X-Thread-Id ヘッダから取得し、その時点で
-   *  onThread を呼ぶ（workspace がサイドバー登録 / アクティブ化に使う）。
-   *  実行中も他スレッド表示で中断されない。 */
+  /** 末尾ターンへ event を畳み込む helper。 */
+  const applyToLastTurn = (state: ConvState | undefined, event: AgentEvent): ConvState => {
+    const turns = state?.turns ?? [];
+    if (turns.length === 0) return { turns };
+    const last = turns[turns.length - 1];
+    return { turns: [...turns.slice(0, -1), reduceTurn(last, event)] };
+  };
+
   const run = useCallback(
     async (
       query: string,
@@ -123,17 +79,26 @@ export function useAgent() {
     ): Promise<{ status: ConvStatus; threadId: string }> => {
       const ctrl = new AbortController();
       let key = threadId ?? LIVE_KEY;
-      // 既存スレッドへの追記時のみ、その id で仮スロットを用意（onThread までの空白を防ぐ）。
-      if (threadId) {
-        controllers.current[key] = ctrl;
-        setConvs((prev) => ({ ...prev, [key]: emptyConv(query, attachments) }));
-      }
+
+      // 新しいターンを末尾に追加（既存スレッドなら過去ターンの後ろ、新規なら最初のターン）。
+      const appendTurn = (k: string) => setConvs((prev) => {
+        const turns = prev[k]?.turns ?? [];
+        return { ...prev, [k]: { turns: [...turns, emptyTurn(query, attachments)] } };
+      });
+
+      // 楽観的に新しいターンを即追加（新規は LIVE_KEY、既存はそのスレッドへ）。
+      // 新規スレッドの実 id 確定（X-Thread-Id）までの本文空白フラッシュを防ぐ。
+      controllers.current[key] = ctrl;
+      appendTurn(key);
 
       const finish = (status: ConvStatus): { status: ConvStatus; threadId: string } => {
         setConvs((prev) => {
           const c = prev[key];
-          if (!c) return prev;
-          return { ...prev, [key]: { ...c, streaming: false, status: c.status === "running" ? status : c.status } };
+          if (!c || c.turns.length === 0) return prev;
+          const last = c.turns[c.turns.length - 1];
+          const nextLast = { ...last, streaming: false,
+            status: last.status === "running" ? status : last.status };
+          return { ...prev, [key]: { turns: [...c.turns.slice(0, -1), nextLast] } };
         });
         delete controllers.current[key];
         cb.onDone?.(key, status);
@@ -148,16 +113,24 @@ export function useAgent() {
           signal: ctrl.signal,
         });
 
-        // 実 threadId を確定し、スロット・コントローラをそのキーへ確定する。
         const realId = res.headers.get("X-Thread-Id") || key;
         if (realId !== key) {
           controllers.current[realId] = ctrl;
           delete controllers.current[key];
+          // 仮キーのターンを実キーへ移し、ターンが無ければ emptyTurn を1つ用意（空エントリを残さない）。
+          setConvs((prev) => {
+            const moved = threadId ? [] : (prev[key]?.turns ?? []);
+            const merged = [...(prev[realId]?.turns ?? []), ...moved];
+            const next = { ...prev };
+            delete next[key];
+            next[realId] = { turns: merged.length ? merged : [emptyTurn(query, attachments)] };
+            return next;
+          });
           key = realId;
-        } else if (!controllers.current[key]) {
-          controllers.current[key] = ctrl;
+        } else {
+          if (!controllers.current[key]) controllers.current[key] = ctrl;
+          setConvs((prev) => (prev[key]?.turns.length ? prev : { ...prev, [key]: { turns: [emptyTurn(query, attachments)] } }));
         }
-        setConvs((prev) => ({ ...prev, [key]: prev[key] ?? emptyConv(query, attachments) }));
         cb.onThread?.(key);
 
         if (!res.ok || !res.body) return finish("error");
@@ -175,7 +148,7 @@ export function useAgent() {
             const line = frame.trim();
             if (!line.startsWith("data:")) continue;
             const event = JSON.parse(line.slice(5).trim()) as AgentEvent;
-            setConvs((prev) => (prev[key] ? { ...prev, [key]: reduceConv(prev[key], event) } : prev));
+            setConvs((prev) => ({ ...prev, [key]: applyToLastTurn(prev[key], event) }));
           }
         }
         return finish("done");
@@ -187,23 +160,19 @@ export function useAgent() {
     [],
   );
 
-  /** Cancel an in-flight run, marking its in-flight steps cancelled. */
   const cancel = useCallback((id: string) => {
     controllers.current[id]?.abort();
     setConvs((prev) => {
       const c = prev[id];
-      if (!c) return prev;
-      return {
-        ...prev,
-        [id]: {
-          ...c, streaming: false, status: "cancelled",
-          steps: c.steps.map((s) => (s.status === "running" ? { ...s, status: "pending", summary: "キャンセルされました" } : s)),
-        },
-      };
+      if (!c || c.turns.length === 0) return prev;
+      const last = c.turns[c.turns.length - 1];
+      const nextLast = { ...last, streaming: false, status: "cancelled" as const,
+        steps: last.steps.map((s) => (s.status === "running"
+          ? { ...s, status: "pending" as const, summary: "キャンセルされました" } : s)) };
+      return { ...prev, [id]: { turns: [...c.turns.slice(0, -1), nextLast] } };
     });
   }, []);
 
-  /** Drop a conversation slot (e.g. discard an empty/cancelled draft). */
   const remove = useCallback((id: string) => {
     controllers.current[id]?.abort();
     delete controllers.current[id];

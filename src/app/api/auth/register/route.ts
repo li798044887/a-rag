@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { signAccessToken, authCookieName } from "@/lib/auth";
+import { signAccessToken, setSessionCookie } from "@/lib/auth";
 import { createUser, findUserByEmail, toAppUser } from "@/lib/users";
 import type { UserRow } from "@/lib/db/schema";
 
@@ -36,15 +35,8 @@ export async function POST(req: Request) {
     }
     throw e;
   }
-  const token = await signAccessToken({ id: row.id, email: row.email, org: row.org });
-
-  const jar = await cookies();
-  jar.set(authCookieName, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
+  const token = await signAccessToken({ id: row.id, email: row.email, org: row.org, remember: false });
+  await setSessionCookie(token, false);
 
   return NextResponse.json({ user: toAppUser(row) });
 }

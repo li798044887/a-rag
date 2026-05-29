@@ -1,183 +1,184 @@
-/** Server-side agent orchestrator (real backend).
+/** Server-side agentic orchestrator (real backend).
  *
- * rewrite_query は Haiku、検索は rag /retrieve（hybrid+rerank+近傍拡張）、
- * summarize は Sonnet ストリーミング。各ステップを AgentEvent として配信する。 */
+ * 1つのモデルに retrieve / fetch_document を渡し stopWhen でループ。
+ * fullStream のパーツを AgentEvent へマッピングする。引用は CitationRegistry で番号統合。 */
 
-import { generateText, streamText } from "ai";
-import { retrieveChunks, type RetrievedChunk } from "@/lib/agent/retrieve-client";
+import { streamText, stepCountIs, type LanguageModelUsage, type ModelMessage } from "ai";
 import { resolveModels, DEFAULT_MODEL_ID } from "@/lib/agent/models";
-import { buildInitialSteps } from "@/lib/agent/steps";
-import type { AgentEvent, CitationMap, Source, ToolCall } from "@/lib/types";
+import { buildTools, type ToolCallMeta } from "@/lib/agent/tools";
+import { CitationRegistry } from "@/lib/agent/citations";
+import type { AgentEvent, ToolCall, ToolName } from "@/lib/types";
 
 export interface RunInput {
   query: string;
   ownerUserId: string;
   threadId: string;
+  /** 過去ターンの履歴（user/assistant のメッセージ列、窓掛け済み）。 */
+  history?: ModelMessage[];
   attachments?: string[];
-  /** UI（設定 > モデル）で選択された model id。未指定時は既定モデル。 */
   modelId?: string;
 }
 
-export async function* runAgent({ query, ownerUserId, threadId, modelId }: RunInput): AsyncGenerator<AgentEvent> {
-  const started = Date.now();
-  const steps = buildInitialSteps(query);
-  const byName = (name: string) => steps.find((s) => s.name === name)!;
+const SYSTEM =
+  "あなたは社内ナレッジ検索アシスタントです。必要に応じて retrieve / fetch_document ツールを使い、" +
+  "会話の文脈を踏まえて自己完結した検索クエリを組み立ててください。" +
+  "回答は提供された一次資料のみに基づき日本語で簡潔に行い、重要な事実には必ずツール結果に付いた [1] [2] の出典番号を付け、" +
+  "Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。資料に無いことは推測しないでください。";
 
-  // 選択モデルを解決。キー未設定なら ok:false（reason を summarize で案内）。
+const MAX_STEPS = 6;
+
+export async function* runAgent({ query, ownerUserId, threadId, history, modelId }: RunInput): AsyncGenerator<AgentEvent> {
+  const started = Date.now();
+  const modelLabel = modelId ?? DEFAULT_MODEL_ID;
   const resolution = resolveModels(modelId);
 
-  // runningSummary: 実行中に running カードへ出す「現在この段階」の文言。
-  // 逐次表示（client は step イベント到着順にカードを追加）で現在地を示すために使う。
-  async function* runStep(step: ToolCall, runningSummary: string, work: () => Promise<Partial<ToolCall>>): AsyncGenerator<AgentEvent> {
-    yield { type: "step", step: { ...step, status: "running", summary: runningSummary } };
-    const t0 = Date.now();
-    const patch = await work();
-    // 実測の所要時間で上書き（scaffold のデモ値を残さない）。
-    const durationMs = patch.durationMs ?? Date.now() - t0;
-    Object.assign(step, patch, { status: "done" as const, durationMs });
-    yield { type: "step", step };
+  // キー未設定: 検索も生成もできないため理由を返して終了。
+  if (!resolution.ok) {
+    yield { type: "answer-start" };
+    yield { type: "answer-delta", text: resolution.reason };
+    yield { type: "done", tokens: 0, durationMs: Date.now() - started,
+            citationMap: {}, sourceIds: [], sources: [], threadId };
+    return;
   }
 
-  // 1) rewrite_query（選択モデルプロバイダの安価モデル。キー無しなら原文のまま）
-  let rewritten = query;
-  for await (const e of runStep(byName("rewrite_query"), "クエリを正規化中…", async () => {
-    if (resolution.ok) {
-      try {
-        const { text } = await generateText({
-          model: resolution.models.rewrite,
-          system: "検索意図を保ちつつ、日本語の検索クエリに簡潔に書き換えてください。説明や引用符は不要、クエリ本文のみ返答。",
-          prompt: query,
-        });
-        rewritten = text.trim() || query;
-      } catch {
-        rewritten = query;
-      }
-    }
-    return { input: { query }, output: { rewritten }, summary: `「${rewritten}」に書き換え` };
-  })) yield e;
+  const registry = new CitationRegistry();
+  const meta = new Map<string, ToolCallMeta>();
+  const tools = buildTools({ registry, ownerUserId, meta });
 
-  // 2) retrieve（rag /retrieve が dense/sparse/rerank/近傍拡張を1ホップで実行）。
-  //    重い実待ちは vector_search ステップの内側で行い、その間 running カードに
-  //    「密ベクトル検索を実行中…」を出す（逐次表示で現在地を示す）。
-  //    bm25_search / rerank / fetch_document は同じ1回の検索結果の内訳で、
-  //    取得済みデータから即座に確定するため後続で瞬時に done になる。
-  const topK = 6;
-  let chunks: RetrievedChunk[] = [];
-  let retrieveError = false;
+  const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: query }];
 
-  for await (const e of runStep(byName("vector_search"), "密ベクトル検索を実行中…", async () => {
-    try {
-      chunks = await retrieveChunks({ query, rewritten, ownerUserId, topK });
-    } catch {
-      retrieveError = true;
-    }
-    return {
-      input: { query: rewritten, top_k: topK, backend: "qdrant", mode: "dense", collection: "arag_chunks" },
-      output: { backend: "qdrant", mode: "dense", hits: chunks.length },
-      summary: "密ベクトル検索を実行",
-    };
-  })) yield e;
-  for await (const e of runStep(byName("bm25_search"), "スパース(BM25)検索を実行中…", async () =>
-    ({
-      input: { query: rewritten, backend: "qdrant", mode: "sparse" },
-      output: { backend: "qdrant", mode: "sparse", hits: chunks.length },
-      summary: "スパース(BM25)検索を実行",
-    }))) yield e;
-  for await (const e of runStep(byName("rerank"), "再順位付け中…", async () => ({
-    input: { model: "bge-reranker-v2-m3", top_n: topK },
-    // UI（rerank カード）は output.selected を RerankHit[] として描画する。
-    output: {
-      kept: chunks.length,
-      selected: chunks.map((c) => ({ id: c.chunkId, score: c.score, title: c.documentTitle })),
-    },
-    summary: `${chunks.length} 件を再順位付け`,
-  }))) yield e;
-  const documentIds = [...new Set(chunks.map((c) => c.documentId))];
-  const docCount = documentIds.length;
-  for await (const e of runStep(byName("fetch_document"), "文書を取得中…", async () =>
-    ({
-      input: { document_ids: documentIds },
-      output: { documents: docCount, chunks: chunks.length },
-      summary: `${docCount} 件の文書から文脈取得`,
-    }))) yield e;
+  const result = streamText({
+    model: resolution.models.chat,
+    system: SYSTEM,
+    messages,
+    tools,
+    stopWhen: stepCountIs(MAX_STEPS),
+  });
 
-  // 3) sources / citationMap を構築
-  const sources = sourcesFromChunks(chunks);
-  const citationMap: CitationMap = {};
-  chunks.forEach((c, i) => { citationMap[i + 1] = { sourceId: c.documentId, sectionId: c.chunkId }; });
-  const sourceIds = sources.map((s) => s.id);
-
-  // 4) summarize (streaming)
-  const summarize = byName("summarize");
-  summarize.input = { model: modelId ?? DEFAULT_MODEL_ID };
-  const summarizeStart = Date.now();
-  yield { type: "step", step: { ...summarize, status: "running", summary: "回答を生成中…" } };
-  yield { type: "answer-start" };
-
+  // toolCallId -> step / 開始時刻。tool-call で running、tool-result で done。
+  const stepStart = new Map<string, number>();
+  const stepById = new Map<string, ToolCall>();
+  let answerStarted = false;
   let answer = "";
-  if (retrieveError) {
-    answer = "検索バックエンドに接続できませんでした。時間をおいて再度お試しください。";
-    yield { type: "answer-delta", text: answer };
-  } else if (chunks.length === 0) {
-    answer = "該当する資料が見つかりませんでした。別の言い回しで質問するか、関連ファイルをアップロードしてください。";
-    yield { type: "answer-delta", text: answer };
-  } else if (!resolution.ok) {
-    // 検索・引用（右パネルの一次資料）は機能するが、回答生成には選択モデルのキーが必要。
-    answer = resolution.reason;
-    yield { type: "answer-delta", text: answer };
-  } else {
-    const context = chunks
-      .map((c, i) => `[${i + 1}] ${c.documentTitle} — ${c.headingPath}\n${c.expandedText || c.text}`)
-      .join("\n\n");
-    const result = streamText({
-      model: resolution.models.chat,
-      system:
-        "あなたは社内ナレッジ検索アシスタントです。提供された一次資料のみに基づき日本語で簡潔に回答してください。" +
-        "重要な事実には必ず [1] [2] のように出典番号を付け、Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。",
-      prompt: `一次資料:\n${context}\n\n質問: ${query}`,
-    });
-    try {
-      for await (const delta of result.textStream) {
-        answer += delta;
-        yield { type: "answer-delta", text: delta };
+  let answerStepEmitted = false;
+  let answerStartT = 0;
+  // streamText の finish パートから取れた実トークン使用量。取れなかったら文字数で概算する。
+  let totalUsage: LanguageModelUsage | undefined;
+
+  const emitAnswerStep = (status: "running" | "done", t: number, usage?: LanguageModelUsage): AgentEvent => ({
+    type: "step",
+    step: {
+      id: "answer", name: "answer" as ToolName, label: "回答生成", status,
+      durationMs: status === "done" ? Date.now() - t : 0,
+      input: { model: modelLabel },
+      output: status === "done"
+        ? {
+            inputTokens: usage?.inputTokens ?? null,
+            outputTokens: usage?.outputTokens ?? null,
+            totalTokens: usage?.totalTokens ?? null,
+            cachedInputTokens: usage?.inputTokenDetails?.cacheReadTokens ?? null,
+          }
+        : null,
+      summary: status === "done" ? "回答を生成" : "回答を生成中…",
+    },
+  });
+
+  try {
+    for await (const part of result.fullStream) {
+      if (part.type === "tool-call") {
+        stepStart.set(part.toolCallId, Date.now());
+        const step: ToolCall = {
+          id: part.toolCallId, name: part.toolName as ToolName, label: toolLabel(part.toolName),
+          status: "running", durationMs: 0,
+          input: (part.input ?? {}) as Record<string, unknown>, output: null,
+          summary: runningSummary(part.toolName),
+        };
+        stepById.set(part.toolCallId, step);
+        yield { type: "step", step };
+      } else if (part.type === "tool-result") {
+        const t0 = stepStart.get(part.toolCallId) ?? Date.now();
+        const m = meta.get(part.toolCallId);
+        const prev = stepById.get(part.toolCallId);
+        const step: ToolCall = {
+          id: part.toolCallId, name: part.toolName as ToolName, label: toolLabel(part.toolName),
+          status: "done", durationMs: Date.now() - t0,
+          input: prev?.input ?? (m?.input ?? {}),
+          output: { result: String(part.output).slice(0, 2000) },
+          summary: m?.summary ?? "完了",
+        };
+        yield { type: "step", step };
+      } else if (part.type === "tool-error") {
+        // エラーをステップとして配信しつつループは継続する。SDK がこのエラーをモデルへ渡し、
+        // モデル側で別ツール/別クエリによる回復・フォールバックを試みるため。
+        const t0 = stepStart.get(part.toolCallId) ?? Date.now();
+        yield {
+          type: "step",
+          step: {
+            id: part.toolCallId, name: part.toolName as ToolName, label: toolLabel(part.toolName),
+            status: "error", durationMs: Date.now() - t0,
+            input: (part.input ?? {}) as Record<string, unknown>,
+            output: { error: String(part.error).slice(0, 500) }, summary: "ツール実行に失敗",
+          },
+        };
+      } else if (part.type === "text-delta") {
+        // 中間テキストも回答本文として連結する前提。現行の Claude/GPT はツール呼び出しターンに
+        // 本文を同時出力しないため、最終ステップのテキストのみが流れてくるとみなして許容する。
+        if (!answerStarted) {
+          answerStarted = true;
+          answerStartT = Date.now();
+          yield emitAnswerStep("running", answerStartT);
+          answerStepEmitted = true;
+          yield { type: "answer-start" };
+        }
+        answer += part.text;
+        yield { type: "answer-delta", text: part.text };
+      } else if (part.type === "finish") {
+        totalUsage = part.totalUsage;
       }
-    } catch {
-      // 生成が途中で失敗しても summarize 完了と done イベントへ合流させる。
-      // 既に一部ストリーム済みなら二重表示を避け、未出力時のみ案内を出す。
-      if (!answer) {
-        answer = "回答の生成に失敗しました。時間をおいて再度お試しください。";
-        yield { type: "answer-delta", text: answer };
-      }
+    }
+  } catch {
+    if (!answer) {
+      if (!answerStarted) yield { type: "answer-start" };
+      answer = "回答の生成に失敗しました。時間をおいて再度お試しください。";
+      yield { type: "answer-delta", text: answer };
     }
   }
 
-  Object.assign(summarize, { status: "done" as const, summary: "回答を生成", durationMs: Date.now() - summarizeStart });
-  yield { type: "step", step: summarize };
+  // ツールを一度も呼ばず本文も無い場合のフォールバック。
+  if (!answer) {
+    if (!answerStarted) yield { type: "answer-start" };
+    answer = registry.size === 0
+      ? "該当する資料が見つかりませんでした。別の言い回しで質問するか、関連ファイルをアップロードしてください。"
+      : "回答を生成できませんでした。時間をおいて再度お試しください。";
+    yield { type: "answer-delta", text: answer };
+  }
 
-  const tokens = Math.max(1, Math.round(answer.length / 1.8));
+  if (answerStepEmitted) yield emitAnswerStep("done", answerStartT, totalUsage);
+
+  // 実トークンが取れていればそれを優先。プロバイダが usage を返さない場合のみ文字数で概算。
+  const tokens = totalUsage?.totalTokens ?? totalUsage?.outputTokens ?? Math.max(1, Math.round(answer.length / 1.8));
+  const sources = registry.toSources();
   yield {
     type: "done",
     tokens,
     durationMs: Date.now() - started,
-    citationMap,
-    sourceIds,
+    citationMap: registry.toCitationMap(),
+    sourceIds: sources.map((s) => s.id),
     sources,
     threadId,
   };
 }
 
-function sourcesFromChunks(chunks: RetrievedChunk[]): Source[] {
-  const byDoc = new Map<string, Source>();
-  for (const c of chunks) {
-    let src = byDoc.get(c.documentId);
-    if (!src) {
-      src = { id: c.documentId, type: "doc", title: c.documentTitle, path: c.documentTitle,
-              author: "", date: "", sections: [] };
-      byDoc.set(c.documentId, src);
-    }
-    if (!src.sections.some((s) => s.id === c.chunkId)) {
-      src.sections.push({ id: c.chunkId, heading: c.headingPath, body: c.text, highlight: true });
-    }
-  }
-  return [...byDoc.values()];
+function toolLabel(name: string): string {
+  if (name === "retrieve") return "知識ベース検索";
+  if (name === "fetch_document") return "文書取得";
+  return name;
 }
+
+function runningSummary(name: string): string {
+  if (name === "retrieve") return "知識ベースを検索中…";
+  if (name === "fetch_document") return "文書を取得中…";
+  return "実行中…";
+}
+
+export { DEFAULT_MODEL_ID };
