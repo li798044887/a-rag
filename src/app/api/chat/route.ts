@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { ModelMessage } from "ai";
 import { getSessionClaims } from "@/lib/auth";
 import { runAgent } from "@/lib/agent/run";
-import { createThread, saveCompletedMessage, getThreadMessages } from "@/lib/threads";
+import { createThread, saveCompletedMessage, getThreadMessages, deleteMessagesFrom } from "@/lib/threads";
 import { toModelHistory } from "@/lib/agent/history";
 import type { AgentEvent, ToolCall } from "@/lib/types";
 
@@ -13,8 +13,8 @@ export async function POST(req: Request) {
   const claims = await getSessionClaims();
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { query, threadId, model } = (await req.json().catch(() => ({}))) as {
-    query?: string; threadId?: string; model?: string;
+  const { query, threadId, model, regenerateFrom } = (await req.json().catch(() => ({}))) as {
+    query?: string; threadId?: string; model?: string; regenerateFrom?: number;
   };
   const q = query || "";
 
@@ -22,8 +22,14 @@ export async function POST(req: Request) {
   const tid = threadId || (await createThread(claims.sub, q || "新しいスレッド")).id;
 
   // 既存スレッドへの追記なら過去ターンを履歴として読み込む（直近8ターン窓）。
+  // 再生成（regenerateFrom 指定）時は、履歴読込の前に当該index以降を削除し DB を整合させる。
   let history: ModelMessage[] = [];
   if (threadId) {
+    // regenerateFrom は 0 も有効（先頭ターン再生成＝全ターン破棄）。truthy 判定ではなく型で判定する。
+    // 削除がスローした場合はストリーム構築前なので HTTP 500 が返る（設計上許容）。
+    if (typeof regenerateFrom === "number") {
+      await deleteMessagesFrom(tid, claims.sub, regenerateFrom);
+    }
     const prior = await getThreadMessages(tid, claims.sub);
     if (prior) {
       history = toModelHistory(
