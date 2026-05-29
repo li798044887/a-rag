@@ -9,6 +9,8 @@ _lock = threading.Lock()
 
 class StubReranker:
     """文字 n-gram 重なりで擬似スコア（テスト/オフライン用）。"""
+    name = "stub"
+
     def score(self, query: str, docs: list[str]) -> list[float]:
         qset = set(query.replace(" ", ""))
         return [len(qset & set(d)) / (len(qset) or 1) for d in docs]

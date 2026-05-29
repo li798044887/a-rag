@@ -10,5 +10,6 @@ class DenseSparse:
 
 class Embedder(Protocol):
     dim: int
+    name: str
 
     def embed(self, texts: list[str]) -> list[DenseSparse]: ...

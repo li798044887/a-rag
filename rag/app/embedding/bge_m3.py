@@ -11,6 +11,7 @@ class BGEM3Embedder:
         from FlagEmbedding import BGEM3FlagModel
         use_fp16 = settings.device == "cuda"
         self.model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=use_fp16, device=settings.device)
+        self.name = "BAAI/bge-m3"
         # PyTorch + HuggingFace fast tokenizer はスレッド非安全。同期 (def) ルートは
         # スレッドプールで実行されるため、並列 retrieve から同時推論されると 2 件目が落ちる。直列化する。
         self._lock = threading.Lock()

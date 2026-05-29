@@ -8,6 +8,7 @@ class BGEReranker:
         from FlagEmbedding import FlagReranker
         self.model = FlagReranker("BAAI/bge-reranker-v2-m3",
                                   use_fp16=settings.device == "cuda", device=settings.device)
+        self.name = "BAAI/bge-reranker-v2-m3"
         # スレッド非安全なモデルへの同時推論を防ぐ（BGEM3Embedder と同じ理由）。
         self._lock = threading.Lock()
 

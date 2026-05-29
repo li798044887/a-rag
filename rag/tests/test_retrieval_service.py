@@ -105,3 +105,54 @@ def test_retrieve_stream_emits_stages_in_order():
     session.query(Chunk).filter_by(document_id=doc.id).delete()
     session.query(Document).filter_by(id=doc.id).delete()
     session.commit(); session.close()
+
+
+def test_retrieve_stream_done_events_carry_detail():
+    e, r = StubEmbedder(dim=8), StubReranker()
+    store = QdrantStore(collection="test_detail_" + uuid.uuid4().hex[:8], dim=8)
+    store.ensure_collection()
+    session = SessionLocal()
+    doc = Document(owner_user_id="u1", filename="設計.pdf", mime="application/pdf",
+                   size=1, raw_path="/tmp/x", status="ready")
+    session.add(doc); session.flush()
+    bodies = ["認証トークンは24時間で失効する。", "請求書の発行手順。", "次の文脈。"]
+    rows = []
+    for i, b in enumerate(bodies):
+        c = Chunk(document_id=doc.id, ordinal=i, heading_path=f"H{i}", page_start=0,
+                  page_end=0, block_type="text", token_len=len(b), text=b)
+        session.add(c); session.flush(); rows.append(c)
+    session.commit()
+    store.upsert([
+        {"chunk_id": c.id, "document_id": doc.id, "owner_user_id": "u1",
+         "heading_path": c.heading_path, "page_start": 0, "page_end": 0, "block_type": "text",
+         "source_type": "doc", "text": c.text, "vector": e.embed([c.text])[0]}
+        for c in rows
+    ])
+
+    events = list(retrieve_stream(session, store, e, r, query="認証トークン 失効",
+                                  owner_user_id="u1", top_k=2, candidate_k=10))
+    by = {}
+    for ev in events:
+        if ev.get("status") == "done":
+            by[ev["stage"]] = ev
+
+    embed = by["embed"]
+    assert embed["model"] == "stub" and embed["dims"] == 8
+
+    vs = by["vector_search"]
+    assert isinstance(vs["hits"], list) and vs["hits"]
+    assert set(vs["hits"][0].keys()) == {"title", "heading", "score"}
+    assert vs["hits"][0]["title"] == "設計.pdf"
+
+    rr = by["rerank"]
+    assert rr["model"] == "stub" and rr["top_n"] == 2
+    assert isinstance(rr["selected"], list) and rr["selected"]
+    assert set(rr["selected"][0].keys()) == {"id", "score", "title"}
+
+    exp = by["expand"]
+    assert exp["count"] == len(rr["selected"])
+
+    store.drop()
+    session.query(Chunk).filter_by(document_id=doc.id).delete()
+    session.query(Document).filter_by(id=doc.id).delete()
+    session.commit(); session.close()
