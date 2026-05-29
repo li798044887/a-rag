@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { HtmlTable } from "@/components/sources/html-table";
 import type { CitationMap, Source, SourceType } from "@/lib/types";
 
 export type RightPanelAction = "open-source" | "download" | "share";
@@ -170,7 +171,11 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
                 </div>
               )}
               <h3 className="mb-1.5 text-[12.5px] font-bold tracking-[-0.005em] text-fg">{sec.heading}</h3>
-              <div className="whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2">{sec.body}</div>
+              {sec.blockType === "table" || sec.body.trimStart().startsWith("<table") ? (
+                <HtmlTable html={sec.body} />
+              ) : (
+                <div className="whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2">{sec.body}</div>
+              )}
             </div>
           );
         })}
