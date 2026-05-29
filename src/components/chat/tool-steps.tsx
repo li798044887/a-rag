@@ -3,6 +3,14 @@
 import { cn, formatMs } from "@/lib/utils";
 import type { RerankHit, ToolCall, ToolName, ToolStatus, ToolView } from "@/lib/types";
 
+const LOG_DETAIL_MAX = 8;
+
+interface CandidateHit {
+  title: string;
+  heading: string;
+  score: number;
+}
+
 const TOOL_ICONS: Partial<Record<ToolName, React.ReactNode>> = {
   rewrite_query: <path d="M3 8h7M7 5l-3 3 3 3M13 4v8" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />,
   vector_search: (
@@ -161,6 +169,30 @@ function ToolInputBlock({ step }: { step: ToolCall }) {
       </div>
     );
   }
+  if (step.name === "vector_search" || step.name === "bm25_search") {
+    const rows: { k: string; v: React.ReactNode }[] = [];
+    if (typeof step.input.mode === "string") rows.push({ k: "mode", v: step.input.mode });
+    return (
+      <div className="space-y-2">
+        {rows.length > 0 && <KeyValueGrid rows={rows} />}
+        {typeof step.input.query === "string" && (
+          <div className="rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5">
+            <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted-2">query</div>
+            <div className="text-[12.5px] leading-[1.5] text-fg">{step.input.query}</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (step.name === "rerank") {
+    const rows: { k: string; v: React.ReactNode }[] = [];
+    if (step.input.model != null) rows.push({ k: "model", v: String(step.input.model) });
+    if (step.input.top_n != null) rows.push({ k: "top_n", v: String(step.input.top_n) });
+    if (rows.length) return <KeyValueGrid rows={rows} />;
+  }
+  if (step.name === "embed" && step.input.model != null) {
+    return <KeyValueGrid rows={[{ k: "model", v: String(step.input.model) }]} />;
+  }
   return <pre className={preCls}>{JSON.stringify(step.input, null, 2)}</pre>;
 }
 
@@ -197,6 +229,39 @@ function ToolOutputBlock({ step }: { step: ToolCall }) {
         ))}
       </div>
     );
+  }
+  if ((step.name === "vector_search" || step.name === "bm25_search") && Array.isArray(output.hits)) {
+    const hits = output.hits as CandidateHit[];
+    if (hits.length === 0) {
+      return <div className="px-1 py-1 text-[11.5px] text-muted">候補なし</div>;
+    }
+    // スコアは非負前提（dense=cosine, sparse=BM25/dot）。リスト内最大値でバー幅を正規化。
+    const max = Math.max(...hits.map((h) => h.score), 1e-9);
+    return (
+      <div className="flex max-h-72 flex-col gap-[5px] overflow-y-auto py-1">
+        {hits.map((h, i) => (
+          <div
+            key={i}
+            className="grid grid-cols-[64px_42px_1fr] items-center gap-2.5 text-[11.5px] max-md:grid-cols-[54px_38px_1fr] max-md:gap-2"
+          >
+            <div className="h-[5px] overflow-hidden rounded-full bg-divider">
+              <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.max(4, (h.score / max) * 100)}%` }} />
+            </div>
+            <span className="font-mono text-[11px] font-semibold text-accent">{h.score.toFixed(2)}</span>
+            <span className="truncate text-fg-2">
+              <span className="text-fg">{h.title}</span>
+              {h.heading && <span className="text-muted-2"> — {h.heading}</span>}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (step.name === "embed") {
+    return <KeyValueGrid rows={[{ k: "dims", v: String(output.dims ?? "—") }]} />;
+  }
+  if (step.name === "expand") {
+    return <KeyValueGrid rows={[{ k: "拡張件数", v: String(output.count ?? 0) }]} />;
   }
 
   if ((step.name === "retrieve" || step.name === "fetch_document") && typeof output.result === "string") {
@@ -359,6 +424,21 @@ function ToolStepLog({ steps }: { steps: ToolCall[] }) {
     }
     if (s.status === "done") {
       lines.push({ t: start + s.durationMs, name: logName, msg: `done in ${formatMs(s.durationMs)} · ${s.summary}`, kind: "done" });
+      const out = (s.output ?? {}) as Record<string, unknown>;
+      const dt = start + s.durationMs;
+      if ((s.name === "vector_search" || s.name === "bm25_search") && Array.isArray(out.hits)) {
+        const hits = out.hits as { title: string; heading: string; score: number }[];
+        hits.slice(0, LOG_DETAIL_MAX).forEach((h) =>
+          lines.push({ t: dt, name: "", msg: `${h.score.toFixed(2)}  ${h.title}${h.heading ? ` — ${h.heading}` : ""}`, kind: "detail" }));
+        if (hits.length > LOG_DETAIL_MAX)
+          lines.push({ t: dt, name: "", msg: `… 他 ${hits.length - LOG_DETAIL_MAX} 件`, kind: "detail" });
+      } else if (s.name === "rerank" && Array.isArray(out.selected)) {
+        const sel = out.selected as { score: number; title: string }[];
+        sel.slice(0, LOG_DETAIL_MAX).forEach((h) =>
+          lines.push({ t: dt, name: "", msg: `${h.score.toFixed(2)}  ${h.title}`, kind: "detail" }));
+        if (sel.length > LOG_DETAIL_MAX)
+          lines.push({ t: dt, name: "", msg: `… 他 ${sel.length - LOG_DETAIL_MAX} 件`, kind: "detail" });
+      }
       t = start + s.durationMs;
     } else if (s.status === "running") {
       lines.push({ t: start + (s.durationMs || 0), name: logName, msg: "streaming…", kind: "running" });
@@ -375,7 +455,7 @@ function ToolStepLog({ steps }: { steps: ToolCall[] }) {
           <span
             className={cn(
               "min-w-0 flex-1 break-words",
-              l.kind === "done" ? "text-fg" : l.kind === "param" ? "text-muted" : l.kind === "running" ? "text-accent" : "text-fg-2",
+              l.kind === "done" ? "text-fg" : l.kind === "param" ? "text-muted" : l.kind === "running" ? "text-accent" : l.kind === "detail" ? "text-muted-2" : "text-fg-2",
             )}
           >
             {l.msg}
@@ -409,26 +489,70 @@ function groupSteps(steps: ToolCall[]): { roots: ToolCall[]; childrenOf: Map<str
   return { roots, childrenOf };
 }
 
-/** 子サブステップのコンパクト行（展開なし）。card / timeline 共通。 */
-function SubStepRow({ step }: { step: ToolCall }) {
+/** 子サブステップの行。詳細があれば展開可能。card / timeline 共通。 */
+function SubStepRow({ step, expanded, onToggle }: { step: ToolCall; expanded: boolean; onToggle: () => void }) {
+  const expandable = isExpandable(step);
+  const showInput = hasInputData(step.input);
+  const showOutput = step.output != null;
   return (
-    <div className="flex items-center gap-2.5 py-[3px] text-[11.5px] text-fg-2">
-      <StatusIcon status={step.status} />
-      <span className="grid place-items-center text-muted-2">
-        <svg viewBox="0 0 16 16" width="12" height="12">{TOOL_ICONS[step.name]}</svg>
-      </span>
-      <span className="font-mono text-[11px] font-semibold text-fg-2">{step.name}</span>
-      <span className="min-w-0 flex-1 truncate text-muted">{step.summary}</span>
-      <span className="font-mono text-[10.5px] tabular-nums text-muted-2">{formatMs(step.durationMs)}</span>
+    <div>
+      <button
+        type="button"
+        onClick={expandable ? onToggle : undefined}
+        aria-expanded={expandable ? expanded : undefined}
+        className={cn(
+          "flex w-full items-center gap-2.5 border-0 bg-transparent py-[3px] text-left text-[11.5px] text-fg-2",
+          expandable ? "cursor-pointer hover:text-fg" : "cursor-default",
+        )}
+      >
+        <StatusIcon status={step.status} />
+        <span className="grid place-items-center text-muted-2">
+          <svg viewBox="0 0 16 16" width="12" height="12">{TOOL_ICONS[step.name]}</svg>
+        </span>
+        <span className="font-mono text-[11px] font-semibold text-fg-2">{step.name}</span>
+        <span className="min-w-0 flex-1 truncate text-muted">{step.summary}</span>
+        <span className="font-mono text-[10.5px] tabular-nums text-muted-2">{formatMs(step.durationMs)}</span>
+        {expandable ? (
+          <span className={cn("text-muted-2 transition-transform", expanded && "rotate-180")}>
+            <svg viewBox="0 0 16 16" width="10" height="10">
+              <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        ) : (
+          <span aria-hidden className="block h-[10px] w-[10px]" />
+        )}
+      </button>
+      {expandable && expanded && (
+        <div className="flex flex-col gap-2 pb-2 pl-[26px] pt-1">
+          {showInput && (
+            <div>
+              <div className={sectionLabelCls}>入力</div>
+              <ToolInputBlock step={step} />
+            </div>
+          )}
+          {showOutput && (
+            <div>
+              <div className={sectionLabelCls}>出力</div>
+              <ToolOutputBlock step={step} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function SubSteps({ steps }: { steps: ToolCall[] | undefined }) {
+function SubSteps({ steps, expandedMap, onToggleStep }: {
+  steps: ToolCall[] | undefined;
+  expandedMap: Record<string, boolean>;
+  onToggleStep: (id: string) => void;
+}) {
   if (!steps || steps.length === 0) return null;
   return (
     <div className="flex flex-col gap-px border-l-[1.5px] border-divider pl-3 ml-[7px]">
-      {steps.map((s) => <SubStepRow key={s.id} step={s} />)}
+      {steps.map((s) => (
+        <SubStepRow key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} />
+      ))}
     </div>
   );
 }
@@ -446,7 +570,7 @@ export function ToolSteps({ steps, variant, expandedMap, onToggleStep }: Props) 
             <ToolStepTimeline step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} isLast={i === roots.length - 1} />
             {childrenOf.has(s.id) && (
               <div className="mb-2 ml-[22px] pl-1">
-                <SubSteps steps={childrenOf.get(s.id)} />
+                <SubSteps steps={childrenOf.get(s.id)} expandedMap={expandedMap} onToggleStep={onToggleStep} />
               </div>
             )}
           </div>
@@ -461,7 +585,7 @@ export function ToolSteps({ steps, variant, expandedMap, onToggleStep }: Props) 
           <ToolStepCard step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} />
           {childrenOf.has(s.id) && (
             <div className="border-b-[0.5px] border-divider bg-surface px-3.5 py-2 pl-10 max-md:pl-6">
-              <SubSteps steps={childrenOf.get(s.id)} />
+              <SubSteps steps={childrenOf.get(s.id)} expandedMap={expandedMap} onToggleStep={onToggleStep} />
             </div>
           )}
         </div>
