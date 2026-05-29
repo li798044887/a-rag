@@ -8,6 +8,7 @@ export type RightPanelAction = "open-source" | "download" | "share";
 
 interface Props {
   sources: Source[];
+  contextQuery?: string;
   citationMap: CitationMap;
   activeSourceId: string;
   highlightSectionId: string | null;
@@ -42,7 +43,7 @@ function SourceIcon({ type }: { type: SourceType }) {
 
 const iconBtn = "grid h-[26px] w-[26px] place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg";
 
-export function RightPanel({ sources, citationMap, activeSourceId, highlightSectionId, onSetActive, onClose, onAction }: Props) {
+export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
 
@@ -81,28 +82,35 @@ export function RightPanel({ sources, citationMap, activeSourceId, highlightSect
 
   return (
     <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_auto_1fr_auto] overflow-hidden border-l-[0.5px] border-divider bg-bg-2 max-wide:fixed max-wide:inset-y-0 max-wide:right-0 max-wide:z-[60] max-wide:w-[min(440px,50vw)] max-wide:border-l-0 max-wide:shadow-[-8px_0_32px_rgba(0,0,0,0.16)] max-md:w-[min(440px,92vw)] wide:static wide:z-auto wide:w-auto wide:shadow-none">
-      {/* Head */}
-      <div className="flex h-[52px] items-center justify-between border-b-[0.5px] border-divider px-4 max-md:px-3.5">
-        <div className="inline-flex items-center gap-2 text-[13px] font-semibold text-fg">
-          <svg viewBox="0 0 16 16" width="13" height="13">
-            <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
-            <path d="M6 6h4M6 8.5h4M6 11h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          </svg>
-          <span>一次資料</span>
-          <span className="rounded-full bg-divider px-1.5 py-px font-mono text-[10.5px] text-muted">{sources.length}</span>
-        </div>
-        <div className="flex gap-0.5">
-          <button className={iconBtn} title="ソースを新しいタブで開く" onClick={() => onAction("open-source", active)}>
-            <svg viewBox="0 0 16 16" width="12" height="12">
-              <path d="M6 3H3v10h10v-3M9 3h4v4M13 3l-6 6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Head（+ どのターンの出典かを示す文脈ラベル）を 1 グリッドセルにまとめる。 */}
+      <div>
+        <div className="flex h-[52px] items-center justify-between border-b-[0.5px] border-divider px-4 max-md:px-3.5">
+          <div className="inline-flex items-center gap-2 text-[13px] font-semibold text-fg">
+            <svg viewBox="0 0 16 16" width="13" height="13">
+              <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+              <path d="M6 6h4M6 8.5h4M6 11h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
-          </button>
-          <button className={iconBtn} title="閉じる" onClick={onClose}>
-            <svg viewBox="0 0 16 16" width="12" height="12">
-              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-            </svg>
-          </button>
+            <span>一次資料</span>
+            <span className="rounded-full bg-divider px-1.5 py-px font-mono text-[10.5px] text-muted">{sources.length}</span>
+          </div>
+          <div className="flex gap-0.5">
+            <button className={iconBtn} title="ソースを新しいタブで開く" onClick={() => onAction("open-source", active)}>
+              <svg viewBox="0 0 16 16" width="12" height="12">
+                <path d="M6 3H3v10h10v-3M9 3h4v4M13 3l-6 6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button className={iconBtn} title="閉じる" onClick={onClose}>
+              <svg viewBox="0 0 16 16" width="12" height="12">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         </div>
+        {contextQuery && (
+          <div className="truncate border-b-[0.5px] border-divider px-4 py-2 text-[11.5px] text-muted max-md:px-3.5">
+            「{contextQuery}」の出典
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
