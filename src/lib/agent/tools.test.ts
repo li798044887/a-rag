@@ -2,10 +2,10 @@ import { expect, test, vi } from "vitest";
 
 vi.mock("@/lib/agent/retrieve-client", () => ({
   retrieveChunks: vi.fn(),
-  retrieveChunksStream: vi.fn(async ({ onStage }: { onStage: (e: { stage: string; status: string; ms?: number; count?: number }) => void }) => {
-    onStage({ stage: "embed", status: "start" });
-    onStage({ stage: "embed", status: "done", ms: 1 });
-    onStage({ stage: "vector_search", status: "done", ms: 2, count: 3 });
+  retrieveChunksStream: vi.fn(async ({ onStage }: { onStage: (e: Record<string, unknown>) => void }) => {
+    onStage({ stage: "embed", status: "done", ms: 1, model: "BAAI/bge-m3", dims: 1024 });
+    onStage({ stage: "vector_search", status: "done", ms: 2, count: 1, hits: [{ title: "設計.pdf", heading: "認証", score: 0.8 }] });
+    onStage({ stage: "rerank", status: "done", ms: 3, count: 1, model: "bge", top_n: 6, selected: [{ id: "c1", score: 0.04, title: "設計.pdf" }] });
     return [{
       chunkId: "c1", documentId: "d1", documentTitle: "設計.pdf", headingPath: "認証",
       pageStart: 0, pageEnd: 0, blockType: "text", text: "トークンは24時間で失効する。",
@@ -102,6 +102,29 @@ test("fetch_document tool falls back when no chunks are returned", async () => {
   expect(out).toBe("文書の本文が取得できませんでした。");
 });
 
+test("stageToEvent populates per-stage input/output detail", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const bus = new StepBus();
+  const events: AgentEvent[] = [];
+  const drain = (async () => { for await (const e of bus) events.push(e); })();
+
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus });
+  await tools.retrieve.execute!({ query: "認証は?" }, { toolCallId: "call-1", messages: [] } as never);
+  bus.close();
+  await drain;
+
+  const steps = events.filter((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step").map((e) => e.step);
+  const vs = steps.find((s) => s.name === "vector_search" && s.status === "done")!;
+  expect(vs.input).toMatchObject({ mode: "dense", query: "認証は?" });
+  expect((vs.output as { hits: unknown[] }).hits).toHaveLength(1);
+  const rr = steps.find((s) => s.name === "rerank" && s.status === "done")!;
+  expect(rr.input).toMatchObject({ model: "bge", top_n: 6 });
+  expect((rr.output as { selected: unknown[] }).selected).toHaveLength(1);
+  const embed = steps.find((s) => s.name === "embed" && s.status === "done")!;
+  expect(embed.output).toMatchObject({ dims: 1024 });
+});
+
 test("retrieve tool pushes nested sub-steps with parentId to the bus", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
@@ -118,5 +141,5 @@ test("retrieve tool pushes nested sub-steps with parentId to the bus", async () 
   expect(subSteps.every((e) => e.step.parentId === "call-1")).toBe(true);
   expect(subSteps.map((e) => e.step.name)).toContain("vector_search");
   const vsDone = subSteps.find((e) => e.step.name === "vector_search" && e.step.status === "done");
-  expect(vsDone!.step.output).toMatchObject({ count: 3 });
+  expect(vsDone!.step.output).toMatchObject({ count: 1 });
 });

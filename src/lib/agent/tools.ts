@@ -51,8 +51,31 @@ function stageDoneSummary(stage: string, count?: number): string {
   }
 }
 
+/** done 時の段階別 input を組み立てる。 */
+function stageInput(ev: RetrieveStageEvent, query: string): Record<string, unknown> {
+  switch (ev.stage) {
+    case "embed": return ev.model ? { model: ev.model } : {};
+    case "vector_search": return { mode: "dense", query };
+    case "bm25_search": return { mode: "sparse", query };
+    case "rerank": return { model: ev.model ?? null, top_n: ev.top_n ?? null };
+    default: return {};
+  }
+}
+
+/** done 時の段階別 output を組み立てる。 */
+function stageOutput(ev: RetrieveStageEvent): Record<string, unknown> | null {
+  switch (ev.stage) {
+    case "embed": return ev.dims != null ? { dims: ev.dims } : null;
+    case "vector_search":
+    case "bm25_search": return { count: ev.count ?? 0, hits: ev.hits ?? [] };
+    case "rerank": return { count: ev.count ?? 0, selected: ev.selected ?? [] };
+    case "expand": return { count: ev.count ?? 0 };
+    default: return ev.count != null ? { count: ev.count } : null;
+  }
+}
+
 /** retrieve の段階イベントを parentId 付きサブステップへ変換して bus に流す。 */
-function stageToEvent(ev: RetrieveStageEvent, parentId: string): AgentEvent {
+function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string): AgentEvent {
   // start と done は同一 id を共有し、reducer が id マージで running→done に更新する（衝突ではなく意図）。
   const base = {
     id: `${parentId}:${ev.stage}`,
@@ -66,7 +89,7 @@ function stageToEvent(ev: RetrieveStageEvent, parentId: string): AgentEvent {
   if (ev.status === "error") {
     return { type: "step", step: { ...base, status: "error", durationMs: ev.ms ?? 0, input: {}, output: { error: ev.message ?? "失敗" }, summary: "段階に失敗" } };
   }
-  return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: {}, output: ev.count != null ? { count: ev.count } : null, summary: stageDoneSummary(ev.stage, ev.count) } };
+  return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummary(ev.stage, ev.count) } };
 }
 
 export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput): ToolSet {
@@ -82,7 +105,7 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
       execute: async ({ query }, { toolCallId }) => {
         const chunks = await retrieveChunksStream({
           query, ownerUserId, topK: RETRIEVE_TOP_K,
-          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId)),
+          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, query)),
         });
         const lines = chunks.map((c) => {
           const n = registry.register({
