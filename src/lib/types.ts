@@ -128,6 +128,7 @@ export interface SourceConnector {
   iconName: IconName;
   count: string;
   color: string;
+  darkColor?: string;
 }
 
 // ── User / auth ─────────────────────────────────────────────────────────────

@@ -130,7 +130,15 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
                     </svg>
                   )}
                 </span>
-                <span className="inline-flex w-3.5 items-center justify-center" style={{ color: s.color }}>
+                <span
+                  className="inline-flex w-3.5 items-center justify-center text-[var(--connector-color)] dark:text-[var(--connector-color-dark)]"
+                  style={
+                    {
+                      "--connector-color": s.color,
+                      "--connector-color-dark": s.darkColor ?? s.color,
+                    } as React.CSSProperties
+                  }
+                >
                   <Icon name={s.iconName} size={13} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-fg-2">{s.label}</span>

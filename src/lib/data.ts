@@ -215,12 +215,12 @@ export const SCOPE_PRESETS: ScopePreset[] = [
 ];
 
 export const ALL_CONNECTORS: SourceConnector[] = [
-  { id: "confluence", label: "Confluence", iconName: "book", count: "15,234", color: "#2B579A" },
-  { id: "notion", label: "Notion", iconName: "doc", count: "8,420", color: "#1F1B16" },
-  { id: "drive", label: "Google Drive", iconName: "fileDoc", count: "2,108", color: "#1F8A5B" },
-  { id: "slack", label: "Slack", iconName: "hash", count: "42 ch", color: "#7A5AE0" },
-  { id: "github", label: "GitHub", iconName: "github", count: "38 repos", color: "#1F1B16" },
-  { id: "postgres", label: "PostgreSQL", iconName: "database", count: "warehouse", color: "#2B579A" },
+  { id: "confluence", label: "Confluence", iconName: "book", count: "15,234", color: "#2B579A", darkColor: "#6EA8FF" },
+  { id: "notion", label: "Notion", iconName: "doc", count: "8,420", color: "#1F1B16", darkColor: "#F0ECE2" },
+  { id: "drive", label: "Google Drive", iconName: "fileDoc", count: "2,108", color: "#1F8A5B", darkColor: "#45D39A" },
+  { id: "slack", label: "Slack", iconName: "hash", count: "42 ch", color: "#7A5AE0", darkColor: "#9B7CFF" },
+  { id: "github", label: "GitHub", iconName: "github", count: "38 repos", color: "#1F1B16", darkColor: "#F0ECE2" },
+  { id: "postgres", label: "PostgreSQL", iconName: "database", count: "warehouse", color: "#2B579A", darkColor: "#6EA8FF" },
 ];
 
 export const DEFAULT_USER = {
