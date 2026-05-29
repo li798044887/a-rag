@@ -1,11 +1,17 @@
 import { expect, test, vi } from "vitest";
 
 vi.mock("@/lib/agent/retrieve-client", () => ({
-  retrieveChunks: vi.fn(async () => [{
-    chunkId: "c1", documentId: "d1", documentTitle: "設計.pdf", headingPath: "認証",
-    pageStart: 0, pageEnd: 0, blockType: "text", text: "トークンは24時間で失効する。",
-    expandedText: "前文。トークンは24時間で失効する。後文。", score: 0.9,
-  }]),
+  retrieveChunks: vi.fn(),
+  retrieveChunksStream: vi.fn(async ({ onStage }: { onStage: (e: { stage: string; status: string; ms?: number; count?: number }) => void }) => {
+    onStage({ stage: "embed", status: "start" });
+    onStage({ stage: "embed", status: "done", ms: 1 });
+    onStage({ stage: "vector_search", status: "done", ms: 2, count: 3 });
+    return [{
+      chunkId: "c1", documentId: "d1", documentTitle: "設計.pdf", headingPath: "認証",
+      pageStart: 0, pageEnd: 0, blockType: "text", text: "トークンは24時間で失効する。",
+      expandedText: "前文。トークンは24時間で失効する。後文。", score: 0.9,
+    }];
+  }),
   fetchDocument: vi.fn(async () => ({
     documentId: "d1", documentTitle: "設計.pdf",
     chunks: [{ chunkId: "c2", ordinal: 1, headingPath: "認可", pageStart: 0, pageEnd: 0,
@@ -15,12 +21,14 @@ vi.mock("@/lib/agent/retrieve-client", () => ({
 
 import { buildTools } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
-import { retrieveChunks, fetchDocument } from "@/lib/agent/retrieve-client";
+import { retrieveChunksStream, fetchDocument } from "@/lib/agent/retrieve-client";
+import { StepBus } from "@/lib/agent/step-bus";
+import type { AgentEvent } from "@/lib/types";
 
 test("retrieve tool registers citations and returns numbered text", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
   const out = await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-1", messages: [] } as never);
 
   expect(typeof out).toBe("string");
@@ -33,7 +41,7 @@ test("retrieve tool registers citations and returns numbered text", async () => 
 test("fetch_document resolves a citation ref to the real document/chunk ids", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
   // 先に retrieve して [1] を登録（chunkId=c1, documentId=d1）。
   await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-r", messages: [] } as never);
 
@@ -50,7 +58,7 @@ test("fetch_document resolves a citation ref to the real document/chunk ids", as
 test("fetch_document errors when the ref was never retrieved", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
 
   const out = (await tools.fetch_document.execute!(
     { ref: 99 }, { toolCallId: "call-x", messages: [] } as never)) as string;
@@ -61,7 +69,7 @@ test("fetch_document errors when the ref was never retrieved", async () => {
 test("retrieve output does not leak raw uuids (only [n] is shown)", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
   const out = (await tools.retrieve.execute!(
     { query: "認証" }, { toolCallId: "call-ids", messages: [] } as never)) as string;
 
@@ -71,10 +79,10 @@ test("retrieve output does not leak raw uuids (only [n] is shown)", async () => 
 });
 
 test("retrieve tool falls back when no chunks are returned", async () => {
-  vi.mocked(retrieveChunks).mockResolvedValueOnce([]);
+  vi.mocked(retrieveChunksStream).mockResolvedValueOnce([]);
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
   const out = await tools.retrieve.execute!({ query: "存在しない" }, { toolCallId: "call-3", messages: [] } as never);
 
   expect(out).toBe("該当する資料は見つかりませんでした。");
@@ -85,11 +93,30 @@ test("fetch_document tool falls back when no chunks are returned", async () => {
   vi.mocked(fetchDocument).mockResolvedValueOnce({ documentId: "d1", documentTitle: "X", chunks: [] });
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
   await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-r2", messages: [] } as never);
 
   const out = await tools.fetch_document.execute!(
     { ref: 1 }, { toolCallId: "call-4", messages: [] } as never);
 
   expect(out).toBe("文書の本文が取得できませんでした。");
+});
+
+test("retrieve tool pushes nested sub-steps with parentId to the bus", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const bus = new StepBus();
+  const events: AgentEvent[] = [];
+  const drain = (async () => { for await (const e of bus) events.push(e); })();
+
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus });
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-1", messages: [] } as never);
+  bus.close();
+  await drain;
+
+  const subSteps = events.filter((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step");
+  expect(subSteps.every((e) => e.step.parentId === "call-1")).toBe(true);
+  expect(subSteps.map((e) => e.step.name)).toContain("vector_search");
+  const vsDone = subSteps.find((e) => e.step.name === "vector_search" && e.step.status === "done");
+  expect(vsDone!.step.output).toMatchObject({ count: 3 });
 });

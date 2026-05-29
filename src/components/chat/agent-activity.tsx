@@ -21,8 +21,12 @@ export function AgentActivity({
 
   if (steps.length === 0) return null;
 
-  const totalMs = steps.reduce((a, s) => a + (s.durationMs || 0), 0);
-  const current = steps.find((s) => s.status === "running");
+  // 子サブステップの ms は親 retrieve の duration に内包されるため、集計はトップレベルのみ。
+  const topLevel = steps.filter((s) => !s.parentId);
+  const totalMs = topLevel.reduce((a, s) => a + (s.durationMs || 0), 0);
+  // 現在段階インジケータ: running な leaf（子）を優先し、無ければトップレベルの running。
+  const runningSteps = steps.filter((s) => s.status === "running");
+  const current = runningSteps.find((s) => s.parentId) ?? runningSteps[0];
 
   return (
     <div className="overflow-hidden rounded-[14px] border-[0.5px] border-divider-strong bg-surface-2">
@@ -39,7 +43,7 @@ export function AgentActivity({
           {running ? (current?.summary ?? "エージェント実行中…") : "エージェント実行"}
         </span>
         <span className="inline-flex items-center gap-2 font-mono text-[11px] text-muted">
-          {steps.length} ステップ · {formatMs(totalMs)}
+          {topLevel.length} ステップ · {formatMs(totalMs)}
           <span className={cn("transition-transform", isOpen && "rotate-180")}>
             <svg viewBox="0 0 16 16" width="11" height="11">
               <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />

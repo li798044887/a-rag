@@ -4,11 +4,16 @@ import type { ToolSet } from "ai";
 // retrieve-client はツール経由でのみ使われる。ツールの execute がレジストリ登録する様子を再現するため
 // tools をモックせず、retrieve-client をモックして実 buildTools を通す。
 vi.mock("@/lib/agent/retrieve-client", () => ({
-  retrieveChunks: vi.fn(async () => [{
-    chunkId: "c1", documentId: "d1", documentTitle: "設計.pdf", headingPath: "認証",
-    pageStart: 0, pageEnd: 0, blockType: "text", text: "トークンは24時間で失効する。",
-    expandedText: "前文。トークンは24時間で失効する。後文。", score: 0.9,
-  }]),
+  retrieveChunks: vi.fn(),
+  retrieveChunksStream: vi.fn(async ({ onStage }: { onStage: (e: { stage: string; status: string; ms?: number; count?: number }) => void }) => {
+    onStage({ stage: "embed", status: "done", ms: 1 });
+    onStage({ stage: "vector_search", status: "done", ms: 2, count: 3 });
+    return [{
+      chunkId: "c1", documentId: "d1", documentTitle: "設計.pdf", headingPath: "認証",
+      pageStart: 0, pageEnd: 0, blockType: "text", text: "トークンは24時間で失効する。",
+      expandedText: "前文。トークンは24時間で失効する。後文。", score: 0.9,
+    }];
+  }),
   fetchDocument: vi.fn(),
 }));
 
@@ -113,4 +118,35 @@ test("runAgent returns the missing-key reason and empty sources when no API key 
   expect(done.sources).toEqual([]);
   expect(done.citationMap).toEqual({});
   expect(done.threadId).toBe("t1");
+});
+
+test("runAgent emits rewrite_query sibling and nested retrieve sub-steps", async () => {
+  const events: AgentEvent[] = [];
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
+    events.push(e);
+  }
+  const steps = events.filter((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step");
+
+  // rewrite_query はトップレベル（parentId なし）で retrieve より前に出る。
+  const rw = steps.find((e) => e.step.name === "rewrite_query");
+  expect(rw).toBeDefined();
+  expect(rw!.step.parentId).toBeUndefined();
+  const rwIdx = steps.findIndex((e) => e.step.name === "rewrite_query");
+  const retrIdx = steps.findIndex((e) => e.step.name === "retrieve");
+  expect(rwIdx).toBeLessThan(retrIdx);
+
+  // vector_search は retrieve の子（parentId === retrieve の toolCallId = "call-1"）。
+  const vs = steps.find((e) => e.step.name === "vector_search");
+  expect(vs!.step.parentId).toBe("call-1");
+
+  // サブステップが retrieve の running と done の間に interleave される（フルイベント列で順序確認）。
+  const idx = (pred: (e: Extract<AgentEvent, { type: "step" }>) => boolean) =>
+    events.findIndex((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step" && pred(e));
+  const rwI = idx((e) => e.step.name === "rewrite_query");
+  const rRunI = idx((e) => e.step.name === "retrieve" && e.step.status === "running");
+  const vsI = idx((e) => e.step.name === "vector_search");
+  const rDoneI = idx((e) => e.step.name === "retrieve" && e.step.status === "done");
+  expect(rwI).toBeLessThan(rRunI);
+  expect(rRunI).toBeLessThan(vsI);
+  expect(vsI).toBeLessThan(rDoneI);
 });

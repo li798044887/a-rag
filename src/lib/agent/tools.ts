@@ -1,7 +1,9 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
-import { retrieveChunks, fetchDocument } from "@/lib/agent/retrieve-client";
+import { retrieveChunksStream, fetchDocument, type RetrieveStageEvent } from "@/lib/agent/retrieve-client";
 import { CitationRegistry } from "@/lib/agent/citations";
+import { StepBus } from "@/lib/agent/step-bus";
+import type { AgentEvent, ToolName } from "@/lib/types";
 
 /** toolCallId -> UI 用メタ。fullStream の tool-call/tool-result に対応付ける。 */
 export interface ToolCallMeta {
@@ -14,11 +16,60 @@ export interface BuildToolsInput {
   registry: CitationRegistry;
   ownerUserId: string;
   meta: Map<string, ToolCallMeta>;
+  bus: StepBus;
 }
 
 const RETRIEVE_TOP_K = 6;
 
-export function buildTools({ registry, ownerUserId, meta }: BuildToolsInput): ToolSet {
+const STAGE_LABEL: Record<string, string> = {
+  embed: "クエリ埋め込み",
+  vector_search: "ベクトル検索",
+  bm25_search: "キーワード検索",
+  rerank: "リランキング",
+  expand: "近傍拡張",
+};
+
+function stageRunningSummary(stage: string): string {
+  switch (stage) {
+    case "embed": return "クエリを埋め込み中…";
+    case "vector_search": return "密ベクトル検索中…";
+    case "bm25_search": return "キーワード検索中…";
+    case "rerank": return "再順位付け中…";
+    case "expand": return "近傍チャンクを取得中…";
+    default: return "実行中…";
+  }
+}
+
+function stageDoneSummary(stage: string, count?: number): string {
+  switch (stage) {
+    case "embed": return "クエリを埋め込み";
+    case "vector_search": return `密ベクトル ${count ?? 0} 件`;
+    case "bm25_search": return `BM25 ${count ?? 0} 件`;
+    case "rerank": return `${count ?? 0} 件に再順位付け`;
+    case "expand": return "近傍拡張";
+    default: return "完了";
+  }
+}
+
+/** retrieve の段階イベントを parentId 付きサブステップへ変換して bus に流す。 */
+function stageToEvent(ev: RetrieveStageEvent, parentId: string): AgentEvent {
+  // start と done は同一 id を共有し、reducer が id マージで running→done に更新する（衝突ではなく意図）。
+  const base = {
+    id: `${parentId}:${ev.stage}`,
+    name: ev.stage as ToolName,
+    parentId,
+    label: STAGE_LABEL[ev.stage] ?? ev.stage,
+  };
+  if (ev.status === "start") {
+    return { type: "step", step: { ...base, status: "running", durationMs: 0, input: {}, output: null, summary: stageRunningSummary(ev.stage) } };
+  }
+  if (ev.status === "error") {
+    return { type: "step", step: { ...base, status: "error", durationMs: ev.ms ?? 0, input: {}, output: { error: ev.message ?? "失敗" }, summary: "段階に失敗" } };
+  }
+  return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: {}, output: ev.count != null ? { count: ev.count } : null, summary: stageDoneSummary(ev.stage, ev.count) } };
+}
+
+export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput): ToolSet {
   return {
     retrieve: tool({
       description:
@@ -29,7 +80,10 @@ export function buildTools({ registry, ownerUserId, meta }: BuildToolsInput): To
         query: z.string().describe("検索クエリ（会話文脈を解決した自己完結な日本語）"),
       }),
       execute: async ({ query }, { toolCallId }) => {
-        const chunks = await retrieveChunks({ query, ownerUserId, topK: RETRIEVE_TOP_K });
+        const chunks = await retrieveChunksStream({
+          query, ownerUserId, topK: RETRIEVE_TOP_K,
+          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId)),
+        });
         const lines = chunks.map((c) => {
           const n = registry.register({
             documentId: c.documentId, documentTitle: c.documentTitle, chunkId: c.chunkId,
@@ -50,7 +104,6 @@ export function buildTools({ registry, ownerUserId, meta }: BuildToolsInput): To
         ref: z.number().int().describe("retrieve 結果の出典番号 [n] の数値（例: 1）"),
       }),
       execute: async ({ ref }, { toolCallId }) => {
-        // [n] をサーバ側で実 ID へ解決する。モデルに UUID を書かせない（誤コピー防止）。
         const hit = registry.resolve(ref);
         if (!hit) {
           meta.set(toolCallId, { name: "fetch_document", input: { ref },

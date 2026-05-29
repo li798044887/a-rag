@@ -31,9 +31,11 @@ export type ToolStatus = "pending" | "running" | "done" | "error";
 export type ToolName =
   | "rewrite_query"
   | "retrieve"
+  | "embed"
   | "vector_search"
   | "bm25_search"
   | "rerank"
+  | "expand"
   | "fetch_document"
   | "summarize"
   | "answer"
@@ -50,6 +52,7 @@ export interface RerankHit {
 export interface ToolCall {
   id: string;
   name: ToolName;
+  parentId?: string;
   label: string;
   status: ToolStatus;
   durationMs: number;

@@ -34,6 +34,13 @@ const TOOL_ICONS: Partial<Record<ToolName, React.ReactNode>> = {
     </>
   ),
   summarize: <path d="M3 4h10M3 8h10M3 12h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />,
+  embed: (
+    <>
+      <circle cx="8" cy="8" r="5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+    </>
+  ),
+  expand: <path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />,
 };
 
 function StatusIcon({ status }: { status: ToolStatus }) {
@@ -342,18 +349,19 @@ function ToolStepLog({ steps }: { steps: ToolCall[] }) {
   let t = 0;
   steps.forEach((s) => {
     const start = t;
-    lines.push({ t: start, name: s.name, msg: "started", kind: "start" });
+    const logName = (s.parentId ? "› " : "") + s.name;
+    lines.push({ t: start, name: logName, msg: "started", kind: "start" });
     const keys = Object.keys(s.input);
     if (keys.length) {
       const k = keys[0];
       const v = s.input[k];
-      lines.push({ t: start, name: s.name, msg: `${k}: ${typeof v === "string" ? `"${v}"` : JSON.stringify(v)}`, kind: "param" });
+      lines.push({ t: start, name: logName, msg: `${k}: ${typeof v === "string" ? `"${v}"` : JSON.stringify(v)}`, kind: "param" });
     }
     if (s.status === "done") {
-      lines.push({ t: start + s.durationMs, name: s.name, msg: `done in ${formatMs(s.durationMs)} · ${s.summary}`, kind: "done" });
+      lines.push({ t: start + s.durationMs, name: logName, msg: `done in ${formatMs(s.durationMs)} · ${s.summary}`, kind: "done" });
       t = start + s.durationMs;
     } else if (s.status === "running") {
-      lines.push({ t: start + (s.durationMs || 0), name: s.name, msg: "streaming…", kind: "running" });
+      lines.push({ t: start + (s.durationMs || 0), name: logName, msg: "streaming…", kind: "running" });
     }
   });
   const fmtT = (ms: number) => `+${Math.floor(ms / 1000).toString().padStart(2, "0")}.${(ms % 1000).toString().padStart(3, "0").slice(0, 3)}`;
@@ -385,21 +393,78 @@ interface Props {
   onToggleStep: (id: string) => void;
 }
 
+/** フラットな steps を「ルート(parentId なし)」と「子(parentId 別)」に分ける。 */
+function groupSteps(steps: ToolCall[]): { roots: ToolCall[]; childrenOf: Map<string, ToolCall[]> } {
+  const roots: ToolCall[] = [];
+  const childrenOf = new Map<string, ToolCall[]>();
+  for (const s of steps) {
+    if (s.parentId) {
+      const arr = childrenOf.get(s.parentId) ?? [];
+      arr.push(s);
+      childrenOf.set(s.parentId, arr);
+    } else {
+      roots.push(s);
+    }
+  }
+  return { roots, childrenOf };
+}
+
+/** 子サブステップのコンパクト行（展開なし）。card / timeline 共通。 */
+function SubStepRow({ step }: { step: ToolCall }) {
+  return (
+    <div className="flex items-center gap-2.5 py-[3px] text-[11.5px] text-fg-2">
+      <StatusIcon status={step.status} />
+      <span className="grid place-items-center text-muted-2">
+        <svg viewBox="0 0 16 16" width="12" height="12">{TOOL_ICONS[step.name]}</svg>
+      </span>
+      <span className="font-mono text-[11px] font-semibold text-fg-2">{step.name}</span>
+      <span className="min-w-0 flex-1 truncate text-muted">{step.summary}</span>
+      <span className="font-mono text-[10.5px] tabular-nums text-muted-2">{formatMs(step.durationMs)}</span>
+    </div>
+  );
+}
+
+function SubSteps({ steps }: { steps: ToolCall[] | undefined }) {
+  if (!steps || steps.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-px border-l-[1.5px] border-divider pl-3 ml-[7px]">
+      {steps.map((s) => <SubStepRow key={s.id} step={s} />)}
+    </div>
+  );
+}
+
 export function ToolSteps({ steps, variant, expandedMap, onToggleStep }: Props) {
   if (variant === "log") return <ToolStepLog steps={steps} />;
+
+  const { roots, childrenOf } = groupSteps(steps);
+
   if (variant === "timeline") {
     return (
       <div className="px-3.5 pb-3 pt-2 max-md:px-3">
-        {steps.map((s, i) => (
-          <ToolStepTimeline key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} isLast={i === steps.length - 1} />
+        {roots.map((s, i) => (
+          <div key={s.id}>
+            <ToolStepTimeline step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} isLast={i === roots.length - 1} />
+            {childrenOf.has(s.id) && (
+              <div className="mb-2 ml-[22px] pl-1">
+                <SubSteps steps={childrenOf.get(s.id)} />
+              </div>
+            )}
+          </div>
         ))}
       </div>
     );
   }
   return (
     <div className="flex flex-col">
-      {steps.map((s) => (
-        <ToolStepCard key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} />
+      {roots.map((s) => (
+        <div key={s.id}>
+          <ToolStepCard step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} />
+          {childrenOf.has(s.id) && (
+            <div className="border-b-[0.5px] border-divider bg-surface px-3.5 py-2 pl-10 max-md:pl-6">
+              <SubSteps steps={childrenOf.get(s.id)} />
+            </div>
+          )}
+        </div>
       ))}
     </div>
   );
