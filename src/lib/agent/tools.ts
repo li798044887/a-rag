@@ -111,6 +111,7 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
           const n = registry.register({
             documentId: c.documentId, documentTitle: c.documentTitle, chunkId: c.chunkId,
             headingPath: c.headingPath, snippet: c.text,
+            blockType: c.blockType, page: c.pageStart,
           });
           return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${c.expandedText || c.text}`;
         });
@@ -139,6 +140,7 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
           const n = registry.register({
             documentId: doc.documentId, documentTitle: doc.documentTitle, chunkId: c.chunkId,
             headingPath: c.headingPath, snippet: c.text,
+            blockType: c.blockType, page: c.pageStart,
           });
           return `[${n}] ${doc.documentTitle} — ${c.headingPath}\n${c.text}`;
         });
