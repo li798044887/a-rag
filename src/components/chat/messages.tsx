@@ -70,7 +70,8 @@ export function StaticAnswer({
 
 export function Transcript({
   turns, toolView, expandedSteps, onToggleStep, onCite, citationStyle,
-  onCopy, onRegenerate, onFeedback, feedback, liveAttachments, isLiveLastTurn,
+  onCopy, onRegenerate, onOpenSources, onFeedback, feedback,
+  activeCiteTurn, rightPanelOpen, liveAttachments, isLiveLastTurn,
 }: {
   turns: Turn[];
   toolView: ToolView;
@@ -79,10 +80,13 @@ export function Transcript({
   // どのターンの引用かを特定するため turn index を渡す。
   onCite: (n: number, turnIdx: number) => void;
   citationStyle: CitationStyle;
-  onCopy: () => void;
-  onRegenerate: () => void;
-  onFeedback: (v: "up" | "down") => void;
-  feedback: "up" | "down" | null;
+  onCopy: (turnIdx: number) => void;
+  onRegenerate: (turnIdx: number) => void;
+  onOpenSources: (turnIdx: number) => void;
+  onFeedback: (v: "up" | "down", turnIdx: number) => void;
+  feedback: Record<number, "up" | "down">;
+  activeCiteTurn: number;
+  rightPanelOpen: boolean;
   liveAttachments: StagedFile[];
   isLiveLastTurn: boolean;
 }) {
@@ -110,17 +114,20 @@ export function Transcript({
                 onToggleStep={onToggleStep}
               />
               {turn.status === "cancelled" ? (
-                <CancelledNotice onRetry={onRegenerate} />
+                <CancelledNotice onRetry={() => onRegenerate(idx)} />
               ) : (
                 (turn.answer.length > 0 || turn.streaming) && (
                   <StreamingAnswer text={turn.answer} streaming={turn.streaming} onCite={(n) => onCite(n, idx)} citationStyle={citationStyle} />
                 )
               )}
-              {/* フッター操作（コピー/再生成/評価）はスレッド単位の状態を扱うため最新ターンのみに表示。 */}
-              {isLast && turn.status === "done" && (
+              {/* 各 done 回答が自分の指標・操作を持つ（複数ターン対応）。 */}
+              {turn.status === "done" && (
                 <AnswerFooter
                   tokens={turn.tokens} durationMs={turn.durationMs} sources={turn.sources}
-                  onCopy={onCopy} onRegenerate={onRegenerate} onFeedback={onFeedback} feedback={feedback}
+                  onCopy={() => onCopy(idx)} onRegenerate={() => onRegenerate(idx)}
+                  onOpenSources={() => onOpenSources(idx)}
+                  sourcesActive={rightPanelOpen && activeCiteTurn === idx}
+                  onFeedback={(v) => onFeedback(v, idx)} feedback={feedback[idx] ?? null}
                 />
               )}
             </AssistantMessage>
