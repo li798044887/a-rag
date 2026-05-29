@@ -7,6 +7,7 @@ import { streamText, stepCountIs, type LanguageModelUsage, type ModelMessage } f
 import { resolveModels, DEFAULT_MODEL_ID } from "@/lib/agent/models";
 import { buildTools, type ToolCallMeta } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
+import { StepBus } from "@/lib/agent/step-bus";
 import type { AgentEvent, ToolCall, ToolName } from "@/lib/types";
 
 export interface RunInput {
@@ -43,7 +44,8 @@ export async function* runAgent({ query, ownerUserId, threadId, history, modelId
 
   const registry = new CitationRegistry();
   const meta = new Map<string, ToolCallMeta>();
-  const tools = buildTools({ registry, ownerUserId, meta });
+  const bus = new StepBus();
+  const tools = buildTools({ registry, ownerUserId, meta, bus });
 
   const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: query }];
 
