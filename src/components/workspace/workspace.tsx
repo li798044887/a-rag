@@ -77,6 +77,9 @@ export function Workspace() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolled = useRef(false);
+  // ユーザー起点のスレッド移動ごとに +1。run 開始時の値を控え、onThread の
+  // 自動切替が「移動後のユーザー」を勝手に引き戻さないようにする世代トークン。
+  const navToken = useRef(0);
 
   // 表示中スレッドの会話状態（ライブ実行 or 取得済みスナップショット）。無ければ空。
   const view = agent.get(activeThreadId);
@@ -99,7 +102,12 @@ export function Workspace() {
   // 表示中スレッドの状態に phase を追従させる（ライブ会話を表示中にバックグラウンドで
   // 完了/中断した場合や、スレッド切替で戻った場合に正しく反映する）。
   // wasMobile と同じ render-phase パターンで、cascading effect を避ける。
-  const activeStatus = lastTurn?.status;
+  //
+  // 空の下書き ("th-current") では追従させない。このキーは「下書き」と「実 id 確定前の
+  // 走行 run の一時キー」を兼ねるため、下書きへ戻った直後に残存/並行ターンが phase を
+  // 勝手に running へ巻き戻してしまう（新規スレッドを押したのに実行中表示になる不具合）。
+  // 実 run は onThread で実 id へ移行し、それ以降この同期が正しく状態を追う。
+  const activeStatus = activeThreadId === "th-current" ? undefined : lastTurn?.status;
   const statusKey = activeStatus ? `${activeThreadId}:${activeStatus}` : "";
   const [syncedStatusKey, setSyncedStatusKey] = useState("");
   if (statusKey && statusKey !== syncedStatusKey) {
@@ -160,10 +168,18 @@ export function Workspace() {
         activeThreadId !== "th-current" && cur && curLast?.status !== "running" ? activeThreadId : undefined;
       if (continueId) setLiveId(continueId);
 
+      // この run を起動した時点のナビゲーション世代。onThread が遅れて発火する
+      // までにユーザーが別スレッド/新規下書きへ移動していたら、引き戻さない。
+      const navAtStart = navToken.current;
+
       // 実行は会話マップ側で継続する。別スレッドへ移動しても中断されない。
       await agent.run(finalQuery, ready.map((f) => f.name), continueId, model.id, {
         // 実 threadId 判明時点で即サイドバー登録＋アクティブ化（実行中でも履歴に出す）。
-        onThread: (id) => { setLiveId(id); setActiveThreadId(id); },
+        // ただしユーザーが既に別画面へ移動済みなら activeThreadId は触らない。
+        onThread: (id) => {
+          setLiveId(id);
+          if (navToken.current === navAtStart) setActiveThreadId(id);
+        },
         onDone: (id, status) => {
           if (status === "error") push("実行に失敗しました", "error");
           refreshThreads(); // 永続化済みの実スレッドを一覧へ反映（ライブ仮エントリと自動的に重複排除）。
@@ -199,6 +215,7 @@ export function Workspace() {
 
   const newChat = () => {
     // ライブ実行は中断しない（バックグラウンドで継続、サイドバーから戻れる）。空の下書きへ。
+    navToken.current++;
     setActiveThreadId("th-current");
     setPhase("empty");
     setUserQuery("");
@@ -273,6 +290,7 @@ export function Workspace() {
       setThreads((cur) => cur.filter((t) => t.id !== id));
       // アクティブだったスレッドを消したら下書きへ戻す。
       if (id === activeThreadId) {
+        navToken.current++;
         setActiveThreadId("th-current");
         setPhase("empty");
         setUserQuery("");
@@ -305,6 +323,7 @@ export function Workspace() {
       if (isMobile) setSidebarCollapsed(true);
       return;
     }
+    navToken.current++;
     setActiveThreadId(id);
     setFeedback(null);
     setRightPanelOpen(false);
