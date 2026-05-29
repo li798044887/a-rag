@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Icon } from "@/components/icons";
+import { BrandMark, Icon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { AppUser, ThreadSummary } from "@/lib/types";
 
@@ -115,26 +115,7 @@ export function Sidebar(props: SidebarProps) {
       <div className="flex items-center justify-between py-3 pl-[14px] pr-3 pb-2">
         <div className="flex items-center gap-2 text-[14px] font-bold tracking-[-0.01em]">
           <div className="grid h-[22px] w-[22px] place-items-center rounded-md bg-accent text-white">
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
-              <path
-                d="M7 4.5h6.5L17 8v11.5H7V4.5z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M13.5 4.5V8H17"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="12" cy="13" r="2.8" fill="none" stroke="currentColor" strokeWidth="2" />
-              <path d="M14.1 15.1 16.6 17.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            <BrandMark size={14} />
           </div>
           <span>ARag</span>
         </div>

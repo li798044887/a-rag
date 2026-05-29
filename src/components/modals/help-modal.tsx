@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BrandMark } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -50,10 +51,7 @@ export function HelpModal({ open, onClose }: Props) {
         <aside className="flex flex-col border-r-[0.5px] border-divider bg-surface-2 p-[18px_12px_14px] max-md:flex-row max-md:items-center max-md:gap-2 max-md:overflow-x-auto max-md:border-b-[0.5px] max-md:border-r-0 max-md:p-2.5">
           <div className="mb-2.5 flex items-center gap-2.5 border-b-[0.5px] border-divider px-2 pb-3.5 pt-0.5 max-md:m-0 max-md:shrink-0 max-md:border-b-0 max-md:border-r-[0.5px] max-md:border-divider max-md:px-1 max-md:pr-2.5 max-md:pb-0">
             <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent text-white">
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
-                <path d="M4 6c0-1.1.9-2 2-2h8l6 6v8c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V6z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                <circle cx="12" cy="13" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              </svg>
+              <BrandMark size={15} />
             </div>
             <div className="max-md:hidden">
               <div className="text-[14px] font-bold tracking-[-0.01em]">ARag</div>

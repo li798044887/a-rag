@@ -1,6 +1,6 @@
 "use client";
 
-import { Icon } from "@/components/icons";
+import { BrandMark, Icon } from "@/components/icons";
 import { SUGGESTED_PROMPTS } from "@/lib/data";
 import type { AppUser } from "@/lib/types";
 
@@ -16,11 +16,7 @@ export function EmptyState({ user, onPickPrompt }: { user: AppUser; onPickPrompt
     <div className="grid min-h-[calc(100vh-52px-130px)] min-w-0 place-items-center px-6 py-10 max-md:min-h-0 max-md:px-[18px] max-md:py-7">
       <div className="w-full max-w-[920px] min-w-0 text-center">
         <div className="mx-auto mb-6 grid h-14 w-14 place-items-center rounded-[16px] bg-accent text-white shadow-[0_6px_20px_var(--accent-glow)] max-md:mb-[18px] max-md:h-12 max-md:w-12 max-md:rounded-[14px]">
-          <svg viewBox="0 0 32 32" width="22" height="22" className="max-md:h-5 max-md:w-5">
-            <path d="M6 8a3 3 0 013-3h11l7 7v12a3 3 0 01-3 3H9a3 3 0 01-3-3V8z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-            <circle cx="16" cy="17" r="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
-            <path d="M19 20l3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <BrandMark size={24} className="max-md:h-[21px] max-md:w-[21px]" />
         </div>
         <h1 className="m-0 mb-2.5 text-[clamp(22px,3.4vw,32px)] font-bold tracking-[-0.02em] text-fg [text-wrap:balance] [word-break:keep-all] max-md:text-[clamp(20px,6.4vw,26px)]">
           {greeting()}、<span className="text-accent">{user.firstName}</span> さん

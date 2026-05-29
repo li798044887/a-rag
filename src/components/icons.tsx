@@ -284,6 +284,33 @@ const glyphs = {
 
 export type IconName = keyof typeof glyphs;
 
+/** ARag brand mark — a knowledge document under a magnifying glass.
+ *
+ * Monoline (no fills): the lens nests into the page's open lower-right corner,
+ * so the document outline terminates tangent to the lens ring instead of
+ * crossing it. Strokes use `currentColor`, so the surrounding tile sets the
+ * tint (typically `text-white` on an accent tile). 24×24 grid. */
+export function BrandMark({ size = 18, className }: { size?: number; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" aria-hidden="true">
+      <g stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+        {/* page outline — open at the lower-right where the lens sits */}
+        <path
+          d="M15.4 11.02V6.8L11.6 3H7.5A1.5 1.5 0 0 0 6 4.5V15.1A1.5 1.5 0 0 0 7.5 16.6H12.09"
+          strokeWidth="1.7"
+        />
+        {/* dog-ear fold */}
+        <path d="M11.6 3V6.8H15.4" strokeWidth="1.5" />
+        {/* content lines */}
+        <path d="M8 8.4H12.6M8 10.7H11" strokeWidth="1.4" />
+        {/* magnifying glass */}
+        <circle cx="13.9" cy="13.9" r="3.25" strokeWidth="1.7" />
+        <path d="M16.2 16.2 18.9 18.9" strokeWidth="1.8" />
+      </g>
+    </svg>
+  );
+}
+
 interface IconProps {
   name: IconName;
   size?: number;
