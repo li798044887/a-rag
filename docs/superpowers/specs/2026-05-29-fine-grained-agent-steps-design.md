@@ -12,7 +12,7 @@
 
 1. **表示構造**: 内部段階は `retrieve` の**子としてネスト**表示する（フラットな兄弟並びにはしない）。
 2. **検索の分割**: 現状 Qdrant がサーバ側 RRF で融合している密ベクトル検索と BM25 検索を、**2 クエリに分割**して個別段階（`vector_search` / `bm25_search`）として出す。
-3. **分割後の候補統合**: **union + 重複除去 → rerank に全候補を渡す**方式を採用（RRF の自前再現はしない）。最終順位は reranker が支配するため品質劣化しにくく、RRF 定数の推測も不要。rerank への入力候補が最大 40 → 最大 80 件に増えるぶん rerank がわずかに重くなることは許容する。
+3. **分割後の候補統合（性能制約あり）**: dense / sparse の検索結果を**ランク交互マージ（round-robin）+ 重複除去し、`candidate_k` 件で打ち切って** rerank に渡す。RRF 定数の推測は不要で、最終順位は reranker が支配するため品質劣化しにくい。**rerank 入力を従来同様 `candidate_k`(=40) 件に据え置く**ことで rerank コストの増加を防ぐ（性能大前提）。さらに **dense_search と bm25_search は並行実行**し、Qdrant 往復が 1→2 回になることによるレイテンシ増を `max(dense, sparse)` に抑える。
 4. **rewrite_query 表示**: モデルが `retrieve` に渡したクエリの可視化として、`retrieve` の**直前にトップレベルの兄弟ステップ**として出す（バックエンドの実段階ではなく、`run.ts` 側で導出）。
 5. **転送方式**: rag → Next.js 間は **NDJSON（1 行 1 イベントの chunked レスポンス）**。server-to-server のため SSE framing は不要。
 6. **ライブ進行表示**: 各サブステップを `running → done` で逐次更新し、現在段階インジケータを出す（既存 UX 方針に一致）。
@@ -30,12 +30,11 @@
 
 #### `app/retrieval/service.py`
 - `retrieve()` を**段階イベントを yield するジェネレータ** `retrieve_stream(...)` に再構成する。処理順と yield:
-  1. `embed`: `embedder.embed([query])[0]`（dense + sparse）。
-  2. `vector_search`: `store.dense_search(..., limit=candidate_k)`。
-  3. `bm25_search`: `store.sparse_search(..., limit=candidate_k)`。
-  4. 統合: 2 結果を `chunk_id` で union + 重複除去（重複時は任意の一方を残す。スコアは段階の意味を持たないため統合では使わない）。
-  5. `rerank`: `reranker.score(query, [候補の text])` で全候補をスコアリングし、降順 top_k。
-  6. `expand`: 既存 `_expand` による近傍チャンク連結。Postgres/Qdrant 不整合時の空拡張ガードは現行どおり維持。
+  1. `embed`: `embedder.embed([query])[0]`（1 回の呼び出しで dense + sparse の両方を得る）。
+  2. `vector_search` と `bm25_search`: `store.dense_search(..., limit=candidate_k)` と `store.sparse_search(..., limit=candidate_k)` を **`ThreadPoolExecutor` で並行実行**（qdrant_client は同期 I/O のためスレッドで並列化）。両段階の `start` は実行前に、`done` は各 future 完了時に yield する。
+  3. 統合: 2 つのランク付き結果を **round-robin（rank 0 の dense, rank 0 の sparse, rank 1 の dense, …）で交互に取り、`chunk_id` で重複除去し、先頭 `candidate_k` 件で打ち切る**。これにより rerank 入力件数を従来同様 `candidate_k` に据え置く。
+  4. `rerank`: `reranker.score(query, [候補の text])` でスコアリングし、降順 top_k。
+  5. `expand`: 既存 `_expand` による近傍チャンク連結。Postgres/Qdrant 不整合時の空拡張ガードは現行どおり維持。
 - 各段階で `start` と `done`（所要 ms・件数）を yield し、最後に最終チャンク列を yield する。
 - 既存の同期 API は **`retrieve_stream` を drain して最終チャンク列だけを返す薄いラッパ `retrieve()`** として温存し、現行の `/retrieve` エンドポイントと既存テストの挙動を変えない。
 
@@ -109,9 +108,8 @@
 
 #### `src/components/chat/tool-steps.tsx`
 - フラットな `ToolCall[]` を「親（`parentId` 無し）→ 子（`parentId` 一致）」にグルーピングして描画する。
-- 親 `retrieve` の行の下に、子段階を**常時インデント表示**する（展開操作不要）。子はコンパクト行: status アイコン / `name` / `summary` / 所要 ms。
-- 子のうち `rerank` はスコアバー出力（既存 `RerankHit` 描画）を持つため**展開可能**にする。その他の子は非展開のコンパクト行で開始する。
-- 既存 3 バリアント（card / timeline / log）すべてでネスト表示を成立させる。各バリアントの子行は親に視覚的に従属する字下げ表現にする。
+- 親 `retrieve` の行の下に、子段階を**常時インデント表示**する（展開操作不要）。子は一律**コンパクト非展開行**: status アイコン / `name` / `summary` / 所要 ms（入力・出力の展開ブロックは持たない）。
+- card / timeline バリアントは親子グルーピングでネスト描画する。log バリアントは現行どおりフラットに全ステップを行として出す（サブステップも順序どおり行として現れるため追加対応不要。子は `name` を字下げ表記）。
 - 新しい `ToolName`（`embed` / `expand` / `vector_search` / `bm25_search` 等）のアイコンを `TOOL_ICONS` に追加する（既存の `vector_search` / `bm25_search` / `rerank` アイコンは流用）。
 
 #### `src/components/chat/agent-activity.tsx`
@@ -128,7 +126,8 @@
 
 ### バックエンド
 - `retrieve_stream` が期待する段階列（embed → vector_search → bm25_search → rerank → expand → result）と件数・ms を yield すること。
-- `dense_search` / `sparse_search` が分割クエリとして機能し、union + 重複除去が `chunk_id` 単位で正しく行われること。
+- `dense_search` / `sparse_search` が分割クエリとして機能し、round-robin 交互マージ + 重複除去 + `candidate_k` 打ち切りが `chunk_id` 単位で正しく行われること。
+- dense_search / bm25_search が並行実行されること（両 future が投入されてから join される）。
 - 既存 `retrieve()`（drain ラッパ）が従来と同じ最終チャンク列を返し、現行 `/retrieve` テストが緑のままであること。
 
 ### TS
@@ -144,4 +143,4 @@
 
 - `fetch_document` の内部分解（単一 DB クエリのため段階化しない。現行どおり単一ステップ）。
 - `summarize` への改名（現行 `answer` を維持）。
-- RRF の自前再現（union + rerank 方式を採用）。
+- RRF の自前再現（round-robin 交互マージ + 上限打ち切り + rerank 方式を採用）。
