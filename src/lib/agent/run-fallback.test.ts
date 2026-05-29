@@ -1,9 +1,11 @@
 import { expect, test, vi } from "vitest";
 import type { ToolSet } from "ai";
 
-// retrieve は agentic ループのツール経由でのみ呼ばれる。接続失敗を再現する。
+// retrieve は agentic ループのツール経由でのみ呼ばれ、現在は retrieveChunksStream を使う。
+// バックエンド接続失敗（/retrieve/stream への到達失敗）を再現する。
 vi.mock("@/lib/agent/retrieve-client", () => ({
-  retrieveChunks: vi.fn(async () => { throw new Error("ECONNREFUSED"); }),
+  retrieveChunks: vi.fn(),
+  retrieveChunksStream: vi.fn(async () => { throw new Error("ECONNREFUSED"); }),
   fetchDocument: vi.fn(),
 }));
 
