@@ -22,6 +22,7 @@ import { useTweaks } from "@/hooks/use-tweaks";
 import { useUploads } from "@/hooks/use-uploads";
 import { cn } from "@/lib/utils";
 import { MODEL_STORAGE_KEY } from "@/lib/constants";
+import { buildThreadMarkdown } from "@/lib/export";
 import type { CitationMap, ModelOption, ScopeValue, Source, ThreadSummary, ToolCall, Turn } from "@/lib/types";
 
 type Phase = "empty" | "running" | "done" | "cancelled";
@@ -396,11 +397,11 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
   };
 
   const exportThread = () => {
-    if (!userQuery) {
+    if (turns.length === 0) {
       push("エクスポートするスレッドがありません", "info");
       return;
     }
-    const md = `# ${userQuery}\n\n${lastTurn?.answer ?? ""}\n\n---\n\n## 参考資料\n${(lastTurn?.sources ?? []).map((s, i) => `[${i + 1}] ${s.title} (${s.path})`).join("\n")}\n`;
+    const md = buildThreadMarkdown(turns);
     triggerDownload(new Blob([md], { type: "text/markdown" }), `arag-thread-${activeThreadId}.md`);
     push("スレッドをMarkdownでエクスポートしました", "success");
   };
