@@ -55,3 +55,7 @@ rag/__pycache__/
 /sample
 /test-results
 /.vscode
+
+# storybook
+/storybook-static
+/outputs

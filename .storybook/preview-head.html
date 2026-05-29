@@ -1,0 +1,15 @@
+<!-- アプリでは next/font が --font-jakarta / --font-jetbrains を注入する。
+     Storybook では next/font が使えないため Google Fonts から読み込み、
+     同名の CSS 変数を定義して globals.css の var(--font-sans) を満たす。 -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    --font-jakarta: "Plus Jakarta Sans";
+    --font-jetbrains: "JetBrains Mono";
+  }
+</style>
