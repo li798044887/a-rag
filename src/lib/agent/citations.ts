@@ -6,6 +6,8 @@ export interface CitationInput {
   chunkId: string;
   headingPath: string;
   snippet: string;
+  blockType: string;
+  page: number;
 }
 
 /** 1ターンスコープの引用番号付け。chunkId をキーに通し番号 [n] を割り当てる。 */
@@ -39,7 +41,10 @@ export class CitationRegistry {
         byDoc.set(c.documentId, src);
       }
       if (!src.sections.some((s) => s.id === c.chunkId)) {
-        src.sections.push({ id: c.chunkId, heading: c.headingPath, body: c.snippet, highlight: true });
+        src.sections.push({
+          id: c.chunkId, heading: c.headingPath, body: c.snippet,
+          highlight: true, blockType: c.blockType, page: c.page,
+        });
       }
     }
     return [...byDoc.values()];

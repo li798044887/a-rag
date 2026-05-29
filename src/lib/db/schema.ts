@@ -45,6 +45,8 @@ export const citations = pgTable("citations", {
   sectionId: text("section_id").notNull(),
   headingPath: text("heading_path").notNull().default(""),
   snippet: text("snippet").notNull(),
+  blockType: text("block_type").notNull().default("text"),
+  page: integer("page").notNull().default(0),
 });
 
 export type ThreadRow = typeof threads.$inferSelect;

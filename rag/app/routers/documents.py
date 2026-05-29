@@ -3,6 +3,7 @@ from pathlib import Path
 
 from arq import create_pool
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.db import SessionLocal
@@ -130,3 +131,26 @@ def _fetch_document(document_id: str, req: FetchDocumentRequest) -> FetchDocumen
              dependencies=[Depends(require_internal_token)])
 def fetch_document_chunks(document_id: str, req: FetchDocumentRequest):
     return _fetch_document(document_id, req)
+
+
+@router.get("/documents/{document_id}/raw",
+            dependencies=[Depends(require_internal_token)])
+def get_document_raw(document_id: str, owner_user_id: str):
+    session = SessionLocal()
+    try:
+        doc = session.get(Document, document_id)
+        if not doc or doc.owner_user_id != owner_user_id:
+            raise HTTPException(status_code=404, detail="document not found")
+        raw_path = Path(doc.raw_path)
+        mime = doc.mime
+        filename = doc.filename
+    finally:
+        session.close()
+    if not raw_path.exists():
+        raise HTTPException(status_code=404, detail="file not found")
+    return FileResponse(
+        str(raw_path),
+        media_type=mime or "application/octet-stream",
+        filename=filename,
+        content_disposition_type="inline",
+    )

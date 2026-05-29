@@ -73,6 +73,8 @@ export async function POST(req: Request) {
               sectionId: ref.sectionId,
               headingPath: sec?.heading ?? "",
               snippet: sec?.body ?? "",
+              blockType: sec?.blockType ?? "text",
+              page: sec?.page ?? 0,
             };
           });
           // 永続化の失敗は done 送出後なのでクライアントへ error を送らずログのみ。

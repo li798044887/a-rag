@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { HtmlTable } from "@/components/sources/html-table";
 import type { CitationMap, Source, SourceType } from "@/lib/types";
 
 export type RightPanelAction = "open-source" | "download" | "share";
@@ -46,6 +47,7 @@ const iconBtn = "grid h-[26px] w-[26px] place-items-center rounded-md border-0 b
 export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState<"structured" | "pdf">("structured");
 
   useEffect(() => {
     if (!highlightSectionId || !hlRef.current || !bodyRef.current) return;
@@ -53,6 +55,14 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
   }, [highlightSectionId, activeSourceId]);
 
   const active = sources.find((s) => s.id === activeSourceId) || sources[0];
+  const isPdf = active ? /\.pdf$/i.test(active.title || active.path) : false;
+  const rawUrl = active ? `/api/documents/${encodeURIComponent(active.id)}/raw` : "";
+  // ハイライト中セクション → 先頭セクションの順でページを決定（0-based を PDF の 1-based へ）。
+  const hlSec = active?.sections.find((s) => s.id === highlightSectionId);
+  const pdfPage = ((hlSec?.page ?? active?.sections[0]?.page ?? 0) | 0) + 1;
+  // PDF を持たない資料では常に構造化表示にフォールバックする（state はそのまま保持）。
+  const effectiveMode = isPdf ? viewMode : "structured";
+
   const citationNum = (id: string) => {
     const entry = Object.entries(citationMap).find(([, c]) => c.sourceId === id);
     return entry ? entry[0] : "?";
@@ -140,10 +150,35 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
           <span className="min-w-[32px] font-mono text-[9.5px] uppercase tracking-[0.05em] text-muted-2">パス</span>
           <code className="break-all font-mono text-[11px] text-fg-2">{active.path}</code>
         </div>
+        {isPdf && (
+          <div className="mt-1 flex gap-1">
+            {([["structured", "構造化"], ["pdf", "元PDF"]] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={cn(
+                  "rounded-[7px] px-2.5 py-1 text-[11.5px] font-medium",
+                  effectiveMode === mode ? "bg-surface text-fg shadow-e1" : "text-fg-2 hover:bg-divider",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Body */}
-      <div ref={bodyRef} className="overflow-y-auto px-5 pb-6 pt-[18px] max-md:px-3.5">
+      <div ref={bodyRef} className={cn("overflow-y-auto", effectiveMode === "pdf" ? "p-0" : "px-5 pb-6 pt-[18px] max-md:px-3.5")}>
+        {effectiveMode === "pdf" ? (
+          <iframe
+            key={pdfPage}
+            src={`${rawUrl}#page=${pdfPage}`}
+            title={active.title}
+            className="h-full w-full border-0"
+          />
+        ) : (
+          <>
         <div className="mb-4 flex items-start gap-2.5">
           <span className="pt-[3px] text-accent">
             <SourceIcon type={active.type} />
@@ -170,10 +205,16 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
                 </div>
               )}
               <h3 className="mb-1.5 text-[12.5px] font-bold tracking-[-0.005em] text-fg">{sec.heading}</h3>
-              <div className="whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2">{sec.body}</div>
+              {sec.blockType === "table" || sec.body.trimStart().startsWith("<table") ? (
+                <HtmlTable html={sec.body} />
+              ) : (
+                <div className="whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2">{sec.body}</div>
+              )}
             </div>
           );
         })}
+          </>
+        )}
       </div>
 
       {/* Foot */}

@@ -30,6 +30,7 @@ export interface SaveInput {
   citations: Array<{
     ordinal: number; documentId: string; documentTitle: string;
     chunkId: string; sectionId: string; headingPath: string; snippet: string;
+    blockType: string; page: number;
   }>;
 }
 
@@ -140,7 +141,10 @@ function sourcesFromCitations(cites: Array<typeof citations.$inferSelect>): Sour
       byDoc.set(c.documentId, src);
     }
     if (!src.sections.some((s) => s.id === c.sectionId)) {
-      src.sections.push({ id: c.sectionId, heading: c.headingPath, body: c.snippet, highlight: true });
+      src.sections.push({
+        id: c.sectionId, heading: c.headingPath, body: c.snippet,
+        highlight: true, blockType: c.blockType, page: c.page,
+      });
     }
   }
   return [...byDoc.values()];
