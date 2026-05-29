@@ -1,3 +1,7 @@
+import time
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+
 from sqlalchemy.orm import Session
 
 from app.embedding.base import Embedder
@@ -8,8 +12,6 @@ from app.vectorstore.qdrant import QdrantStore
 
 
 def _expand(session: Session, document_id: str, ordinal: int) -> str:
-    # 返り値には hit チャンク自身（ordinal）も前後（ordinal±1）と共に含まれる。
-    # Phase 5 でプロンプト組立時に text と expanded_text を併用する場合は重複に留意すること。
     rows = (session.query(Chunk)
             .filter(Chunk.document_id == document_id,
                     Chunk.ordinal.in_([ordinal - 1, ordinal, ordinal + 1]))
@@ -17,17 +19,72 @@ def _expand(session: Session, document_id: str, ordinal: int) -> str:
     return "\n\n".join(r.text for r in rows) if rows else ""
 
 
-def retrieve(session: Session, store: QdrantStore, embedder: Embedder, reranker: Reranker,
-             *, query: str, owner_user_id: str, top_k: int = 6,
-             candidate_k: int = 40) -> list[RetrievedChunk]:
+def _merge_round_robin(dense: list[dict], sparse: list[dict], limit: int) -> list[dict]:
+    # dense/sparse の各ランクを交互に取り chunk_id で重複除去、limit 件で打ち切る。
+    seen: set[str] = set()
+    out: list[dict] = []
+    for i in range(max(len(dense), len(sparse))):
+        for src in (dense, sparse):
+            if i < len(src):
+                cid = src[i]["chunk_id"]
+                if cid not in seen:
+                    seen.add(cid)
+                    out.append(src[i])
+                    if len(out) >= limit:
+                        return out
+    return out
+
+
+def _ms(t0: float) -> int:
+    return int((time.perf_counter() - t0) * 1000)
+
+
+def _timed(fn, *args) -> tuple:
+    s = time.perf_counter()
+    return fn(*args), int((time.perf_counter() - s) * 1000)
+
+
+def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, reranker: Reranker,
+                    *, query: str, owner_user_id: str, top_k: int = 6,
+                    candidate_k: int = 40) -> Iterator[dict]:
+    # 1) embed（1回の呼び出しで dense+sparse の両方を得る）
+    yield {"stage": "embed", "status": "start"}
+    t = time.perf_counter()
     qv = embedder.embed([query])[0]
-    hits = store.hybrid_search(qv, owner_user_id=owner_user_id, limit=candidate_k)
-    if not hits:
-        return []
+    yield {"stage": "embed", "status": "done", "ms": _ms(t)}
 
-    rr = reranker.score(query, [h["text"] for h in hits])
-    ranked = sorted(zip(hits, rr), key=lambda x: x[1], reverse=True)[:top_k]
+    # 2) dense / sparse 検索を並行実行（性能大前提）。両 start を先に出す。
+    yield {"stage": "vector_search", "status": "start"}
+    yield {"stage": "bm25_search", "status": "start"}
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_dense = ex.submit(_timed, store.dense_search, qv.dense, owner_user_id, candidate_k)
+        f_sparse = ex.submit(_timed, store.sparse_search, qv.sparse, owner_user_id, candidate_k)
+        dense_hits, dense_ms = f_dense.result()
+        yield {"stage": "vector_search", "status": "done", "ms": dense_ms, "count": len(dense_hits)}
+        sparse_hits, sparse_ms = f_sparse.result()
+        yield {"stage": "bm25_search", "status": "done", "ms": sparse_ms, "count": len(sparse_hits)}
 
+    if not dense_hits and not sparse_hits:
+        yield {"stage": "rerank", "status": "start"}
+        yield {"stage": "rerank", "status": "done", "ms": 0, "count": 0}
+        yield {"stage": "expand", "status": "start"}
+        yield {"stage": "expand", "status": "done", "ms": 0}
+        yield {"stage": "result", "chunks": []}
+        return
+
+    # 3) round-robin マージ + candidate_k 打ち切り
+    merged = _merge_round_robin(dense_hits, sparse_hits, candidate_k)
+
+    # 4) rerank
+    yield {"stage": "rerank", "status": "start"}
+    tr = time.perf_counter()
+    scores = reranker.score(query, [h["text"] for h in merged])
+    ranked = sorted(zip(merged, scores), key=lambda x: x[1], reverse=True)[:top_k]
+    yield {"stage": "rerank", "status": "done", "ms": _ms(tr), "count": len(ranked)}
+
+    # 5) expand + RetrievedChunk 構築
+    yield {"stage": "expand", "status": "start"}
+    te = time.perf_counter()
     title_cache: dict[str, str] = {}
     out: list[RetrievedChunk] = []
     for hit, score in ranked:
@@ -36,22 +93,25 @@ def retrieve(session: Session, store: QdrantStore, embedder: Embedder, reranker:
             doc = session.get(Document, doc_id)
             title_cache[doc_id] = doc.filename if doc else doc_id
         chunk = session.get(Chunk, hit["chunk_id"])
-        if chunk is None:
-            # Postgres/Qdrant 不整合: チャンクが DB に存在しない。
-            # 先頭チャンク（ordinal=0）の近傍を誤って返さないよう近傍拡張を空にする。
-            out.append(RetrievedChunk(
-                chunk_id=hit["chunk_id"], document_id=doc_id,
-                document_title=title_cache[doc_id], heading_path=hit.get("heading_path", ""),
-                page_start=hit.get("page_start", 0), page_end=hit.get("page_end", 0),
-                block_type=hit.get("block_type", "text"), text=hit["text"],
-                expanded_text="", score=float(score),
-            ))
-            continue
+        expanded = "" if chunk is None else _expand(session, doc_id, chunk.ordinal)
         out.append(RetrievedChunk(
             chunk_id=hit["chunk_id"], document_id=doc_id,
             document_title=title_cache[doc_id], heading_path=hit.get("heading_path", ""),
             page_start=hit.get("page_start", 0), page_end=hit.get("page_end", 0),
             block_type=hit.get("block_type", "text"), text=hit["text"],
-            expanded_text=_expand(session, doc_id, chunk.ordinal), score=float(score),
-        ))
-    return out
+            expanded_text=expanded, score=float(score)))
+    yield {"stage": "expand", "status": "done", "ms": _ms(te)}
+    yield {"stage": "result", "chunks": out}
+
+
+def retrieve(session: Session, store: QdrantStore, embedder: Embedder, reranker: Reranker,
+             *, query: str, owner_user_id: str, top_k: int = 6,
+             candidate_k: int = 40) -> list[RetrievedChunk]:
+    # 非ストリーミング用 drain ラッパ（既存 /retrieve と既存テストを温存）。
+    result: list[RetrievedChunk] = []
+    for ev in retrieve_stream(session, store, embedder, reranker, query=query,
+                              owner_user_id=owner_user_id, top_k=top_k, candidate_k=candidate_k):
+        if ev.get("stage") == "result":
+            result = ev["chunks"]
+            break
+    return result
