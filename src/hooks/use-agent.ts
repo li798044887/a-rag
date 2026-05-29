@@ -75,15 +75,17 @@ export function useAgent() {
       attachments: string[],
       threadId: string | undefined,
       modelId: string | undefined,
-      cb: { onThread?: (id: string) => void; onDone?: (id: string, status: ConvStatus) => void } = {},
+      cb: { onThread?: (id: string) => void; onDone?: (id: string, status: ConvStatus) => void;
+            truncateFrom?: number; regenerateFrom?: number } = {},
     ): Promise<{ status: ConvStatus; threadId: string }> => {
       const ctrl = new AbortController();
       let key = threadId ?? LIVE_KEY;
 
-      // 新しいターンを末尾に追加（既存スレッドなら過去ターンの後ろ、新規なら最初のターン）。
+      // 新しいターンを末尾に追加。truncateFrom 指定時はその index 以降を捨ててから追加（再生成）。
       const appendTurn = (k: string) => setConvs((prev) => {
         const turns = prev[k]?.turns ?? [];
-        return { ...prev, [k]: { turns: [...turns, emptyTurn(query, attachments)] } };
+        const base = cb.truncateFrom != null ? turns.slice(0, cb.truncateFrom) : turns;
+        return { ...prev, [k]: { turns: [...base, emptyTurn(query, attachments)] } };
       });
 
       // 楽観的に新しいターンを即追加（新規は LIVE_KEY、既存はそのスレッドへ）。
@@ -109,7 +111,7 @@ export function useAgent() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, attachments, threadId, model: modelId }),
+          body: JSON.stringify({ query, attachments, threadId, model: modelId, regenerateFrom: cb.regenerateFrom }),
           signal: ctrl.signal,
         });
 
