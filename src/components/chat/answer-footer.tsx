@@ -9,6 +9,8 @@ interface Props {
   sources: Source[];
   onCopy: () => void;
   onRegenerate: () => void;
+  onOpenSources: () => void;
+  sourcesActive: boolean;
   onFeedback: (v: "up" | "down") => void;
   feedback: "up" | "down" | null;
 }
@@ -17,7 +19,7 @@ const chipCls =
   "inline-flex items-center gap-[5px] rounded-full border-[0.5px] border-divider-strong bg-surface px-2 py-[3px] font-mono text-[11px] text-muted";
 const btnCls = "grid h-7 w-7 place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg";
 
-export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate, onFeedback, feedback }: Props) {
+export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate, onOpenSources, sourcesActive, onFeedback, feedback }: Props) {
   return (
     <div className="mt-3.5 flex items-center justify-between gap-2 border-t-[0.5px] border-dashed border-divider-strong pt-3.5 max-md:flex-wrap max-md:gap-y-2">
       <div className="flex flex-wrap gap-1.5">
@@ -34,12 +36,17 @@ export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate
           </svg>
           {tokens >= 1000 ? `${(tokens / 1000).toFixed(1).replace(/\.0$/, "")}k` : tokens} tokens
         </span>
-        <span className={chipCls}>
+        <button
+          type="button"
+          onClick={onOpenSources}
+          title="このターンの一次資料を表示"
+          className={cn(chipCls, "cursor-pointer hover:text-fg", sourcesActive && "border-accent bg-accent-soft text-accent")}
+        >
           <svg viewBox="0 0 16 16" width="11" height="11">
             <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
           </svg>
           {sources.length} sources
-        </span>
+        </button>
       </div>
       <div className="flex gap-0.5 max-md:ml-auto">
         <button className={btnCls} title="コピー" onClick={onCopy}>
