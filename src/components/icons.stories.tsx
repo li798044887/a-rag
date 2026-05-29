@@ -17,6 +17,8 @@ const meta = {
   title: "Foundations/Icons",
   component: Icon,
   parameters: { layout: "centered" },
+  // render のみの Story でも必須 arg を満たすため meta レベルで既定値を持つ。
+  args: { name: "search", size: 24 },
   argTypes: {
     name: { control: "select", options: ICON_NAMES },
     size: { control: { type: "range", min: 12, max: 64, step: 2 } },
