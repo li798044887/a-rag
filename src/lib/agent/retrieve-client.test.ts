@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { retrieveChunks, fetchDocument } from "@/lib/agent/retrieve-client";
+import { retrieveChunks, fetchDocument, retrieveChunksStream, type RetrieveStageEvent } from "@/lib/agent/retrieve-client";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -34,4 +34,24 @@ test("fetchDocument posts to rag /documents/{id}/chunks and maps chunks", async 
   const body = JSON.parse(init!.body as string);
   expect(body.owner_user_id).toBe("u1");
   expect(body.around_chunk_id).toBe("c0");
+});
+
+test("retrieveChunksStream parses NDJSON: forwards stages and returns result chunks", async () => {
+  const ndjson =
+    '{"stage":"embed","status":"done","ms":1}\n' +
+    '{"stage":"vector_search","status":"done","ms":2,"count":3}\n' +
+    '{"stage":"result","chunks":[{"chunk_id":"c1","document_id":"d1","document_title":"t",' +
+    '"heading_path":"H","page_start":0,"page_end":0,"block_type":"text","text":"b",' +
+    '"expanded_text":"e","score":0.9}]}\n';
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(ndjson, { status: 200 }));
+  process.env.RAG_SERVICE_URL = "http://rag:8000";
+
+  const stages: RetrieveStageEvent[] = [];
+  const chunks = await retrieveChunksStream({
+    query: "q", ownerUserId: "u1", topK: 6, onStage: (e) => stages.push(e),
+  });
+
+  expect(stages.map((s) => s.stage)).toEqual(["embed", "vector_search"]);
+  expect(stages[1].count).toBe(3);
+  expect(chunks[0].chunkId).toBe("c1");
 });

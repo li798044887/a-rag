@@ -13,6 +13,21 @@ export interface RetrievedChunk {
   score: number;
 }
 
+function mapChunk(c: Record<string, unknown>): RetrievedChunk {
+  return {
+    chunkId: c.chunk_id as string,
+    documentId: c.document_id as string,
+    documentTitle: c.document_title as string,
+    headingPath: c.heading_path as string,
+    pageStart: c.page_start as number,
+    pageEnd: c.page_end as number,
+    blockType: c.block_type as string,
+    text: c.text as string,
+    expandedText: c.expanded_text as string,
+    score: c.score as number,
+  };
+}
+
 export async function retrieveChunks(input: {
   query: string;
   rewritten?: string;
@@ -34,18 +49,65 @@ export async function retrieveChunks(input: {
     throw new Error(`retrieve failed: ${res.status} ${body}`);
   }
   const data = (await res.json()) as { chunks: Array<Record<string, unknown>> };
-  return data.chunks.map((c) => ({
-    chunkId: c.chunk_id as string,
-    documentId: c.document_id as string,
-    documentTitle: c.document_title as string,
-    headingPath: c.heading_path as string,
-    pageStart: c.page_start as number,
-    pageEnd: c.page_end as number,
-    blockType: c.block_type as string,
-    text: c.text as string,
-    expandedText: c.expanded_text as string,
-    score: c.score as number,
-  }));
+  return data.chunks.map(mapChunk);
+}
+
+export interface RetrieveStageEvent {
+  stage: string;
+  status: "start" | "done" | "error";
+  ms?: number;
+  count?: number;
+  message?: string;
+}
+
+/** /retrieve/stream を読み、段階イベントを onStage に流し、最終 result の chunks を返す。 */
+export async function retrieveChunksStream(input: {
+  query: string;
+  rewritten?: string;
+  ownerUserId: string;
+  topK?: number;
+  onStage: (ev: RetrieveStageEvent) => void;
+}): Promise<RetrievedChunk[]> {
+  const res = await ragFetch("/retrieve/stream", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      query: input.query,
+      rewritten: input.rewritten ?? null,
+      owner_user_id: input.ownerUserId,
+      top_k: input.topK ?? 6,
+    }),
+  });
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`retrieve stream failed: ${res.status} ${body}`);
+  }
+
+  let chunks: RetrievedChunk[] = [];
+  const handleLine = (raw: string) => {
+    const s = raw.trim();
+    if (!s) return;
+    const ev = JSON.parse(s) as Record<string, unknown>;
+    if (ev.stage === "result") {
+      chunks = (ev.chunks as Array<Record<string, unknown>>).map(mapChunk);
+    } else {
+      input.onStage(ev as unknown as RetrieveStageEvent);
+    }
+  };
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) handleLine(line);
+  }
+  if (buffer.trim()) handleLine(buffer);
+  return chunks;
 }
 
 export interface FetchedDocChunk {
