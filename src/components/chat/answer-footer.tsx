@@ -49,7 +49,9 @@ export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate
           )}
         >
           <svg viewBox="0 0 16 16" width="11" height="11">
-            <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+            <path d="M5 2.75h6.25L13 4.5v7.75H5z" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinejoin="round" />
+            <path d="M3 5.25v8h8" stroke="currentColor" strokeWidth="1.35" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M7 6.25h3.75M7 8.5h3.75" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
           {sources.length} sources
         </button>
