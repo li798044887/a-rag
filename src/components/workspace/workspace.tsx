@@ -58,7 +58,7 @@ export function Workspace() {
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({ t4: true, t6: true });
   const [activeSourceId, setActiveSourceId] = useState("src-1");
   const [highlightSectionId, setHighlightSectionId] = useState<string | null>("s1-2");
-  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+  const [feedback, setFeedback] = useState<Record<number, "up" | "down">>({});
   const [userAttachments, setUserAttachments] = useState<typeof uploads.files>([]);
   const [scope, setScope] = useState<ScopeValue>(SCOPE_PRESETS[0]);
   const [shareTarget, setShareTarget] = useState<{ item: Source | null } | null>(null);
@@ -145,12 +145,19 @@ export function Workspace() {
 
   // ── Run / control ─────────────────────────────────────────────────────
   const startRun = useCallback(
-    async (query: string) => {
+    async (query: string, opts?: { regenerateFrom?: number }) => {
+      const regen = opts?.regenerateFrom;
       const ready = uploads.files.filter((f) => f.status === "ready");
-      const finalQuery = query || (ready.length ? "添付ファイルについて要点をまとめて" : "");
+      // 再生成: 対象ターンの query/添付を再利用。通常: 入力 or 添付からフォールバック。
+      const regenTurn = regen != null ? turns[regen] : undefined;
+      const finalQuery = regen != null
+        ? (regenTurn?.query ?? "")
+        : query || (ready.length ? "添付ファイルについて要点をまとめて" : "");
       if (!finalQuery) return;
+      const attachNames = regen != null ? (regenTurn?.attachments ?? []) : ready.map((f) => f.name);
+
       setUserQuery(finalQuery);
-      setUserAttachments(ready);
+      setUserAttachments(regen != null ? [] : ready);
       setComposerValue("");
       setPhase("running");
       setExpandedSteps({ t4: true, t6: true });
@@ -158,36 +165,40 @@ export function Workspace() {
       setHighlightSectionId("s1-2");
       setRightPanelOpen(false);
       setAutoOpened(false);
-      setFeedback(null);
+      // 再生成時は regen index 以降のフィードバックを破棄、通常は全リセット。
+      setFeedback((prev) => {
+        if (regen == null) return {};
+        const next: Record<number, "up" | "down"> = {};
+        for (const [k, v] of Object.entries(prev)) if (Number(k) < regen) next[Number(k)] = v;
+        return next;
+      });
       userScrolled.current = false;
-      uploads.clear();
+      if (regen == null) uploads.clear();
 
-      // 完了済みスレッドを表示中なら追記、それ以外（新規 or 実行中）は新規スレッド。
+      // 再生成は常にアクティブスレッドの継続。通常は完了済みスレッド表示中のみ継続。
       const cur = agent.get(activeThreadId);
       const curLast = cur?.turns[cur.turns.length - 1];
-      const continueId =
-        activeThreadId !== "th-current" && cur && curLast?.status !== "running" ? activeThreadId : undefined;
+      const continueId = regen != null
+        ? activeThreadId
+        : (activeThreadId !== "th-current" && cur && curLast?.status !== "running" ? activeThreadId : undefined);
       if (continueId) setLiveId(continueId);
 
-      // この run を起動した時点のナビゲーション世代。onThread が遅れて発火する
-      // までにユーザーが別スレッド/新規下書きへ移動していたら、引き戻さない。
       const navAtStart = navToken.current;
 
-      // 実行は会話マップ側で継続する。別スレッドへ移動しても中断されない。
-      await agent.run(finalQuery, ready.map((f) => f.name), continueId, model.id, {
-        // 実 threadId 判明時点で即サイドバー登録＋アクティブ化（実行中でも履歴に出す）。
-        // ただしユーザーが既に別画面へ移動済みなら activeThreadId は触らない。
+      await agent.run(finalQuery, attachNames, continueId, model.id, {
+        truncateFrom: regen ?? undefined,
+        regenerateFrom: regen ?? undefined,
         onThread: (id) => {
           setLiveId(id);
           if (navToken.current === navAtStart) setActiveThreadId(id);
         },
         onDone: (id, status) => {
           if (status === "error") push("実行に失敗しました", "error");
-          refreshThreads(); // 永続化済みの実スレッドを一覧へ反映（ライブ仮エントリと自動的に重複排除）。
+          refreshThreads();
         },
       });
     },
-    [agent, uploads, push, activeThreadId, refreshThreads, model],
+    [agent, uploads, push, activeThreadId, refreshThreads, model, turns],
   );
 
   const stopRun = () => {
@@ -196,17 +207,14 @@ export function Workspace() {
     push("実行を停止しました", "info");
   };
 
-  const regenerate = () => {
-    const q = userQuery;
-    if (q) {
-      startRun(q);
-      push("回答を再生成しています", "info");
-    }
+  const regenerate = (turnIdx: number) => {
+    startRun("", { regenerateFrom: turnIdx });
+    push("回答を再生成しています", "info");
   };
 
-  const copyAnswer = async () => {
+  const copyAnswer = async (turnIdx: number) => {
     try {
-      const text = (lastTurn?.answer ?? "").replace(/\*\*/g, "").replace(/\[\d+\]/g, "");
+      const text = (turns[turnIdx]?.answer ?? "").replace(/\*\*/g, "").replace(/\[\d+\]/g, "");
       await navigator.clipboard.writeText(text);
       push("回答をコピーしました", "success");
     } catch {
@@ -222,7 +230,7 @@ export function Workspace() {
     setUserQuery("");
     setComposerValue("");
     setRightPanelOpen(false);
-    setFeedback(null);
+    setFeedback({});
     if (isMobile) setSidebarCollapsed(true);
   };
 
@@ -233,6 +241,15 @@ export function Workspace() {
     setActiveCiteTurn(turnIdx);
     setActiveSourceId(c.sourceId);
     setHighlightSectionId(c.sectionId);
+    setRightPanelOpen(true);
+  };
+
+  // フッターの出典チップ用: そのターンの出典でパネルを開く。
+  const openSourcesForTurn = (turnIdx: number) => {
+    const turn = turns[turnIdx];
+    setActiveCiteTurn(turnIdx);
+    setActiveSourceId(turn?.sources[0]?.id ?? "src-1");
+    setHighlightSectionId(null);
     setRightPanelOpen(true);
   };
 
@@ -296,7 +313,7 @@ export function Workspace() {
         setPhase("empty");
         setUserQuery("");
         setRightPanelOpen(false);
-        setFeedback(null);
+        setFeedback({});
       }
       if (id === liveId) {
         agent.cancel(id);
@@ -326,7 +343,7 @@ export function Workspace() {
     }
     navToken.current++;
     setActiveThreadId(id);
-    setFeedback(null);
+    setFeedback({});
     setRightPanelOpen(false);
     if (isMobile) setSidebarCollapsed(true);
     userScrolled.current = false;
@@ -635,11 +652,19 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
                   citationStyle={tweaks.citationStyle}
                   onCopy={copyAnswer}
                   onRegenerate={regenerate}
-                  onFeedback={(v) => {
-                    setFeedback((prev) => (prev === v ? null : v));
-                    if (feedback !== v) push(v === "up" ? "フィードバックを送信しました" : "改善要望を受け付けました", "success");
+                  onOpenSources={openSourcesForTurn}
+                  onFeedback={(v: "up" | "down", idx: number) => {
+                    setFeedback((prev) => {
+                      const next = { ...prev };
+                      if (next[idx] === v) delete next[idx];
+                      else next[idx] = v;
+                      return next;
+                    });
+                    if (feedback[idx] !== v) push(v === "up" ? "フィードバックを送信しました" : "改善要望を受け付けました", "success");
                   }}
                   feedback={feedback}
+                  activeCiteTurn={activeCiteTurn}
+                  rightPanelOpen={rightPanelShown}
                   liveAttachments={userAttachments}
                   isLiveLastTurn={isLive}
                 />
@@ -671,6 +696,7 @@ ${src.sections.map((s) => `<h2>${s.heading}</h2><pre>${s.body.replace(/</g, "&lt
       {rightPanelShown && (
         <RightPanel
           sources={citeTurn?.sources ?? []}
+          contextQuery={citeTurn?.query}
           citationMap={citeTurn?.citationMap ?? {}}
           activeSourceId={activeSourceId}
           highlightSectionId={highlightSectionId}
