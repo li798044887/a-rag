@@ -27,6 +27,10 @@ import type { CitationMap, ModelOption, ScopeValue, Source, ThreadSummary, ToolC
 
 type Phase = "empty" | "running" | "done" | "cancelled";
 
+// 安定した空配列参照。`view?.turns ?? []` をインラインで使うと毎レンダーで新配列となり
+// startRun の useCallback 依存が不安定になるため、モジュールスコープの定数を使う。
+const NO_TURNS: Turn[] = [];
+
 export function Workspace() {
   const { tweaks, setTweak } = useTweaks();
   const { user, claims, status, signIn, register, signOut, setRemember, revokeAllSessions } = useAuth();
@@ -84,7 +88,7 @@ export function Workspace() {
 
   // 表示中スレッドの会話状態（ライブ実行 or 取得済みスナップショット）。無ければ空。
   const view = agent.get(activeThreadId);
-  const turns = view?.turns ?? [];
+  const turns = view?.turns ?? NO_TURNS;
   const lastTurn = turns[turns.length - 1];
   const isLive = activeThreadId === liveId;
   const rightPanelShown = rightPanelOpen && phase !== "empty";
