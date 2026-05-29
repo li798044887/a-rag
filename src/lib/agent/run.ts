@@ -173,12 +173,16 @@ async function pump(
     if (answerStepEmitted) bus.push(emitAnswerStep("done", answerStartT, totalUsage));
 
     const tokens = totalUsage?.totalTokens ?? totalUsage?.outputTokens ?? Math.max(1, Math.round(answer.length / 1.8));
-    const sources = registry.toSources();
+    // 回答本文に実際に出現した出典番号 [n] だけをパネル/引用へ採用する。
+    // 1件も引用が無い回答（要約のみ・エラー時など）は従来どおり全件にフォールバック。
+    const citedNums = new Set([...answer.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
+    const filter = citedNums.size > 0 ? citedNums : undefined;
+    const sources = registry.toSources(filter);
     bus.push({
       type: "done",
       tokens,
       durationMs: Date.now() - started,
-      citationMap: registry.toCitationMap(),
+      citationMap: registry.toCitationMap(filter),
       sourceIds: sources.map((s) => s.id),
       sources,
       threadId,

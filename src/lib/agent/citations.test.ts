@@ -52,4 +52,54 @@ describe("CitationRegistry メタ伝播", () => {
     expect(sec.blockType).toBe("text");
     expect(sec.page).toBe(0);
   });
+
+  it("関連度は文書内チャンクの最大スコアを採用する", () => {
+    const reg = new CitationRegistry();
+    reg.register({ documentId: "d1", documentTitle: "A", chunkId: "c1",
+      headingPath: "h1", snippet: "s1", blockType: "text", page: 0, score: 0.42 });
+    reg.register({ documentId: "d1", documentTitle: "A", chunkId: "c2",
+      headingPath: "h2", snippet: "s2", blockType: "text", page: 0, score: 0.91 });
+    expect(reg.toSources()[0].score).toBe(0.91);
+  });
+
+  it("スコア未指定なら score は undefined", () => {
+    const reg = new CitationRegistry();
+    reg.register({ documentId: "d1", documentTitle: "A", chunkId: "c1",
+      headingPath: "h1", snippet: "s1", blockType: "text", page: 0 });
+    expect(reg.toSources()[0].score).toBeUndefined();
+  });
+});
+
+describe("引用フィルタ（実際に引用された出典のみ採用）", () => {
+  const seed = () => {
+    const reg = new CitationRegistry();
+    // [1] d1, [2] d2, [3] d1(別チャンク)
+    reg.register({ documentId: "d1", documentTitle: "A", chunkId: "c1",
+      headingPath: "h1", snippet: "s1", blockType: "text", page: 0, score: 0.2 });
+    reg.register({ documentId: "d2", documentTitle: "B", chunkId: "c2",
+      headingPath: "h2", snippet: "s2", blockType: "text", page: 0, score: 0.01 });
+    reg.register({ documentId: "d1", documentTitle: "A", chunkId: "c3",
+      headingPath: "h3", snippet: "s3", blockType: "text", page: 0, score: 0.95 });
+    return reg;
+  };
+
+  it("引用された番号の資料だけを toSources が返す", () => {
+    const sources = seed().toSources(new Set([1, 3]));
+    // d2([2]) は未引用なので除外、d1 のみ・引用された 2 セクション
+    expect(sources.map((s) => s.id)).toEqual(["d1"]);
+    expect(sources[0].sections.map((x) => x.id)).toEqual(["c1", "c3"]);
+    // 関連度は引用チャンクの最大スコア
+    expect(sources[0].score).toBe(0.95);
+  });
+
+  it("toCitationMap は元の番号を維持しつつ未引用を落とす", () => {
+    const map = seed().toCitationMap(new Set([1, 3]));
+    expect(Object.keys(map)).toEqual(["1", "3"]);
+    expect(map[1]).toMatchObject({ sourceId: "d1", sectionId: "c1" });
+    expect(map[3]).toMatchObject({ sourceId: "d1", sectionId: "c3" });
+  });
+
+  it("引数なしなら全件（フォールバック）", () => {
+    expect(seed().toSources().map((s) => s.id)).toEqual(["d1", "d2"]);
+  });
 });

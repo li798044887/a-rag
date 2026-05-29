@@ -75,6 +75,7 @@ export async function POST(req: Request) {
               snippet: sec?.body ?? "",
               blockType: sec?.blockType ?? "text",
               page: sec?.page ?? 0,
+              score: src?.score ?? null,
             };
           });
           // 永続化の失敗は done 送出後なのでクライアントへ error を送らずログのみ。

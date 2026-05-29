@@ -22,6 +22,8 @@ export interface Source {
   author: string;
   date: string;
   sections: SourceSection[];
+  /** 文書内チャンクの再ランクスコア(0–1)の最大値。未取得なら undefined。 */
+  score?: number;
 }
 
 /** Maps a citation number ([1], [2]…) to the source + section it opens. */

@@ -42,6 +42,7 @@ vi.mock("ai", async (orig) => {
 vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
 
 import { streamText } from "ai";
+import { retrieveChunksStream } from "@/lib/agent/retrieve-client";
 import { runAgent } from "@/lib/agent/run";
 import type { AgentEvent } from "@/lib/types";
 
@@ -75,6 +76,39 @@ test("runAgent runs tool loop, streams answer, finishes with sources+citationMap
   expect(done.sources[0].id).toBe("d1");
   expect(done.sources[0].sections[0].id).toBe("c1");
   expect(done.citationMap[1]).toMatchObject({ sourceId: "d1", sectionId: "c1" });
+});
+
+test("runAgent surfaces only the sources actually cited in the answer", async () => {
+  // retrieve は 2 件返すが、回答は [1] のみ引用する → d2 はパネルに出さない。
+  vi.mocked(retrieveChunksStream).mockImplementationOnce(async () => [
+    { chunkId: "c1", documentId: "d1", documentTitle: "A.pdf", headingPath: "h1",
+      pageStart: 0, pageEnd: 0, blockType: "text", text: "本文1", expandedText: "前 本文1 後", score: 0.9 },
+    { chunkId: "c2", documentId: "d2", documentTitle: "B.pdf", headingPath: "h2",
+      pageStart: 0, pageEnd: 0, blockType: "text", text: "本文2", expandedText: "前 本文2 後", score: 0.01 },
+  ]);
+  vi.mocked(streamText).mockImplementationOnce((opts) => {
+    const { tools } = opts as unknown as { tools: ToolSet };
+    async function* gen() {
+      yield { type: "tool-call", toolCallId: "call-1", toolName: "retrieve", input: { query: "q" } };
+      await tools.retrieve.execute!({ query: "q" }, { toolCallId: "call-1", messages: [] } as never);
+      yield { type: "tool-result", toolCallId: "call-1", toolName: "retrieve", input: { query: "q" }, output: "…" };
+      yield { type: "text-delta", id: "t1", text: "答え[1]。" };
+      yield { type: "finish", finishReason: "stop", totalUsage: { totalTokens: 10 } };
+    }
+    return { fullStream: gen() } as never;
+  });
+
+  const events: AgentEvent[] = [];
+  for await (const e of runAgent({ query: "q", ownerUserId: "u1", threadId: "t1" })) events.push(e);
+
+  const done = events.find((e) => e.type === "done");
+  if (!done || done.type !== "done") throw new Error("done event missing");
+  expect(done.sources.map((s) => s.id)).toEqual(["d1"]);
+  expect(Object.keys(done.citationMap)).toEqual(["1"]);
+  // 引用された資料の関連度は実スコア（0.00 ではない）。
+  expect(done.sources[0].score).toBe(0.9);
+  // expandedText が引用箇所の本文として使われる。
+  expect(done.sources[0].sections[0].body).toBe("前 本文1 後");
 });
 
 test("runAgent emits an error step on tool-error and continues to stream the answer", async () => {

@@ -25,7 +25,7 @@ test("create, save message+citations, list, and reconstruct", async () => {
     tokens: 12, durationMs: 800, steps: [{ id: "s1" }],
     citations: [{ ordinal: 1, documentId: "d1", documentTitle: "設計.pdf",
       chunkId: "c1", sectionId: "c1", headingPath: "認証", snippet: "失効する",
-      blockType: "table", page: 2 }],
+      blockType: "table", page: 2, score: 0.88 }],
   });
 
   const list = await listThreads(userId);
@@ -37,6 +37,8 @@ test("create, save message+citations, list, and reconstruct", async () => {
   // Task 4: blockType / page が復元される
   expect(detail?.sources[0].sections[0].blockType).toBe("table");
   expect(detail?.sources[0].sections[0].page).toBe(2);
+  // 関連度スコアが復元される
+  expect(detail?.sources[0].score).toBe(0.88);
   expect(detail?.citationMap[1]).toMatchObject({ sourceId: "d1", sectionId: "c1" });
 });
 
@@ -47,7 +49,7 @@ test("getThreadMessages returns all turns oldest-first with citations", async ()
     steps: [{ id: "s1" }],
     citations: [{ ordinal: 1, documentId: "d1", documentTitle: "設計.pdf",
       chunkId: "c1", sectionId: "c1", headingPath: "h", snippet: "本文",
-      blockType: "text", page: 0 }],
+      blockType: "text", page: 0, score: 0.5 }],
   });
   await saveCompletedMessage({
     threadId: t.id, query: "Q2", answerText: "A2。", tokens: 4, durationMs: 90,
@@ -66,7 +68,7 @@ test("deleteMessagesFrom removes turns from index onward (with citations)", asyn
     await saveCompletedMessage({
       threadId: t.id, query: q, answerText: a, tokens: 1, durationMs: 1, steps: [],
       citations: q === "Q1"
-        ? [{ ordinal: 1, documentId: "d1", documentTitle: "x", chunkId: "c1", sectionId: "c1", headingPath: "h", snippet: "本文", blockType: "text", page: 0 }]
+        ? [{ ordinal: 1, documentId: "d1", documentTitle: "x", chunkId: "c1", sectionId: "c1", headingPath: "h", snippet: "本文", blockType: "text", page: 0, score: null }]
         : [],
     });
   }

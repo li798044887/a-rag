@@ -8,6 +8,8 @@ export interface CitationInput {
   snippet: string;
   blockType: string;
   page: number;
+  /** 再ランクスコア(0–1)。retrieve 由来のみ持ち、fetch_document 由来では undefined。 */
+  score?: number;
 }
 
 /** 1ターンスコープの引用番号付け。chunkId をキーに通し番号 [n] を割り当てる。 */
@@ -30,10 +32,15 @@ export class CitationRegistry {
     return this.order[n - 1];
   }
 
-  /** document 単位に束ねた Source[]（登録順を保持）。 */
-  toSources(): Source[] {
+  /**
+   * document 単位に束ねた Source[]（登録順を保持）。
+   * cited を渡すと、その出典番号 [n] に対応するチャンクのみを採用する
+   * （= 回答が実際に引用した資料だけをパネルに出す）。
+   */
+  toSources(cited?: Set<number>): Source[] {
     const byDoc = new Map<string, Source>();
-    for (const c of this.order) {
+    this.order.forEach((c, i) => {
+      if (cited && !cited.has(i + 1)) return;
       let src = byDoc.get(c.documentId);
       if (!src) {
         src = { id: c.documentId, type: "doc", title: c.documentTitle, path: c.documentTitle,
@@ -46,13 +53,22 @@ export class CitationRegistry {
           highlight: true, blockType: c.blockType, page: c.page,
         });
       }
-    }
+      // 関連度は文書内チャンクの最大スコアを採用する。
+      if (typeof c.score === "number") {
+        src.score = src.score === undefined ? c.score : Math.max(src.score, c.score);
+      }
+    });
     return [...byDoc.values()];
   }
 
-  toCitationMap(): CitationMap {
+  /** cited を渡すと、引用された出典番号のエントリだけを残す（番号は元のまま維持）。 */
+  toCitationMap(cited?: Set<number>): CitationMap {
     const map: CitationMap = {};
-    this.order.forEach((c, i) => { map[i + 1] = { sourceId: c.documentId, sectionId: c.chunkId }; });
+    this.order.forEach((c, i) => {
+      const n = i + 1;
+      if (cited && !cited.has(n)) return;
+      map[n] = { sourceId: c.documentId, sectionId: c.chunkId };
+    });
     return map;
   }
 

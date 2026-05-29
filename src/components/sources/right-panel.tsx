@@ -44,6 +44,33 @@ function SourceIcon({ type }: { type: SourceType }) {
 
 const iconBtn = "grid h-[26px] w-[26px] place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg";
 
+const proseCls = "whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2";
+
+/**
+ * セクション本文を描画する。本文は素のテキスト・HTMLテーブル・その混在
+ * （expandedText 由来で見出し＋表が連結されるケース）を取りうるため、
+ * <table>…</table> ブロックを切り出して表として描画し、残りはテキストにする。
+ */
+function SectionBody({ body }: { body: string }) {
+  const parts: React.ReactNode[] = [];
+  const re = /<table[\s\S]*?<\/table>/gi;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  const pushText = (raw: string) => {
+    const text = raw.trim();
+    if (text) parts.push(<div key={key++} className={proseCls}>{text}</div>);
+  };
+  while ((m = re.exec(body)) !== null) {
+    pushText(body.slice(last, m.index));
+    parts.push(<HtmlTable key={key++} html={m[0]} className="my-1" />);
+    last = m.index + m[0].length;
+  }
+  pushText(body.slice(last));
+  if (parts.length === 0) return <div className={proseCls}>{body}</div>;
+  return <div className="flex flex-col gap-1.5">{parts}</div>;
+}
+
 export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
@@ -205,11 +232,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
                 </div>
               )}
               <h3 className="mb-1.5 text-[12.5px] font-bold tracking-[-0.005em] text-fg">{sec.heading}</h3>
-              {sec.blockType === "table" || sec.body.trimStart().startsWith("<table") ? (
-                <HtmlTable html={sec.body} />
-              ) : (
-                <div className="whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2">{sec.body}</div>
-              )}
+              <SectionBody body={sec.body} />
             </div>
           );
         })}
@@ -235,9 +258,11 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
           共有
         </button>
         <div className="flex-1 max-md:hidden" />
-        <span className="font-mono text-[11px] text-muted max-md:ml-auto">
-          関連度 <strong className="text-accent">0.94</strong>
-        </span>
+        {typeof active.score === "number" && (
+          <span className="font-mono text-[11px] text-muted max-md:ml-auto">
+            関連度 <strong className="text-accent">{active.score.toFixed(2)}</strong>
+          </span>
+        )}
       </div>
     </div>
   );

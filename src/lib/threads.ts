@@ -30,7 +30,7 @@ export interface SaveInput {
   citations: Array<{
     ordinal: number; documentId: string; documentTitle: string;
     chunkId: string; sectionId: string; headingPath: string; snippet: string;
-    blockType: string; page: number;
+    blockType: string; page: number; score: number | null;
   }>;
 }
 
@@ -145,6 +145,10 @@ function sourcesFromCitations(cites: Array<typeof citations.$inferSelect>): Sour
         id: c.sectionId, heading: c.headingPath, body: c.snippet,
         highlight: true, blockType: c.blockType, page: c.page,
       });
+    }
+    // 関連度は文書内チャンクの最大スコアを採用する（live 側 toSources と同じ規則）。
+    if (typeof c.score === "number") {
+      src.score = src.score === undefined ? c.score : Math.max(src.score, c.score);
     }
   }
   return [...byDoc.values()];
