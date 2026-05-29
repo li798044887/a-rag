@@ -97,7 +97,7 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
         </h1>
         <p className="m-0 mb-7 text-[14px] leading-[1.5] text-muted">
           {mode === "signin" && "社内SSOまたはメールでサインインしてください"}
-          {mode === "signup" && "7日間の無料トライアル・クレジットカード不要"}
+          {mode === "signup" && "メールアドレスとパスワードでアカウントを作成してください"}
           {mode === "reset" && "リセット用のリンクをメールで送信します"}
         </p>
 
