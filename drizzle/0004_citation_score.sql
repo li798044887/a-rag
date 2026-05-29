@@ -1,0 +1,1 @@
+ALTER TABLE "citations" ADD COLUMN "score" double precision;

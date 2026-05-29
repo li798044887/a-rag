@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, doublePrecision } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -47,6 +47,8 @@ export const citations = pgTable("citations", {
   snippet: text("snippet").notNull(),
   blockType: text("block_type").notNull().default("text"),
   page: integer("page").notNull().default(0),
+  /** 再ランクスコア(0–1)。fetch_document 由来など未取得なら null。 */
+  score: doublePrecision("score"),
 });
 
 export type ThreadRow = typeof threads.$inferSelect;

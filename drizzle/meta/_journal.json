@@ -29,6 +29,13 @@
       "when": 1780071071229,
       "tag": "0003_cold_toxin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780072655720,
+      "tag": "0004_citation_score",
+      "breakpoints": true
     }
   ]
 }
