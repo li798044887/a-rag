@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 from arq import create_pool
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import settings
@@ -12,6 +12,7 @@ from app.documents_service import (
 )
 from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
+from app.vectorstore.qdrant import QdrantStore
 from app.schemas import (
     DocumentListResponse, FetchDocumentRequest, FetchDocumentResponse, FetchedChunk, IngestStarted,
 )
@@ -123,6 +124,27 @@ async def retry_job(job_id: str, owner_user_id: str | None = None):
         session.close()
     await enqueue_ingest(result.document_id, result.job_id)
     return result
+
+
+@router.delete("/documents/{document_id}", status_code=204,
+               dependencies=[Depends(require_internal_token)])
+def delete_document(document_id: str, owner_user_id: str):
+    session = SessionLocal()
+    try:
+        doc = session.get(Document, document_id)
+        if not doc or doc.owner_user_id != owner_user_id:
+            raise HTTPException(status_code=404, detail="document not found")
+        raw_path = doc.raw_path
+        parsed_md_path = doc.parsed_md_path
+        QdrantStore().delete_by_document(document_id)
+        session.query(Chunk).filter(Chunk.document_id == document_id).delete()
+        session.query(IngestJob).filter(IngestJob.document_id == document_id).delete()
+        session.delete(doc)
+        session.commit()
+    finally:
+        session.close()
+    cleanup_document_files(raw_path, parsed_md_path)
+    return Response(status_code=204)
 
 
 def _fetch_document(document_id: str, req: FetchDocumentRequest) -> FetchDocumentResponse:
