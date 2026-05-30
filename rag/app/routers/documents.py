@@ -177,9 +177,33 @@ def fetch_document_chunks(document_id: str, req: FetchDocumentRequest):
     return _fetch_document(document_id, req)
 
 
+def _preview_document(document_id: str, owner_user_id: str) -> FetchDocumentResponse:
+    session = SessionLocal()
+    try:
+        doc = session.get(Document, document_id)
+        if not doc or doc.owner_user_id != owner_user_id:
+            raise HTTPException(status_code=404, detail="document not found")
+        rows = (session.query(Chunk)
+                .filter(Chunk.document_id == document_id)
+                .order_by(Chunk.ordinal).all())
+        return FetchDocumentResponse(
+            document_id=doc.id, document_title=doc.filename,
+            chunks=[FetchedChunk(chunk_id=c.id, ordinal=c.ordinal, heading_path=c.heading_path,
+                                 page_start=c.page_start, page_end=c.page_end,
+                                 block_type=c.block_type, text=c.text) for c in rows])
+    finally:
+        session.close()
+
+
+@router.get("/documents/{document_id}/preview", response_model=FetchDocumentResponse,
+            dependencies=[Depends(require_internal_token)])
+def preview_document(document_id: str, owner_user_id: str):
+    return _preview_document(document_id, owner_user_id)
+
+
 @router.get("/documents/{document_id}/raw",
             dependencies=[Depends(require_internal_token)])
-def get_document_raw(document_id: str, owner_user_id: str):
+def get_document_raw(document_id: str, owner_user_id: str, download: bool = False):
     session = SessionLocal()
     try:
         doc = session.get(Document, document_id)
@@ -196,7 +220,7 @@ def get_document_raw(document_id: str, owner_user_id: str):
         str(raw_path),
         media_type=mime or "application/octet-stream",
         filename=filename,
-        content_disposition_type="inline",
+        content_disposition_type="attachment" if download else "inline",
     )
 
 
