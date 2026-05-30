@@ -7,13 +7,35 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.db import SessionLocal
-from app.documents_service import assets_dir_for, resolve_within, select_chunks
+from app.documents_service import (
+    assets_dir_for, cleanup_document_files, list_documents, resolve_within, select_chunks,
+)
 from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
-from app.schemas import FetchDocumentRequest, FetchDocumentResponse, FetchedChunk, IngestStarted
+from app.schemas import (
+    DocumentListResponse, FetchDocumentRequest, FetchDocumentResponse, FetchedChunk, IngestStarted,
+)
 from app.security import require_internal_token
 
 router = APIRouter()
+
+
+def _list_documents(owner_user_id: str, limit: int, cursor: str | None,
+                    q: str | None, status: str | None) -> DocumentListResponse:
+    session = SessionLocal()
+    try:
+        return list_documents(session, owner_user_id=owner_user_id, limit=limit,
+                              cursor=cursor, q=q, status=status)
+    finally:
+        session.close()
+
+
+@router.get("/documents", response_model=DocumentListResponse,
+            dependencies=[Depends(require_internal_token)])
+def list_documents_endpoint(owner_user_id: str, limit: int = 30,
+                            cursor: str | None = None, q: str | None = None,
+                            status: str | None = None):
+    return _list_documents(owner_user_id, min(max(limit, 1), 100), cursor, q, status)
 
 
 def _upload_dir() -> Path:
