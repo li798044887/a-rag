@@ -120,7 +120,10 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
             ),
             blockType: c.blockType, page: c.pageStart, score: c.score,
           });
-          return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${c.expandedText || c.text}`;
+          // LLM 向け本文も画像URLを絶対化する。回答にインライン表示された画像が
+          // そのまま描画可能（相対パスのままだと描画されない／壊れる）になるため。
+          const body = resolveImageUrls(c.expandedText || c.text, c.documentId);
+          return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${body}`;
         });
         meta.set(toolCallId, { name: "retrieve", input: { query },
           summary: `「${query}」→ ${chunks.length} 件` });
@@ -149,7 +152,9 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
             headingPath: c.headingPath, snippet: resolveImageUrls(c.text, doc.documentId),
             blockType: c.blockType, page: c.pageStart,
           });
-          return `[${n}] ${doc.documentTitle} — ${c.headingPath}\n${c.text}`;
+          // LLM 向け本文も画像URLを絶対化（インライン表示の画像を描画可能にする）。
+          const body = resolveImageUrls(c.text, doc.documentId);
+          return `[${n}] ${doc.documentTitle} — ${c.headingPath}\n${body}`;
         });
         meta.set(toolCallId, { name: "fetch_document",
           input: { ref, document: doc.documentTitle },
