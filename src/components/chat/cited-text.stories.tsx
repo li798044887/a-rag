@@ -36,3 +36,27 @@ export const Chip: Story = { args: { citationStyle: "chip" } };
 
 /** ピルスタイルの引用。 */
 export const Pill: Story = { args: { citationStyle: "pill" } };
+
+/**
+ * インライン画像。自社アセット(/api/documents/...)は <img> として描画し、
+ * 外部 URL はセキュリティ上テキストのまま（描画しない）ことを検証する。
+ */
+export const InlineImage: Story = {
+  args: {
+    text:
+      "以下の図面を示します。\n" +
+      "![冷却ライン図](/api/documents/d1/assets/images/x.jpg)\n" +
+      "外部画像は描画しません。\n" +
+      "![外部](https://evil.example/track.jpg)",
+    citationStyle: "numbered",
+  },
+  play: async ({ canvasElement }) => {
+    const imgs = Array.from(canvasElement.querySelectorAll("img"));
+    // 自社アセットは <img> として存在する（読み込み成否に関わらずマウントされる）。
+    await expect(imgs.some((i) => (i.getAttribute("src") ?? "").includes("/api/documents/d1/assets/images/x.jpg"))).toBe(true);
+    // 外部 URL は <img> 化されない。
+    await expect(imgs.some((i) => (i.getAttribute("src") ?? "").startsWith("http"))).toBe(false);
+    // 外部画像の alt はテキストとして表示される。
+    await expect(canvasElement.textContent).toContain("外部");
+  },
+};
