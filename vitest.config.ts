@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 import { loadEnv } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 import { playwright } from "@vitest/browser-playwright";
 import { storybookTest } from "@storybook/addon-vitest/vitest-plugin";
 
@@ -9,7 +8,8 @@ export default defineConfig(({ mode }) => ({
     projects: [
       {
         // 既存のユニット/DB テスト（node 環境）。`pnpm test` のデフォルト対象。
-        plugins: [tsconfigPaths()],
+        // `@/` エイリアスは Vite ネイティブの tsconfig paths 解決を使う。
+        resolve: { tsconfigPaths: true },
         test: {
           name: "unit",
           environment: "node",
@@ -22,7 +22,8 @@ export default defineConfig(({ mode }) => ({
       {
         // Storybook の Story をブラウザ上で実行する（play 関数 = インタラクションテスト）。
         // preview.tsx の注釈は @storybook/addon-vitest が自動適用する。
-        plugins: [tsconfigPaths(), storybookTest({ configDir: ".storybook" })],
+        resolve: { tsconfigPaths: true },
+        plugins: [storybookTest({ configDir: ".storybook" })],
         test: {
           name: "storybook",
           browser: {

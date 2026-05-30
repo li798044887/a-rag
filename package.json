@@ -54,7 +54,6 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "8.0.14",
-    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.7"
   },
   "packageManager": "pnpm@9.13.0",

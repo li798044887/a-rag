@@ -10,11 +10,9 @@ const config: StorybookConfig = {
   },
   // MSW の Service Worker（public/mockServiceWorker.js）を配信する。
   staticDirs: ["../public"],
-  // `@/` エイリアスを tsconfig の paths から解決する（next 非依存で動かすため）。
+  // `@/` エイリアスは Vite ネイティブの tsconfig paths 解決を使う（next 非依存で動かすため）。
   viteFinal: async (cfg) => {
-    const { default: tsconfigPaths } = await import("vite-tsconfig-paths");
-    cfg.plugins = cfg.plugins ?? [];
-    cfg.plugins.push(tsconfigPaths());
+    cfg.resolve = { ...cfg.resolve, tsconfigPaths: true };
     return cfg;
   },
 };
