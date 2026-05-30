@@ -1,6 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { retrieveChunksStream, fetchDocument, type RetrieveStageEvent } from "@/lib/agent/retrieve-client";
+import { resolveImageUrls } from "@/lib/agent/image-urls";
 import { CitationRegistry } from "@/lib/agent/citations";
 import { StepBus } from "@/lib/agent/step-bus";
 import type { AgentEvent, ToolName } from "@/lib/types";
@@ -113,7 +114,10 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
             // 表は HTML をそのまま描画するため text を維持。文章は前後文脈込みの
             // expandedText を優先する（見出しだけのチャンクが引用箇所になる問題への対策）。
             headingPath: c.headingPath,
-            snippet: c.blockType === "table" ? c.text : (c.expandedText || c.text),
+            snippet: resolveImageUrls(
+              c.blockType === "table" ? c.text : (c.expandedText || c.text),
+              c.documentId,
+            ),
             blockType: c.blockType, page: c.pageStart, score: c.score,
           });
           return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${c.expandedText || c.text}`;
@@ -142,7 +146,7 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
         const lines = doc.chunks.map((c) => {
           const n = registry.register({
             documentId: doc.documentId, documentTitle: doc.documentTitle, chunkId: c.chunkId,
-            headingPath: c.headingPath, snippet: c.text,
+            headingPath: c.headingPath, snippet: resolveImageUrls(c.text, doc.documentId),
             blockType: c.blockType, page: c.pageStart,
           });
           return `[${n}] ${doc.documentTitle} — ${c.headingPath}\n${c.text}`;
