@@ -85,7 +85,10 @@ def chunk_blocks(
         elif block.type == "equation":
             payload = block.latex or block.text
         else:  # image
-            payload = block.caption or block.text or "[image]"
+            if block.image_path:
+                payload = f"![{block.caption or ''}]({block.image_path})"
+            else:
+                payload = block.caption or block.text or "[image]"
         parts = []
         if block.caption and block.type != "image":
             parts.append(block.caption)
