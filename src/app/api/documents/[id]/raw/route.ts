@@ -4,14 +4,15 @@ import { ragFetch } from "@/lib/rag-client";
 
 export const runtime = "nodejs";
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const claims = await getSessionClaims();
   if (!claims) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { id } = await ctx.params;
+  const download = new URL(req.url).searchParams.get("download") === "1" ? "&download=1" : "";
   const res = await ragFetch(
-    `/documents/${encodeURIComponent(id)}/raw?owner_user_id=${encodeURIComponent(claims.sub)}`,
+    `/documents/${encodeURIComponent(id)}/raw?owner_user_id=${encodeURIComponent(claims.sub)}${download}`,
   );
   if (!res.ok || !res.body) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
