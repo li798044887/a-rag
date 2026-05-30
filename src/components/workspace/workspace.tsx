@@ -10,6 +10,7 @@ import { HelpModal } from "@/components/modals/help-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { ShareModal } from "@/components/modals/share-modal";
 import { RightPanel, type RightPanelAction } from "@/components/sources/right-panel";
+import { usePanelWidth } from "@/components/workspace/use-panel-width";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { DropOverlay } from "@/components/uploads/uploads";
 import { MODELS, SCOPE_PRESETS } from "@/lib/data";
@@ -44,6 +45,7 @@ export function Workspace() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [autoOpened, setAutoOpened] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [panelWidth, handleResizeWidth] = usePanelWidth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。
@@ -529,10 +531,11 @@ export function Workspace() {
         "grid-cols-[1fr]",
         "tablet:grid-cols-[260px_minmax(0,1fr)] tablet:data-[sb=collapsed]:grid-cols-[48px_minmax(0,1fr)]",
         "wide:grid-cols-[260px_minmax(0,1fr)] wide:data-[sb=collapsed]:grid-cols-[48px_minmax(0,1fr)]",
-        "wide:data-[rp=open]:grid-cols-[260px_minmax(0,1fr)_420px] wide:data-[sb=collapsed]:data-[rp=open]:grid-cols-[48px_minmax(0,1fr)_420px]",
+        "wide:data-[rp=open]:grid-cols-[260px_minmax(0,1fr)_var(--rp-width)] wide:data-[sb=collapsed]:data-[rp=open]:grid-cols-[48px_minmax(0,1fr)_var(--rp-width)]",
       )}
       data-sb={sidebarCollapsed ? "collapsed" : "open"}
       data-rp={rightPanelShown ? "open" : "closed"}
+      style={{ ["--rp-width" as string]: `${panelWidth}px` }}
     >
       <Sidebar
         collapsed={sidebarCollapsed}
@@ -710,6 +713,9 @@ export function Workspace() {
             setHighlightSectionId(null);
           }}
           onClose={() => setRightPanelOpen(false)}
+          resizable={isWide}
+          panelWidth={panelWidth}
+          onResizeWidth={handleResizeWidth}
           onAction={handleRPAction}
         />
       )}
