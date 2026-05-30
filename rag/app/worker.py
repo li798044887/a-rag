@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 from pathlib import Path
 from typing import Callable
 
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.chunking.chunker import chunk_blocks
 from app.db import SessionLocal
+from app.documents_service import assets_dir_for
 from app.embedding.base import Embedder
 from app.embedding.factory import get_embedder
 from app.models import Chunk, Document, IngestJob
@@ -24,6 +26,21 @@ def _set(job: IngestJob, doc: Document, session: Session, *,
     job.stage_detail = detail
     doc.status = status if status in ("ready", "error") else "processing"
     session.commit()
+
+
+def _copy_assets(parsed: ParsedDocument, raw_path: str) -> None:
+    """MinerU が出力した images/ を、文書ごとの安定ディレクトリへ複製する。
+    再実行時は作り直す（冪等）。画像が無ければ何もしない。"""
+    if not parsed.images_dir:
+        return
+    src = Path(parsed.images_dir) / "images"
+    if not src.is_dir():
+        return
+    dst = Path(assets_dir_for(raw_path)) / "images"
+    if dst.exists():
+        shutil.rmtree(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dst)
 
 
 def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
@@ -45,6 +62,7 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
         out_dir = str(Path(doc.raw_path).with_suffix("")) + "_mineru"
         parsed = parse_fn(doc.raw_path, out_dir)
         doc.page_count = parsed.page_count
+        _copy_assets(parsed, doc.raw_path)
 
         _set(job, doc, session, status="chunking", progress=40, detail="チャンク化")
         chunks = chunk_blocks(parsed.blocks)
@@ -57,8 +75,11 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
             rows.append((row, ch))
         session.flush()
 
+        # 画像チャンクは表示専用: PG には残すが埋め込み・Qdrant 索引からは除外する。
+        index_rows = [(row, ch) for row, ch in rows if ch.block_type != "image"]
+
         _set(job, doc, session, status="embedding", progress=70, detail="埋め込み生成")
-        texts = [f"{ch.heading_path}\n\n{ch.text}".strip() for _, ch in rows]
+        texts = [f"{ch.heading_path}\n\n{ch.text}".strip() for _, ch in index_rows]
         vectors = embedder.embed(texts) if texts else []
 
         _set(job, doc, session, status="indexing", progress=90, detail="索引化")
@@ -69,7 +90,7 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
                 "block_type": ch.block_type, "source_type": "doc", "text": ch.text,
                 "vector": vectors[i],
             }
-            for i, (row, ch) in enumerate(rows)
+            for i, (row, ch) in enumerate(index_rows)
         ])
 
         _set(job, doc, session, status="ready", progress=100, detail="完了")

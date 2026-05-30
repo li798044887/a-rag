@@ -32,3 +32,34 @@ export const SecondSource: Story = {
     highlightSectionId: null,
   },
 };
+
+const TINY_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+/** 一次資料に markdown 画像が含まれるケース（実画像が描画される）。 */
+export const WithImage: Story = {
+  args: {
+    sources: [
+      {
+        id: "img-doc",
+        type: "doc",
+        title: "05-image-grounding-cooling-line.pdf",
+        path: "05-image-grounding-cooling-line.pdf",
+        author: "",
+        date: "",
+        sections: [
+          {
+            id: "sec-img",
+            heading: "冷却ライン CL-2 異常報告",
+            body: `T2 と F1 の同時異常を一次対応する。\n![冷却ライン図](${TINY_PNG})\n一次対応 V-12 が固着している場合は交換する。`,
+            highlight: true,
+            blockType: "image",
+            page: 0,
+          },
+        ],
+      },
+    ],
+    activeSourceId: "img-doc",
+    highlightSectionId: "sec-img",
+  },
+};

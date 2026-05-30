@@ -66,3 +66,28 @@ def test_long_text_splits_on_sentence_boundary_with_overlap():
         assert c.text.rstrip().endswith("。")
     # オーバーラップ: 隣接チャンクが 1 文を共有
     assert chunks[0].text.split("。")[-2] + "。" in chunks[1].text
+
+
+def test_image_with_path_becomes_markdown_image():
+    blocks = [
+        title("図", 1),
+        ParsedBlock(type="image", image_path="images/a.jpg", caption="冷却図", page=3),
+    ]
+    chunks = chunk_blocks(blocks, target_tokens=1000)
+    assert len(chunks) == 1
+    c = chunks[0]
+    assert c.block_type == "image"
+    assert c.text == "![冷却図](images/a.jpg)"
+    assert c.page_start == 3 and c.page_end == 3
+
+
+def test_image_without_caption_has_empty_alt():
+    blocks = [ParsedBlock(type="image", image_path="images/b.png", page=0)]
+    chunks = chunk_blocks(blocks, target_tokens=1000)
+    assert chunks[0].text == "![](images/b.png)"
+
+
+def test_image_without_path_falls_back_to_placeholder():
+    blocks = [ParsedBlock(type="image", caption=None, page=0)]
+    chunks = chunk_blocks(blocks, target_tokens=1000)
+    assert chunks[0].text == "[image]"

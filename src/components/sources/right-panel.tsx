@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { HtmlTable } from "@/components/sources/html-table";
 import { PanelResizer } from "@/components/sources/panel-resizer";
+import { parseSectionBody } from "@/components/sources/parse-section-body";
 import type { CitationMap, Source, SourceType } from "@/lib/types";
 
 export type RightPanelAction = "open-source" | "download" | "share";
@@ -51,28 +52,46 @@ const iconBtn = "grid h-[26px] w-[26px] place-items-center rounded-md border-0 b
 const proseCls = "whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2";
 
 /**
- * セクション本文を描画する。本文は素のテキスト・HTMLテーブル・その混在
- * （expandedText 由来で見出し＋表が連結されるケース）を取りうるため、
- * <table>…</table> ブロックを切り出して表として描画し、残りはテキストにする。
+ * セクション本文を描画する。本文は素のテキスト・HTMLテーブル・markdown 画像の混在を
+ * 取りうる（expandedText 由来で見出し＋表が連結される等）。parseSectionBody で
+ * 順序付きセグメントへ分割し、種類ごとに描画する。
  */
-function SectionBody({ body }: { body: string }) {
-  const parts: React.ReactNode[] = [];
-  const re = /<table[\s\S]*?<\/table>/gi;
-  let last = 0;
-  let key = 0;
-  let m: RegExpExecArray | null;
-  const pushText = (raw: string) => {
-    const text = raw.trim();
-    if (text) parts.push(<div key={key++} className={proseCls}>{text}</div>);
-  };
-  while ((m = re.exec(body)) !== null) {
-    pushText(body.slice(last, m.index));
-    parts.push(<HtmlTable key={key++} html={m[0]} className="my-1" />);
-    last = m.index + m[0].length;
+function SectionImage({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="rounded-[8px] border-[0.5px] border-divider bg-surface-2 px-3 py-4 text-center text-[11.5px] text-muted">
+        画像を読み込めませんでした{alt ? `（${alt}）` : ""}
+      </div>
+    );
   }
-  pushText(body.slice(last));
-  if (parts.length === 0) return <div className={proseCls}>{body}</div>;
-  return <div className="flex flex-col gap-1.5">{parts}</div>;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- 認証付き動的アセットのため next/image は使わない
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="my-1 max-w-full rounded-[8px] border-[0.5px] border-divider"
+    />
+  );
+}
+
+function SectionBody({ body }: { body: string }) {
+  const segs = parseSectionBody(body);
+  if (segs.length === 0) return <div className={proseCls}>{body}</div>;
+  if (segs.length === 1 && segs[0].kind === "text") {
+    return <div className={proseCls}>{segs[0].text}</div>;
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      {segs.map((s, i) => {
+        if (s.kind === "table") return <HtmlTable key={i} html={s.html} className="my-1" />;
+        if (s.kind === "image") return <SectionImage key={i} src={s.src} alt={s.alt} />;
+        return <div key={i} className={proseCls}>{s.text}</div>;
+      })}
+    </div>
+  );
 }
 
 export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction, resizable, panelWidth = 420, onResizeWidth }: Props) {

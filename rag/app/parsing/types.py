@@ -11,12 +11,14 @@ class ParsedBlock:
     html: str | None = None   # table の HTML
     latex: str | None = None  # equation の LaTeX
     caption: str | None = None  # table/image のキャプション
+    image_path: str | None = None  # image の相対パス（例 "images/x.jpg"）
 
 
 @dataclass
 class ParsedDocument:
     blocks: list[ParsedBlock]
     page_count: int
+    images_dir: str | None = None  # MinerU が画像を書き出したディレクトリ（images/ の親）
 
 
 @dataclass
