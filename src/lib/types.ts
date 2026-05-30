@@ -159,6 +159,42 @@ export interface StagedFile {
   jobId?: string;
 }
 
+// ── Documents (管理) ────────────────────────────────────────────────────────
+export interface DocumentSummary {
+  id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  page_count: number | null;
+  status: string;
+  created_at: string;
+  chunk_count: number;
+  latest_job_id: string | null;
+  error: string | null;
+}
+
+export interface DocumentListResponse {
+  items: DocumentSummary[];
+  next_cursor: string | null;
+  total: number;
+}
+
+export interface DocumentPreviewChunk {
+  chunk_id: string;
+  ordinal: number;
+  heading_path: string;
+  page_start: number;
+  page_end: number;
+  block_type: string;
+  text: string;
+}
+
+export interface DocumentPreview {
+  document_id: string;
+  document_title: string;
+  chunks: DocumentPreviewChunk[];
+}
+
 // ── Toasts ──────────────────────────────────────────────────────────────────
 export type ToastKind = "info" | "success" | "error";
 export interface Toast {
