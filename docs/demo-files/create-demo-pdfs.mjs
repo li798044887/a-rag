@@ -10,10 +10,10 @@ const { chromium } = require(path.resolve(__dirname, "../../node_modules/.pnpm/p
 const docs = [
   {
     file: "01-mineru-layout-report.pdf",
-    title: "MinerU 前処理デモ用: レイアウト混在レポート",
+    title: "設備保全AI導入レポート",
     html: `
       <section class="cover">
-        <p class="eyebrow">ARag Demo Fixture</p>
+        <p class="eyebrow">Suntech DX Office</p>
         <h1>設備保全AI導入レポート</h1>
         <p class="subtitle">表・図表キャプション・数式・階層見出しを含むPDF</p>
         <div class="meta">版: 2026-05-28 / 作成: サンテック DX推進室</div>
@@ -28,7 +28,7 @@ const docs = [
       <section>
         <h2>2. 対象ライン比較</h2>
         <table>
-          <caption>表1: PoC対象ラインの比較。MinerUで表ブロックとして抽出されることを想定。</caption>
+          <caption>表1: PoC対象ラインの比較</caption>
           <thead>
             <tr><th>ライン</th><th>月間停止時間</th><th>主要センサー</th><th>優先度</th><th>備考</th></tr>
           </thead>
@@ -63,12 +63,12 @@ const docs = [
   },
   {
     file: "02-agentic-rag-policy-handbook.pdf",
-    title: "Agentic RAG デモ用: 多段検索ポリシー",
+    title: "出張・購買・例外申請ハンドブック",
     html: `
       <section class="cover">
-        <p class="eyebrow">ARag Demo Fixture</p>
+        <p class="eyebrow">Suntech Administration</p>
         <h1>出張・購買・例外申請ハンドブック</h1>
-        <p class="subtitle">複数箇所の参照とフォローアップ質問を見せるための社内規程PDF</p>
+        <p class="subtitle">出張申請、購買申請、例外申請に関する社内規程</p>
         <div class="meta">施行日: 2026-04-01 / 改定: 2026-05-15</div>
       </section>
       <section>
@@ -107,10 +107,10 @@ const docs = [
   },
   {
     file: "03-version-conflict-faq.pdf",
-    title: "比較デモ用: 版差分FAQ",
+    title: "社内AI利用FAQ 改定履歴",
     html: `
       <section class="cover">
-        <p class="eyebrow">ARag Demo Fixture</p>
+        <p class="eyebrow">Suntech AI Governance</p>
         <h1>社内AI利用FAQ 改定履歴</h1>
         <p class="subtitle">複数版の記述差分を比較させるためのPDF</p>
         <div class="meta">v1.3: 2026-03-01 / v1.4: 2026-05-20</div>
@@ -157,9 +157,25 @@ const css = `
   .page-break { break-before: page; }
 `;
 
-const browser = await chromium.launch({
-  executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-});
+const chromeCandidates = [
+  process.env.CHROME_PATH,
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+].filter(Boolean);
+
+let executablePath;
+for (const candidate of chromeCandidates) {
+  try {
+    await fs.access(candidate);
+    executablePath = candidate;
+    break;
+  } catch {
+    // try next
+  }
+}
+
+const browser = await chromium.launch(executablePath ? { executablePath } : {});
 try {
   const page = await browser.newPage();
   for (const doc of docs) {
@@ -175,7 +191,7 @@ try {
   }
   await fs.writeFile(
     path.join(__dirname, "README.md"),
-    `# ARag demo upload files\n\nGenerated PDF fixtures for tomorrow's demo.\n\n- 01-mineru-layout-report.pdf: table, equation, figure caption, headings. Use this to highlight MinerU preprocessing.\n- 02-agentic-rag-policy-handbook.pdf: multi-hop policy lookup and follow-up questions. Use this to highlight Agentic RAG.\n- 03-version-conflict-faq.pdf: version comparison and stricter/latest rule selection.\n`,
+    `# ARag upload files\n\n社内資料風に作成したPDF一式です。\n\n- 01-mineru-layout-report.pdf: 表、数式、図表キャプション、階層見出しを含む設備保全AI導入レポート。\n- 02-agentic-rag-policy-handbook.pdf: 出張、購買、例外申請を横断する社内規程。\n- 03-version-conflict-faq.pdf: 社内AI利用FAQの改定履歴。\n`,
     "utf8",
   );
 } finally {
