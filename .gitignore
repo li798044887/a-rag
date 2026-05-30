@@ -59,3 +59,4 @@ rag/__pycache__/
 # storybook
 /storybook-static
 /outputs
+/.playwright-mcp
