@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.db import SessionLocal
-from app.documents_service import select_chunks
+from app.documents_service import assets_dir_for, resolve_within, select_chunks
 from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
 from app.schemas import FetchDocumentRequest, FetchDocumentResponse, FetchedChunk, IngestStarted
@@ -154,3 +154,20 @@ def get_document_raw(document_id: str, owner_user_id: str):
         filename=filename,
         content_disposition_type="inline",
     )
+
+
+@router.get("/documents/{document_id}/assets/{asset_path:path}",
+            dependencies=[Depends(require_internal_token)])
+def get_document_asset(document_id: str, asset_path: str, owner_user_id: str):
+    session = SessionLocal()
+    try:
+        doc = session.get(Document, document_id)
+        if not doc or doc.owner_user_id != owner_user_id:
+            raise HTTPException(status_code=404, detail="document not found")
+        raw_path = doc.raw_path
+    finally:
+        session.close()
+    target = resolve_within(assets_dir_for(raw_path), asset_path)
+    if target is None or not target.is_file():
+        raise HTTPException(status_code=404, detail="asset not found")
+    return FileResponse(str(target))
