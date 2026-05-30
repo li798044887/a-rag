@@ -34,14 +34,23 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
 
   // 選択文書のプレビュー（全チャンク）を取得。
   useEffect(() => {
-    if (!selectedId) { setPreview(null); return; }
-    setPreviewLoading(true);
-    setPreview(null);
-    fetch(`/api/documents/${encodeURIComponent(selectedId)}/preview`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setPreview(j))
-      .catch(() => setPreview(null))
-      .finally(() => setPreviewLoading(false));
+    if (!selectedId) return;
+    let cancelled = false;
+    const run = async () => {
+      setPreviewLoading(true);
+      setPreview(null);
+      try {
+        const r = await fetch(`/api/documents/${encodeURIComponent(selectedId)}/preview`);
+        const j = r.ok ? await r.json() : null;
+        if (!cancelled) setPreview(j);
+      } catch {
+        if (!cancelled) setPreview(null);
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    };
+    void run();
+    return () => { cancelled = true; };
   }, [selectedId]);
 
   const images = useMemo(() => {
@@ -69,8 +78,10 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] grid place-items-center bg-[rgba(20,18,15,0.55)] p-4 backdrop-blur-[3px]" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] grid animate-[ar-fade-up_0.12s_ease-out] place-items-center bg-[rgba(20,18,15,0.55)] p-4 backdrop-blur-[3px]" onClick={onClose}>
       <div
+        role="dialog"
+        aria-labelledby="documents-modal-title"
         className="flex h-[88vh] w-[90vw] max-w-[1180px] flex-col overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-e3 max-md:h-[92vh] max-md:w-full"
         onClick={(e) => e.stopPropagation()}
       >
@@ -78,10 +89,10 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
         <div className="flex items-center justify-between border-b-[0.5px] border-divider px-4 py-3">
           <div className="flex items-center gap-2 text-[14px] font-bold text-fg">
             <Icon name="database" size={15} />
-            <span>データソース</span>
+            <span id="documents-modal-title">データソース</span>
             <span className="font-mono text-[11px] font-normal text-muted">{docs.total}件</span>
           </div>
-          <button className="grid h-7 w-7 place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
+          <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
             <svg viewBox="0 0 12 12" width="12" height="12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
           </button>
         </div>
