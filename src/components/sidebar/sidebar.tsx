@@ -22,6 +22,8 @@ interface SidebarProps {
   onAddToProject: (id: string) => void;
   dark: boolean;
   user: AppUser;
+  onOpenDataSources: () => void;
+  dataSourceCount: number;
 }
 
 const drawerBase =
@@ -36,6 +38,7 @@ export function Sidebar(props: SidebarProps) {
   const {
     collapsed, onToggle, threads, activeThreadId, onSelectThread, onNewChat,
     onRenameThread, onDeleteThread, onToggleStar, onAddToProject,
+    onOpenDataSources, dataSourceCount,
   } = props;
   const [filter, setFilter] = useState("");
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
@@ -184,7 +187,7 @@ export function Sidebar(props: SidebarProps) {
           </div>
           <CollectionItem icon="star" label="スター付き" count={String(pinned.length)} />
           <CollectionItem icon="folder" label="プロジェクト" count="4" />
-          <CollectionItem icon="database" label="データソース" count="8" />
+          <CollectionItem icon="database" label="データソース" count={String(dataSourceCount)} onClick={onOpenDataSources} />
         </div>
       </div>
 
@@ -405,9 +408,9 @@ function ThreadMenu({ thread, anchor, onClose, onStar, onRename, onAddProject, o
   );
 }
 
-function CollectionItem({ icon, label, count }: { icon: "star" | "folder" | "database"; label: string; count: string }) {
+function CollectionItem({ icon, label, count, onClick }: { icon: "star" | "folder" | "database"; label: string; count: string; onClick?: () => void }) {
   return (
-    <button className="my-px flex w-full items-center gap-2 rounded-md bg-transparent px-2 py-1.5 text-left text-[12.5px] text-fg-2 hover:bg-divider">
+    <button onClick={onClick} className="my-px flex w-full items-center gap-2 rounded-md bg-transparent px-2 py-1.5 text-left text-[12.5px] text-fg-2 hover:bg-divider">
       <span className="w-4 text-center">
         <Icon name={icon} size={13} />
       </span>

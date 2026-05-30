@@ -28,6 +28,8 @@ const meta = {
     onDeleteThread: fn(),
     onToggleStar: fn(),
     onAddToProject: fn(),
+    onOpenDataSources: fn(),
+    dataSourceCount: 8,
   },
 } satisfies Meta<typeof Sidebar>;
 

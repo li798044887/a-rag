@@ -6,6 +6,7 @@ import { Composer } from "@/components/chat/composer";
 import { EmptyState } from "@/components/chat/empty-state";
 import { Transcript } from "@/components/chat/messages";
 import { ToastViewport } from "@/components/feedback/toast-viewport";
+import { DocumentsModal } from "@/components/documents/documents-modal";
 import { HelpModal } from "@/components/modals/help-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { ShareModal } from "@/components/modals/share-modal";
@@ -48,6 +49,16 @@ export function Workspace() {
   const [panelWidth, handleResizeWidth] = usePanelWidth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [dataSourceCount, setDataSourceCount] = useState(0);
+
+  const refreshDataSourceCount = useCallback(() => {
+    fetch("/api/documents?limit=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j) setDataSourceCount(j.total); })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { refreshDataSourceCount(); }, [refreshDataSourceCount]);
   // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。
   const [model, setModel] = useState<ModelOption>(() => {
     if (typeof window === "undefined") return MODELS[0];
@@ -552,6 +563,8 @@ export function Workspace() {
         onDeleteThread={deleteThread}
         onToggleStar={toggleStar}
         onAddToProject={addToProject}
+        onOpenDataSources={() => setDocumentsOpen(true)}
+        dataSourceCount={dataSourceCount}
         dark={tweaks.dark}
         user={user}
       />
@@ -732,6 +745,12 @@ export function Workspace() {
       />
 
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <DocumentsModal
+        open={documentsOpen}
+        onClose={() => { setDocumentsOpen(false); refreshDataSourceCount(); }}
+        onChanged={refreshDataSourceCount}
+        onToast={push}
+      />
       <ShareModal
         open={!!shareTarget}
         item={shareTarget?.item ?? null}
