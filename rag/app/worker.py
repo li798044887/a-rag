@@ -105,8 +105,21 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
 async def ingest_document(ctx: dict, document_id: str, job_id: str) -> None:
     session = SessionLocal()
     try:
-        embedder = get_embedder()
-        store = QdrantStore(dim=embedder.dim)
+        # モデル/ストア初期化は run_ingest の外なので、ここで失敗すると job が
+        # queued のまま残り UI にエラーが出ない。失敗を job/doc に記録してから再送出する。
+        try:
+            embedder = get_embedder()
+            store = QdrantStore(dim=embedder.dim)
+        except Exception as exc:  # noqa: BLE001
+            job = session.get(IngestJob, job_id)
+            doc = session.get(Document, document_id)
+            if job:
+                job.status = "error"
+                job.error = str(exc)
+            if doc:
+                doc.status = "error"
+            session.commit()
+            raise
         await asyncio.to_thread(
             run_ingest, session, store, embedder, mineru_parse, document_id, job_id
         )

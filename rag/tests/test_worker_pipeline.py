@@ -1,12 +1,14 @@
 import uuid
 from pathlib import Path
 
+import pytest
+
 from app.db import SessionLocal
 from app.models import Chunk, Document, IngestJob
 from app.parsing.types import ParsedBlock, ParsedDocument
 from app.embedding.factory import StubEmbedder
 from app.vectorstore.qdrant import QdrantStore
-from app.worker import run_ingest
+from app.worker import ingest_document, run_ingest
 
 COLL = "test_ingest_" + uuid.uuid4().hex[:8]
 
@@ -105,3 +107,39 @@ def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path):
     assert copied.is_file()
 
     _cleanup(session, store, doc.id, job.id)
+
+
+async def test_ingest_document_marks_error_when_model_setup_fails(monkeypatch):
+    """run_ingest 到達前（モデル/ストア初期化）の失敗も job/doc を error にする。
+    これがないとジョブは queued のまま残り、UI にエラーが出ない。"""
+    session = SessionLocal()
+    doc = Document(owner_user_id="u1", filename="x.pdf", mime="application/pdf",
+                   size=10, raw_path="/tmp/x.pdf", status="queued")
+    session.add(doc)
+    session.flush()
+    job = IngestJob(document_id=doc.id, owner_user_id="u1", status="queued")
+    session.add(job)
+    session.commit()
+    doc_id, job_id = doc.id, job.id
+    session.close()
+
+    def boom():
+        raise RuntimeError("model download failed")
+
+    monkeypatch.setattr("app.worker.get_embedder", boom)
+
+    with pytest.raises(RuntimeError):
+        await ingest_document({}, doc_id, job_id)
+
+    check = SessionLocal()
+    try:
+        j = check.get(IngestJob, job_id)
+        d = check.get(Document, doc_id)
+        assert j.status == "error"
+        assert "model download failed" in (j.error or "")
+        assert d.status == "error"
+    finally:
+        check.query(IngestJob).filter_by(id=job_id).delete()
+        check.query(Document).filter_by(id=doc_id).delete()
+        check.commit()
+        check.close()
