@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -60,3 +62,22 @@ class FetchDocumentResponse(BaseModel):
     document_id: str
     document_title: str
     chunks: list[FetchedChunk]
+
+
+class DocumentListItem(BaseModel):
+    id: str
+    filename: str
+    mime: str
+    size: int
+    page_count: int | None = None
+    status: str
+    created_at: datetime
+    chunk_count: int
+    latest_job_id: str | None = None
+    error: str | None = None
+
+
+class DocumentListResponse(BaseModel):
+    items: list[DocumentListItem]
+    next_cursor: str | None = None
+    total: int

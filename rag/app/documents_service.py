@@ -1,6 +1,8 @@
 """文書チャンクの選択ロジック（窓掛け・上限）。DB I/O は含まない純関数。"""
 
+import base64
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 MAX_CHUNKS = 40
@@ -43,3 +45,16 @@ def resolve_within(base: str, rel: str) -> Path | None:
     except ValueError:
         return None
     return target
+
+
+def encode_cursor(created_at: datetime, doc_id: str) -> str:
+    """created_at と doc_id を base64url エンコードした opaque cursor として返す。"""
+    raw = f"{created_at.isoformat()}|{doc_id}".encode()
+    return base64.urlsafe_b64encode(raw).decode()
+
+
+def decode_cursor(cursor: str) -> tuple[datetime, str]:
+    """opaque cursor をデコードして (created_at, doc_id) タプルを返す。"""
+    raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+    ts, doc_id = raw.split("|", 1)
+    return datetime.fromisoformat(ts), doc_id
