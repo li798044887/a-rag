@@ -72,6 +72,23 @@ export class CitationRegistry {
     return map;
   }
 
+  /**
+   * 引用集合 cited に、引用された文書に属する画像チャンクの番号を加えて返す。
+   * 画像は本文で [n] 参照されにくい（回答にはインライン画像として出る）が、
+   * 引用文書の図版は一次資料パネルに出すべきため、文書単位で取り込む。
+   */
+  withDocumentImages(cited: Set<number>): Set<number> {
+    const citedDocs = new Set<string>();
+    this.order.forEach((c, i) => {
+      if (cited.has(i + 1)) citedDocs.add(c.documentId);
+    });
+    const expanded = new Set(cited);
+    this.order.forEach((c, i) => {
+      if (c.blockType === "image" && citedDocs.has(c.documentId)) expanded.add(i + 1);
+    });
+    return expanded;
+  }
+
   get size(): number {
     return this.order.length;
   }

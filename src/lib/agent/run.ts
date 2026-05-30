@@ -176,7 +176,8 @@ async function pump(
     // 回答本文に実際に出現した出典番号 [n] だけをパネル/引用へ採用する。
     // 1件も引用が無い回答（要約のみ・エラー時など）は従来どおり全件にフォールバック。
     const citedNums = new Set([...answer.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
-    const filter = citedNums.size > 0 ? citedNums : undefined;
+    // 引用文書の図版（画像チャンク）は本文で [n] 参照されにくいので、文書単位で取り込む。
+    const filter = citedNums.size > 0 ? registry.withDocumentImages(citedNums) : undefined;
     const sources = registry.toSources(filter);
     bus.push({
       type: "done",

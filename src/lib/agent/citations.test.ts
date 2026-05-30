@@ -103,3 +103,38 @@ describe("引用フィルタ（実際に引用された出典のみ採用）", (
     expect(seed().toSources().map((s) => s.id)).toEqual(["d1", "d2"]);
   });
 });
+
+describe("withDocumentImages（引用文書の図版をパネルに含める）", () => {
+  const seed = () => {
+    const reg = new CitationRegistry();
+    // [1] d1 text, [2] d1 image, [3] d2 text, [4] d2 image
+    reg.register({ documentId: "d1", documentTitle: "A", chunkId: "c1",
+      headingPath: "h1", snippet: "本文", blockType: "text", page: 0 });
+    reg.register({ documentId: "d1", documentTitle: "A", chunkId: "img1",
+      headingPath: "図", snippet: "![](/api/documents/d1/assets/images/a.jpg)", blockType: "image", page: 0 });
+    reg.register({ documentId: "d2", documentTitle: "B", chunkId: "c2",
+      headingPath: "h2", snippet: "本文2", blockType: "text", page: 0 });
+    reg.register({ documentId: "d2", documentTitle: "B", chunkId: "img2",
+      headingPath: "図2", snippet: "![](/api/documents/d2/assets/images/b.jpg)", blockType: "image", page: 0 });
+    return reg;
+  };
+
+  it("引用文書(d1)の画像チャンクを cited に追加する", () => {
+    // text [1] のみ引用 → 同一文書の画像 [2] も含める。d2 は未引用なので [4] は含めない。
+    const expanded = seed().withDocumentImages(new Set([1]));
+    expect([...expanded].sort((a, b) => a - b)).toEqual([1, 2]);
+  });
+
+  it("拡張した集合を toSources に渡すと画像セクションがパネルに出る", () => {
+    const reg = seed();
+    const sources = reg.toSources(reg.withDocumentImages(new Set([1])));
+    expect(sources.map((s) => s.id)).toEqual(["d1"]);
+    expect(sources[0].sections.map((x) => x.id)).toEqual(["c1", "img1"]);
+  });
+
+  it("引用が無い文書の画像は追加しない", () => {
+    const expanded = seed().withDocumentImages(new Set([3]));
+    // d2 text [3] 引用 → d2 image [4] を追加、d1 は無関係
+    expect([...expanded].sort((a, b) => a - b)).toEqual([3, 4]);
+  });
+});
