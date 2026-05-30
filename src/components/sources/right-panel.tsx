@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { HtmlTable } from "@/components/sources/html-table";
+import { PanelResizer } from "@/components/sources/panel-resizer";
 import type { CitationMap, Source, SourceType } from "@/lib/types";
 
 export type RightPanelAction = "open-source" | "download" | "share";
@@ -16,6 +17,9 @@ interface Props {
   onSetActive: (id: string) => void;
   onClose: () => void;
   onAction: (kind: RightPanelAction, source: Source) => void;
+  resizable?: boolean;
+  panelWidth?: number;
+  onResizeWidth?: (px: number) => void;
 }
 
 function SourceIcon({ type }: { type: SourceType }) {
@@ -71,7 +75,7 @@ function SectionBody({ body }: { body: string }) {
   return <div className="flex flex-col gap-1.5">{parts}</div>;
 }
 
-export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction }: Props) {
+export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction, resizable, panelWidth = 420, onResizeWidth }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<"structured" | "pdf">("structured");
@@ -118,7 +122,8 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
   }
 
   return (
-    <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_auto_1fr_auto] overflow-hidden border-l-[0.5px] border-divider bg-bg-2 max-wide:fixed max-wide:inset-y-0 max-wide:right-0 max-wide:z-[60] max-wide:w-[min(440px,50vw)] max-wide:border-l-0 max-wide:shadow-[-8px_0_32px_rgba(0,0,0,0.16)] max-md:w-[min(440px,92vw)] wide:static wide:z-auto wide:w-auto wide:shadow-none">
+    <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_auto_1fr_auto] overflow-hidden border-l-[0.5px] border-divider bg-bg-2 relative max-wide:fixed max-wide:inset-y-0 max-wide:right-0 max-wide:z-[60] max-wide:w-[min(440px,50vw)] max-wide:border-l-0 max-wide:shadow-[-8px_0_32px_rgba(0,0,0,0.16)] max-md:w-[min(440px,92vw)] wide:z-auto wide:w-auto wide:shadow-none">
+      {resizable && onResizeWidth && <PanelResizer width={panelWidth} onWidth={onResizeWidth} />}
       {/* Head（+ どのターンの出典かを示す文脈ラベル）を 1 グリッドセルにまとめる。 */}
       <div>
         <div className="flex h-[52px] items-center justify-between border-b-[0.5px] border-divider px-4 max-md:px-3.5">
