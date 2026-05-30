@@ -31,7 +31,8 @@ def _block_from_item(item: dict) -> ParsedBlock | None:
     if btype == "equation":
         return ParsedBlock(type="equation", latex=item.get("text", ""), page=page)
     if btype == "image":
-        return ParsedBlock(type="image", caption=_join(item.get("img_caption")), page=page)
+        return ParsedBlock(type="image", image_path=item.get("img_path"),
+                           caption=_join(item.get("img_caption")), page=page)
     return ParsedBlock(type="text", text=item.get("text", ""), page=page)
 
 
@@ -57,4 +58,5 @@ def parse(file_path: str, out_dir: str) -> ParsedDocument:
     items = json.loads(content_list.read_text(encoding="utf-8"))
     blocks = [b for b in (_block_from_item(it) for it in items) if b is not None]
     page_count = max((b.page for b in blocks), default=0) + 1
-    return ParsedDocument(blocks=blocks, page_count=page_count)
+    return ParsedDocument(blocks=blocks, page_count=page_count,
+                          images_dir=str(content_list.parent))
