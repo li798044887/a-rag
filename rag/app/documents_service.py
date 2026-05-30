@@ -58,3 +58,61 @@ def decode_cursor(cursor: str) -> tuple[datetime, str]:
     raw = base64.urlsafe_b64decode(cursor.encode()).decode()
     ts, doc_id = raw.split("|", 1)
     return datetime.fromisoformat(ts), doc_id
+
+
+def list_documents(session, *, owner_user_id: str, limit: int = 30,
+                   cursor: str | None = None, q: str | None = None,
+                   status: str | None = None):
+    """所有者の文書一覧をキーセット・ページングで返す（chunk件数/最新ジョブを一括取得）。"""
+    from sqlalchemy import func, tuple_
+
+    from app.models import Chunk, Document, IngestJob
+    from app.schemas import DocumentListItem, DocumentListResponse
+
+    def _base():
+        q_ = session.query(Document).filter(Document.owner_user_id == owner_user_id)
+        if q:
+            q_ = q_.filter(Document.filename.ilike(f"%{q}%"))
+        if status:
+            q_ = q_.filter(Document.status == status)
+        return q_
+
+    total = _base().count()
+
+    page = _base().order_by(Document.created_at.desc(), Document.id.desc())
+    if cursor:
+        ts, cid = decode_cursor(cursor)
+        page = page.filter(tuple_(Document.created_at, Document.id) < (ts, cid))
+    docs = page.limit(limit + 1).all()
+    has_more = len(docs) > limit
+    docs = docs[:limit]
+
+    doc_ids = [d.id for d in docs]
+    counts = dict(
+        session.query(Chunk.document_id, func.count(Chunk.id))
+        .filter(Chunk.document_id.in_(doc_ids))
+        .group_by(Chunk.document_id)
+        .all()
+    ) if doc_ids else {}
+    latest_job: dict[str, object] = {}
+    if doc_ids:
+        for j in (session.query(IngestJob)
+                  .filter(IngestJob.document_id.in_(doc_ids))
+                  .order_by(IngestJob.created_at.desc())
+                  .all()):
+            latest_job.setdefault(j.document_id, j)
+
+    items = [
+        DocumentListItem(
+            id=d.id, filename=d.filename, mime=d.mime, size=d.size,
+            page_count=d.page_count, status=d.status, created_at=d.created_at,
+            chunk_count=counts.get(d.id, 0),
+            latest_job_id=getattr(latest_job.get(d.id), "id", None),
+            error=getattr(latest_job.get(d.id), "error", None),
+        )
+        for d in docs
+    ]
+    next_cursor = (
+        encode_cursor(docs[-1].created_at, docs[-1].id) if has_more and docs else None
+    )
+    return DocumentListResponse(items=items, next_cursor=next_cursor, total=total)
