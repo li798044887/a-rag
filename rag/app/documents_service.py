@@ -138,3 +138,30 @@ def list_documents(session, *, owner_user_id: str, limit: int = 30,
         encode_cursor(docs[-1].created_at, docs[-1].id) if has_more and docs else None
     )
     return DocumentListResponse(items=items, next_cursor=next_cursor, total=total)
+
+
+def workspace_stats(session, *, owner_user_id: str):
+    """所有者のワークスペース統計を返す。現状の実データソースはアップロード文書のみ。"""
+    from app.models import Document, IngestJob
+    from app.schemas import WorkspaceStats
+
+    total = session.query(Document).filter(Document.owner_user_id == owner_user_id).count()
+    indexed = (
+        session.query(Document)
+        .filter(Document.owner_user_id == owner_user_id, Document.status == "ready")
+        .count()
+    )
+    latest_job = (
+        session.query(IngestJob)
+        .filter(IngestJob.owner_user_id == owner_user_id, IngestJob.status == "ready")
+        .order_by(IngestJob.created_at.desc())
+        .limit(1)
+        .all()
+    )
+    last_synced_at = latest_job[0].created_at if latest_job else None
+    return WorkspaceStats(
+        indexed_document_count=indexed,
+        total_document_count=total,
+        connected_data_source_count=1 if total > 0 else 0,
+        last_synced_at=last_synced_at,
+    )

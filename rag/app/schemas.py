@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class IngestStarted(BaseModel):
@@ -81,3 +81,18 @@ class DocumentListResponse(BaseModel):
     items: list[DocumentListItem]
     next_cursor: str | None = None
     total: int
+
+
+class WorkspaceStats(BaseModel):
+    indexed_document_count: int
+    total_document_count: int
+    connected_data_source_count: int
+    last_synced_at: datetime | None = None
+
+    @field_serializer("last_synced_at")
+    def serialize_last_synced_at(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")

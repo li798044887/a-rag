@@ -2,7 +2,7 @@ from datetime import datetime
 
 from app.config import settings
 from app.routers import documents as documents_router
-from app.schemas import DocumentListItem, DocumentListResponse
+from app.schemas import DocumentListItem, DocumentListResponse, WorkspaceStats
 
 
 def test_list_requires_token(client):
@@ -42,3 +42,49 @@ def test_list_invalid_cursor_returns_400(client, monkeypatch):
     res = client.get("/documents?owner_user_id=u1&cursor=@@bad@@",
                      headers={"x-internal-token": settings.rag_internal_token})
     assert res.status_code == 400
+
+
+def test_workspace_stats_passes_owner_and_returns_payload(client, monkeypatch):
+    seen = {}
+
+    def fake_stats(owner_user_id):
+        seen["owner_user_id"] = owner_user_id
+        return WorkspaceStats(
+            indexed_document_count=2,
+            total_document_count=3,
+            connected_data_source_count=1,
+            last_synced_at=datetime(2026, 5, 31, 8, 14),
+        )
+
+    monkeypatch.setattr(documents_router, "_workspace_stats", fake_stats)
+    res = client.get(
+        "/documents/stats?owner_user_id=u1",
+        headers={"x-internal-token": settings.rag_internal_token},
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["indexed_document_count"] == 2
+    assert body["total_document_count"] == 3
+    assert body["connected_data_source_count"] == 1
+    assert body["last_synced_at"].startswith("2026-05-31T08:14")
+    assert seen == {"owner_user_id": "u1"}
+
+
+def test_workspace_stats_serializes_last_synced_at_as_utc(client, monkeypatch):
+    def fake_stats(owner_user_id):
+        return WorkspaceStats(
+            indexed_document_count=2,
+            total_document_count=3,
+            connected_data_source_count=1,
+            last_synced_at=datetime(2026, 5, 31, 8, 14),
+        )
+
+    monkeypatch.setattr(documents_router, "_workspace_stats", fake_stats)
+    res = client.get(
+        "/documents/stats?owner_user_id=u1",
+        headers={"x-internal-token": settings.rag_internal_token},
+    )
+
+    assert res.status_code == 200
+    assert res.json()["last_synced_at"] == "2026-05-31T08:14:00Z"

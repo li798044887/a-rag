@@ -9,13 +9,14 @@ from app.config import settings
 from app.db import SessionLocal
 from app.documents_service import (
     assets_dir_for, cleanup_document_files, find_layout_pdf, list_documents,
-    find_span_pdf, resolve_within, select_chunks,
+    find_span_pdf, resolve_within, select_chunks, workspace_stats,
 )
 from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
 from app.vectorstore.qdrant import QdrantStore
 from app.schemas import (
     DocumentListResponse, FetchDocumentRequest, FetchDocumentResponse, FetchedChunk, IngestStarted,
+    WorkspaceStats,
 )
 from app.security import require_internal_token
 
@@ -30,6 +31,20 @@ def _list_documents(owner_user_id: str, limit: int, cursor: str | None,
                               cursor=cursor, q=q, status=status)
     finally:
         session.close()
+
+
+def _workspace_stats(owner_user_id: str) -> WorkspaceStats:
+    session = SessionLocal()
+    try:
+        return workspace_stats(session, owner_user_id=owner_user_id)
+    finally:
+        session.close()
+
+
+@router.get("/documents/stats", response_model=WorkspaceStats,
+            dependencies=[Depends(require_internal_token)])
+def workspace_stats_endpoint(owner_user_id: str):
+    return _workspace_stats(owner_user_id)
 
 
 @router.get("/documents", response_model=DocumentListResponse,

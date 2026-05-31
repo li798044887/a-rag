@@ -22,6 +22,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useToasts } from "@/hooks/use-toasts";
 import { useTweaks } from "@/hooks/use-tweaks";
 import { useUploads } from "@/hooks/use-uploads";
+import { useWorkspaceStats } from "@/hooks/use-workspace-stats";
 import { cn } from "@/lib/utils";
 import { MODEL_STORAGE_KEY } from "@/lib/constants";
 import { buildThreadMarkdown } from "@/lib/export";
@@ -40,6 +41,7 @@ export function Workspace() {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const uploads = useUploads(push);
   const agent = useAgent();
+  const workspaceStats = useWorkspaceStats(status === "authed");
 
   const isMobile = useMediaQuery("(max-width: 768px)");
   const isWide = useMediaQuery("(min-width: 1181px)");
@@ -50,15 +52,6 @@ export function Workspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
-  const [dataSourceCount, setDataSourceCount] = useState(0);
-
-  const refreshDataSourceCount = useCallback(() => {
-    fetch("/api/documents?limit=1")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (j) setDataSourceCount(j.total); })
-      .catch(() => {});
-  }, []);
-  useEffect(() => { refreshDataSourceCount(); }, [refreshDataSourceCount]);
   // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。
   const [model, setModel] = useState<ModelOption>(() => {
     if (typeof window === "undefined") return MODELS[0];
@@ -564,7 +557,7 @@ export function Workspace() {
         onToggleStar={toggleStar}
         onAddToProject={addToProject}
         onOpenDataSources={() => setDocumentsOpen(true)}
-        dataSourceCount={dataSourceCount}
+        dataSourceCount={workspaceStats.stats.totalDocumentCount}
         dark={tweaks.dark}
         user={user}
       />
@@ -656,7 +649,7 @@ export function Workspace() {
         <div className="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[1fr_auto] overflow-hidden">
           <div ref={scrollRef} onScroll={onChatScroll} className="overflow-y-auto overflow-x-hidden scroll-smooth">
             {phase === "empty" ? (
-              <EmptyState user={user} onPickPrompt={startRun} />
+              <EmptyState user={user} stats={workspaceStats.stats} onPickPrompt={startRun} />
             ) : (
               <div
                 className={cn(
@@ -747,8 +740,8 @@ export function Workspace() {
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
       <DocumentsModal
         open={documentsOpen}
-        onClose={() => { setDocumentsOpen(false); refreshDataSourceCount(); }}
-        onChanged={refreshDataSourceCount}
+        onClose={() => { setDocumentsOpen(false); workspaceStats.refresh(); }}
+        onChanged={workspaceStats.refresh}
         onToast={push}
       />
       <ShareModal

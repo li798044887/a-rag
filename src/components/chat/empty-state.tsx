@@ -2,6 +2,7 @@
 
 import { BrandMark, Icon } from "@/components/icons";
 import { SUGGESTED_PROMPTS } from "@/lib/data";
+import { formatLastSynced, type WorkspaceStats } from "@/lib/workspace-stats";
 import type { AppUser } from "@/lib/types";
 
 function greeting() {
@@ -11,7 +12,19 @@ function greeting() {
   return "こんばんは";
 }
 
-export function EmptyState({ user, onPickPrompt }: { user: AppUser; onPickPrompt: (label: string) => void }) {
+interface EmptyStateProps {
+  user: AppUser;
+  stats: WorkspaceStats;
+  onPickPrompt: (label: string) => void;
+}
+
+export function EmptyState({ user, stats, onPickPrompt }: EmptyStateProps) {
+  const meta = [
+    [stats.indexedDocumentCount.toLocaleString("ja-JP"), "ドキュメント索引中"],
+    [stats.connectedDataSourceCount.toLocaleString("ja-JP"), "データソース接続中"],
+    ["最終同期", formatLastSynced(stats.lastSyncedAt)],
+  ];
+
   return (
     <div className="grid min-h-[calc(100vh-52px-130px)] min-w-0 place-items-center px-6 py-10 max-md:min-h-0 max-md:px-[18px] max-md:py-7">
       <div className="w-full max-w-[920px] min-w-0 text-center">
@@ -42,11 +55,7 @@ export function EmptyState({ user, onPickPrompt }: { user: AppUser; onPickPrompt
         </div>
 
         <div className="mt-9 flex justify-center gap-6 border-t-[0.5px] border-divider pt-[18px] max-md:mt-6 max-md:flex-wrap max-md:gap-x-[18px] max-md:gap-y-2.5">
-          {[
-            ["26,194", "ドキュメント索引中"],
-            ["8", "データソース接続中"],
-            ["最終同期", "2分前"],
-          ].map(([a, b]) => (
+          {meta.map(([a, b]) => (
             <div key={b} className="text-[11px] text-muted max-md:text-[10.5px]">
               <strong className="text-fg">{a}</strong>
               {b}
