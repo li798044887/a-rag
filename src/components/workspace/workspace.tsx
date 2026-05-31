@@ -586,15 +586,15 @@ export function Workspace() {
               <span className="font-medium text-muted">新規スレッド</span>
             ) : (
               <>
-                <span className="truncate">{userQuery.slice(0, 56) || "スレッド"}</span>
-                <span className="font-normal text-[12px] text-muted max-md:hidden">·  {(citeTurn?.sources ?? []).length} sources</span>
+                <span className="min-w-0 flex-1 truncate">{userQuery.slice(0, 56) || "スレッド"}</span>
+                <span className="shrink-0 whitespace-nowrap font-normal text-[12px] text-muted max-md:hidden">·  {(citeTurn?.sources ?? []).length} sources</span>
                 {phase === "cancelled" && (
-                  <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-[#FDEFEA] px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[#B83A1F] dark:bg-[rgba(184,58,31,0.18)]">
+                  <span className="ml-1.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[#FDEFEA] px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[#B83A1F] dark:bg-[rgba(184,58,31,0.18)]">
                     キャンセル済
                   </span>
                 )}
                 {phase === "running" && (
-                  <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-accent-soft px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-accent before:h-[5px] before:w-[5px] before:rounded-full before:bg-accent before:[animation:ar-pulse_1.2s_ease-in-out_infinite]">
+                  <span className="ml-1.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-accent-soft px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-accent before:h-[5px] before:w-[5px] before:rounded-full before:bg-accent before:[animation:ar-pulse_1.2s_ease-in-out_infinite]">
                     実行中
                   </span>
                 )}
