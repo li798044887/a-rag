@@ -2,7 +2,7 @@
 
 import base64
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 MAX_CHUNKS = 40
@@ -139,10 +139,24 @@ def list_documents(session, *, owner_user_id: str, limit: int = 30,
     )
     return DocumentListResponse(items=items, next_cursor=next_cursor, total=total)
 
+def record_workspace_activity(session, *, owner_user_id: str) -> None:
+    """ドキュメント集合が変わった時刻を owner 単位で記録する。"""
+    from app.models import WorkspaceActivity
+
+    row = session.get(WorkspaceActivity, owner_user_id)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if row:
+        row.last_document_activity_at = now
+        return
+    session.add(WorkspaceActivity(
+        owner_user_id=owner_user_id,
+        last_document_activity_at=now,
+    ))
+
 
 def workspace_stats(session, *, owner_user_id: str):
     """所有者のワークスペース統計を返す。現状の実データソースはアップロード文書のみ。"""
-    from app.models import Document, IngestJob
+    from app.models import Document, IngestJob, WorkspaceActivity
     from app.schemas import WorkspaceStats
 
     total = session.query(Document).filter(Document.owner_user_id == owner_user_id).count()
@@ -158,7 +172,18 @@ def workspace_stats(session, *, owner_user_id: str):
         .limit(1)
         .all()
     )
-    last_synced_at = latest_job[0].created_at if latest_job else None
+    activity = (
+        session.query(WorkspaceActivity)
+        .filter(WorkspaceActivity.owner_user_id == owner_user_id)
+        .limit(1)
+        .all()
+    )
+    candidates = []
+    if latest_job:
+        candidates.append(latest_job[0].created_at)
+    if activity:
+        candidates.append(activity[0].last_document_activity_at)
+    last_synced_at = max(candidates) if candidates else None
     return WorkspaceStats(
         indexed_document_count=indexed,
         total_document_count=total,

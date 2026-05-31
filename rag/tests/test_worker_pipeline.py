@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.db import SessionLocal
-from app.models import Chunk, Document, IngestJob
+from app.models import Chunk, Document, IngestJob, WorkspaceActivity
 from app.parsing.types import ParsedBlock, ParsedDocument
 from app.embedding.factory import StubEmbedder
 from app.vectorstore.qdrant import QdrantStore
@@ -32,22 +32,25 @@ class RecordingEmbedder(StubEmbedder):
         return super().embed(texts)
 
 
-def _cleanup(session, store, doc_id, job_id):
+def _cleanup(session, store, doc_id, job_id, owner_user_id=None):
     store.drop()
     session.query(Chunk).filter_by(document_id=doc_id).delete()
     session.query(IngestJob).filter_by(id=job_id).delete()
     session.query(Document).filter_by(id=doc_id).delete()
+    if owner_user_id:
+        session.query(WorkspaceActivity).filter_by(owner_user_id=owner_user_id).delete()
     session.commit()
     session.close()
 
 
 def test_run_ingest_persists_chunks_and_marks_ready():
     session = SessionLocal()
-    doc = Document(owner_user_id="u1", filename="x.pdf", mime="application/pdf",
+    owner_user_id = "u_" + uuid.uuid4().hex
+    doc = Document(owner_user_id=owner_user_id, filename="x.pdf", mime="application/pdf",
                    size=10, raw_path="/tmp/x.pdf", status="queued")
     session.add(doc)
     session.flush()
-    job = IngestJob(document_id=doc.id, owner_user_id="u1", status="queued")
+    job = IngestJob(document_id=doc.id, owner_user_id=owner_user_id, status="queued")
     session.add(job)
     session.commit()
 
@@ -61,8 +64,11 @@ def test_run_ingest_persists_chunks_and_marks_ready():
     n_chunks = session.query(Chunk).filter_by(document_id=doc.id).count()
     assert n_chunks >= 1
     assert store.count() == n_chunks
+    activity = session.get(WorkspaceActivity, owner_user_id)
+    assert activity is not None
+    assert activity.last_document_activity_at is not None
 
-    _cleanup(session, store, doc.id, job.id)
+    _cleanup(session, store, doc.id, job.id, owner_user_id)
 
 
 def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path):

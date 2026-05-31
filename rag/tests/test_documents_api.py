@@ -12,11 +12,17 @@ def test_upload_requires_internal_token(client):
 
 def test_upload_creates_doc_and_enqueues(client, monkeypatch):
     enqueued = {}
+    activity = []
 
     async def fake_enqueue(document_id, job_id):
         enqueued["args"] = (document_id, job_id)
 
     monkeypatch.setattr("app.routers.documents.enqueue_ingest", fake_enqueue)
+    monkeypatch.setattr(
+        documents_router,
+        "record_workspace_activity",
+        lambda session, *, owner_user_id: activity.append(owner_user_id),
+    )
     res = client.post(
         "/documents",
         headers={"x-internal-token": settings.rag_internal_token},
@@ -27,6 +33,7 @@ def test_upload_creates_doc_and_enqueues(client, monkeypatch):
     body = res.json()
     assert body["document_id"] and body["job_id"]
     assert enqueued["args"][0] == body["document_id"]
+    assert activity == []
 
     status = client.get(f"/jobs/{body['job_id']}",
                         headers={"x-internal-token": settings.rag_internal_token})

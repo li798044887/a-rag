@@ -51,3 +51,9 @@ class IngestJob(Base):
     stage_detail: Mapped[str] = mapped_column(String, default="")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class WorkspaceActivity(Base):
+    __tablename__ = "workspace_activity"
+    owner_user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    last_document_activity_at: Mapped[datetime] = mapped_column(server_default=func.now())

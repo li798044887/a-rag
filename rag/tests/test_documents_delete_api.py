@@ -55,6 +55,9 @@ def _install_fakes(monkeypatch, owner="u1"):
 
 def test_delete_removes_vectors_chunks_jobs_doc_and_files(client, monkeypatch):
     deleted = _install_fakes(monkeypatch)
+    activity = {}
+    monkeypatch.setattr(documents_router, "record_workspace_activity",
+                        lambda session, *, owner_user_id: activity.update(owner_user_id=owner_user_id))
     res = client.delete("/documents/d1?owner_user_id=u1",
                         headers={"x-internal-token": settings.rag_internal_token})
     assert res.status_code == 204
@@ -63,6 +66,7 @@ def test_delete_removes_vectors_chunks_jobs_doc_and_files(client, monkeypatch):
     assert deleted["jobs"] is True
     assert deleted["doc"] is True
     assert deleted["files"] == ("/u/d1.pdf", None)
+    assert activity == {"owner_user_id": "u1"}
 
 
 def test_delete_404_when_not_owner(client, monkeypatch):

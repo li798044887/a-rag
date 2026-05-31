@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.chunking.chunker import chunk_blocks
 from app.db import SessionLocal
-from app.documents_service import assets_dir_for
+from app.documents_service import assets_dir_for, record_workspace_activity
 from app.embedding.base import Embedder
 from app.embedding.factory import get_embedder
 from app.models import Chunk, Document, IngestJob
@@ -25,6 +25,8 @@ def _set(job: IngestJob, doc: Document, session: Session, *,
     job.progress = progress
     job.stage_detail = detail
     doc.status = status if status in ("ready", "error") else "processing"
+    if status == "ready":
+        record_workspace_activity(session, owner_user_id=doc.owner_user_id)
     session.commit()
 
 

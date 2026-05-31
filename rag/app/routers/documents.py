@@ -9,7 +9,7 @@ from app.config import settings
 from app.db import SessionLocal
 from app.documents_service import (
     assets_dir_for, cleanup_document_files, find_layout_pdf, list_documents,
-    find_span_pdf, resolve_within, select_chunks, workspace_stats,
+    find_span_pdf, record_workspace_activity, resolve_within, select_chunks, workspace_stats,
 )
 from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
@@ -159,6 +159,7 @@ def delete_document(document_id: str, owner_user_id: str):
         session.query(Chunk).filter(Chunk.document_id == document_id).delete()
         session.query(IngestJob).filter(IngestJob.document_id == document_id).delete()
         session.delete(doc)
+        record_workspace_activity(session, owner_user_id=owner_user_id)
         session.commit()
     finally:
         session.close()

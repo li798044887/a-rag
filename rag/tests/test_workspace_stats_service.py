@@ -43,7 +43,9 @@ def test_workspace_stats_counts_ready_docs_upload_source_and_last_ready_job():
                 return _Query(count=3)
             if self.calls == 2:
                 return _Query(count=2)
-            return _Query([SimpleNamespace(created_at=latest)])
+            if self.calls == 3:
+                return _Query([SimpleNamespace(created_at=latest)])
+            return _Query()
 
     stats = workspace_stats(_Session(), owner_user_id="u1")
 
@@ -51,6 +53,29 @@ def test_workspace_stats_counts_ready_docs_upload_source_and_last_ready_job():
     assert stats.total_document_count == 3
     assert stats.connected_data_source_count == 1
     assert stats.last_synced_at == latest
+
+
+def test_workspace_stats_uses_newer_document_activity():
+    latest_job = datetime(2026, 5, 31, 8, 14)
+    latest_activity = datetime(2026, 5, 31, 9, 30)
+
+    class _Session:
+        def __init__(self):
+            self.calls = 0
+
+        def query(self, *entities):
+            self.calls += 1
+            if self.calls == 1:
+                return _Query(count=3)
+            if self.calls == 2:
+                return _Query(count=2)
+            if self.calls == 3:
+                return _Query([SimpleNamespace(created_at=latest_job)])
+            return _Query([SimpleNamespace(last_document_activity_at=latest_activity)])
+
+    stats = workspace_stats(_Session(), owner_user_id="u1")
+
+    assert stats.last_synced_at == latest_activity
 
 
 def test_workspace_stats_has_no_connected_source_without_documents():
