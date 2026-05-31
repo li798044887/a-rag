@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
 import { fn } from "storybook/test";
 import { Composer } from "@/components/chat/composer";
 import { MODELS, SCOPE_PRESETS } from "@/lib/data";
@@ -35,28 +35,36 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+type ComposerProps = ComponentProps<typeof Composer>;
+
+function StatefulComposer({
+  initialValue,
+  ...args
+}: ComposerProps & { initialValue: string }) {
+  const [value, setValue] = useState(initialValue);
+  return <Composer {...args} value={value} onChange={setValue} />;
+}
 
 /** 空の状態（制御値を story 内で保持）。 */
 export const Empty: Story = {
-  render: (args) => {
-    const [value, setValue] = useState("");
-    return <Composer {...args} value={value} onChange={setValue} />;
-  },
+  render: (args) => <StatefulComposer {...args} initialValue="" />,
 };
 
 /** 入力済み + 添付あり。 */
 export const WithAttachments: Story = {
-  render: (args) => {
-    const [value, setValue] = useState("このPDFの要点を3つにまとめて");
-    return <Composer {...args} value={value} onChange={setValue} attachments={sampleAttachments} />;
-  },
+  render: (args) => (
+    <StatefulComposer
+      {...args}
+      initialValue="このPDFの要点を3つにまとめて"
+      attachments={sampleAttachments}
+    />
+  ),
 };
 
 /** 実行中（停止ボタン表示）。 */
 export const Running: Story = {
   args: { running: true },
-  render: (args) => {
-    const [value, setValue] = useState("社内のScrum移行の経緯を調べて");
-    return <Composer {...args} value={value} onChange={setValue} />;
-  },
+  render: (args) => (
+    <StatefulComposer {...args} initialValue="社内のScrum移行の経緯を調べて" />
+  ),
 };
