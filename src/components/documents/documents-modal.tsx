@@ -90,7 +90,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
         <div className="flex items-center justify-between border-b-[0.5px] border-divider px-4 py-3">
           <div className="flex items-center gap-2 text-[14px] font-bold text-fg">
             <Icon name="database" size={15} />
-            <span id="documents-modal-title">データソース</span>
+            <span id="documents-modal-title">アップロード文書</span>
             <span className="font-mono text-[11px] font-normal text-muted">{docs.total}件</span>
           </div>
           <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">

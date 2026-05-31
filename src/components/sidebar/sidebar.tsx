@@ -187,7 +187,7 @@ export function Sidebar(props: SidebarProps) {
           </div>
           <CollectionItem icon="star" label="スター付き" count={String(pinned.length)} />
           <CollectionItem icon="folder" label="プロジェクト" count="4" />
-          <CollectionItem icon="database" label="データソース" count={String(dataSourceCount)} onClick={onOpenDataSources} />
+          <CollectionItem icon="database" label="アップロード文書" count={String(dataSourceCount)} onClick={onOpenDataSources} />
         </div>
       </div>
 
