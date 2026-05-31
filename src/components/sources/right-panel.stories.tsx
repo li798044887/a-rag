@@ -64,6 +64,32 @@ export const WithImage: Story = {
   },
 };
 
+/** 長いファイル名や改行されない本文がパネル幅を押し広げないことを確認するケース。 */
+export const LongContent: Story = {
+  args: {
+    sources: [
+      {
+        id: "long-doc",
+        type: "doc",
+        title: "06-multi-file-requirement-request-with-very-long-unbroken-vendor-security-appendix-2026-05-19.pdf",
+        path: "documents/procurement/security/2026/05/06-multi-file-requirement-request-with-very-long-unbroken-vendor-security-appendix-2026-05-19.pdf",
+        author: "",
+        date: "",
+        sections: [
+          {
+            id: "long-sec",
+            heading: "SUNTECH_PURCHASE_REQUEST_緊急購買要求_エッジAIゲートウェイ設備保全_very_long_unbroken_heading_segment",
+            body: `SUNTECH PURCHASE REQUEST緊急購買要求: エッジAIゲートウェイ設備保全 2026-0519 / 申請者: 保全部1. 必須要件納期は2026-06-07まで。これを超える場合は不採用。AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n<table><tr><th>項目</th><th>値</th></tr><tr><td>長い識別子</td><td>edge-ai-gateway-procurement-requirement-security-local-inference-no-cloud-transfer-log-retention-365-days-iso27001-soc2-contract-2026-05-19-final</td></tr></table>`,
+            highlight: true,
+            page: 0,
+          },
+        ],
+      },
+    ],
+    activeSourceId: "long-doc",
+    highlightSectionId: "long-sec",
+  },
+};
 
 /** 数式チャンクは HTML整形で KaTeX 表示し、解析テキストへ切り替えると生テキストを確認できる。 */
 export const EquationModes: Story = {

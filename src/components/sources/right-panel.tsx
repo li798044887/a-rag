@@ -100,9 +100,9 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
     <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_auto_1fr_auto] overflow-hidden border-l-[0.5px] border-divider bg-bg-2 relative max-wide:fixed max-wide:inset-y-0 max-wide:right-0 max-wide:z-[60] max-wide:w-[min(440px,50vw)] max-wide:border-l-0 max-wide:shadow-[-8px_0_32px_rgba(0,0,0,0.16)] max-md:w-[min(440px,92vw)] wide:z-auto wide:w-auto wide:shadow-none">
       {resizable && onResizeWidth && <PanelResizer width={panelWidth} onWidth={onResizeWidth} />}
       {/* Head（+ どのターンの出典かを示す文脈ラベル）を 1 グリッドセルにまとめる。 */}
-      <div>
+      <div className="min-w-0">
         <div className="flex h-[52px] items-center justify-between border-b-[0.5px] border-divider px-4 max-md:px-3.5">
-          <div className="inline-flex items-center gap-2 text-[13px] font-semibold text-fg">
+          <div className="inline-flex min-w-0 items-center gap-2 text-[13px] font-semibold text-fg">
             <svg viewBox="0 0 16 16" width="13" height="13">
               <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
               <path d="M6 6h4M6 8.5h4M6 11h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -131,7 +131,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-col gap-0.5 border-b-[0.5px] border-divider px-2 pb-1 pt-2">
+      <div className="flex min-w-0 flex-col gap-0.5 border-b-[0.5px] border-divider px-2 pb-1 pt-2">
         {sources.map((s) => (
           <button
             key={s.id}
@@ -152,7 +152,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
       </div>
 
       {/* Meta */}
-      <div className="flex flex-col gap-1 border-b-[0.5px] border-divider bg-surface-2 px-4 py-2.5 max-md:px-3.5">
+      <div className="flex min-w-0 flex-col gap-1 border-b-[0.5px] border-divider bg-surface-2 px-4 py-2.5 max-md:px-3.5">
         <div className="flex items-baseline gap-2 text-[11px]">
           <span className="min-w-[32px] font-mono text-[9.5px] uppercase tracking-[0.05em] text-muted-2">パス</span>
           <code className="break-all font-mono text-[11px] text-fg-2">{active.path}</code>
@@ -176,7 +176,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
       </div>
 
       {/* Body */}
-      <div ref={bodyRef} className={cn("overflow-y-auto", effectiveMode === "pdf" ? "p-0" : "px-5 pb-6 pt-[18px] max-md:px-3.5")}>
+      <div ref={bodyRef} className={cn("min-w-0 overflow-x-hidden overflow-y-auto", effectiveMode === "pdf" ? "p-0" : "px-5 pb-6 pt-[18px] max-md:px-3.5")}>
         {effectiveMode === "pdf" ? (
           <iframe
             key={pdfPage}
@@ -186,11 +186,11 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
           />
         ) : (
           <>
-        <div className="mb-4 flex items-start gap-2.5">
+        <div className="mb-4 flex min-w-0 items-start gap-2.5">
           <span className="pt-[3px] text-accent">
             <SourceIcon type={active.type} />
           </span>
-          <h2 className="m-0 text-[16px] font-bold leading-[1.35] tracking-[-0.01em] text-fg">{active.title}</h2>
+          <h2 className="m-0 min-w-0 text-[16px] font-bold leading-[1.35] tracking-[-0.01em] text-fg [overflow-wrap:anywhere]">{active.title}</h2>
         </div>
         {active.sections.map((sec) => {
           const isHl = sec.id === highlightSectionId;
@@ -199,7 +199,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
               key={sec.id}
               ref={isHl ? hlRef : null}
               className={cn(
-                "relative mb-2.5 rounded-[10px] border-[0.5px] border-transparent px-3.5 py-3 transition-[background,box-shadow]",
+                "relative mb-2.5 min-w-0 rounded-[10px] border-[0.5px] border-transparent px-3.5 py-3 transition-[background,box-shadow]",
                 isHl && "animate-hl-pulse border-accent bg-accent-soft",
               )}
             >
@@ -211,7 +211,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
                   引用箇所
                 </div>
               )}
-              <h3 className="mb-1.5 text-[12.5px] font-bold tracking-[-0.005em] text-fg">{sec.heading}</h3>
+              <h3 className="mb-1.5 min-w-0 text-[12.5px] font-bold tracking-[-0.005em] text-fg [overflow-wrap:anywhere]">{sec.heading}</h3>
               {effectiveMode === "text" ? (
                 <PlainSectionBody body={sec.body} />
               ) : (
@@ -225,7 +225,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
       </div>
 
       {/* Foot */}
-      <div className="flex items-center gap-1.5 border-t-[0.5px] border-divider px-3.5 py-2.5 max-md:flex-wrap max-md:gap-y-2">
+      <div className="flex min-w-0 items-center gap-1.5 border-t-[0.5px] border-divider px-3.5 py-2.5 max-md:flex-wrap max-md:gap-y-2">
         <button className="inline-flex h-[26px] items-center gap-[5px] rounded-[7px] border-[0.5px] border-divider-strong bg-surface px-2.5 text-[11.5px] font-medium text-fg-2 hover:bg-surface-2" onClick={() => onAction("download", active)}>
           <svg viewBox="0 0 16 16" width="11" height="11">
             <path d="M8 2v8m0 0l-3-3m3 3l3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />

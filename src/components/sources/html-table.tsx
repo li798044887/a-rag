@@ -40,7 +40,7 @@ export function HtmlTable({ html, className, renderMath }: { html: string; class
   const [sheetOpen, setSheetOpen] = useState(false);
 
   if (!model) {
-    return <div className={cn("whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2", className)}>{html}</div>;
+    return <div className={cn("whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2 [overflow-wrap:anywhere]", className)}>{html}</div>;
   }
 
   const wide = overflow.left || overflow.right;
@@ -58,7 +58,7 @@ export function HtmlTable({ html, className, renderMath }: { html: string; class
                   colSpan={c.colspan}
                   rowSpan={c.rowspan}
                   className={cn(
-                    "border-[0.5px] border-divider px-2.5 py-1.5 align-top",
+                    "border-[0.5px] border-divider px-2.5 py-1.5 align-top [overflow-wrap:anywhere]",
                     c.header ? "bg-surface-2 text-left font-semibold text-fg" : "text-fg-2",
                   )}
                 >
@@ -73,7 +73,7 @@ export function HtmlTable({ html, className, renderMath }: { html: string; class
   );
 
   return (
-    <div className={cn("group/tbl relative", className)}>
+    <div className={cn("group/tbl relative min-w-0", className)}>
       <div
         ref={ref}
         data-overflow-left={overflow.left}

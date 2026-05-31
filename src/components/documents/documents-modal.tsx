@@ -10,7 +10,7 @@ import { cn, formatFileSize } from "@/lib/utils";
 import type { DocumentPreview, DocumentPreviewChunk, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
 
-type Tab = "pdf" | "layout" | "text" | "html" | "images";
+type Tab = "pdf" | "layout" | "span" | "text" | "html" | "images";
 const IMG_RE = /!\[[^\]]*\]\((\/api\/documents\/[^)\s]+)\)/g;
 
 const STATUS_LABEL: Record<string, string> = {
@@ -47,7 +47,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   const selected = docs.items.find((d) => d.id === selectedId) ?? null;
   const isPdf = selected?.mime === "application/pdf";
   const isImage = selected?.mime.startsWith("image/") ?? false;
-  // レイアウト注釈 PDF は MinerU が PDF 入力時のみ生成する。原本は PDF/画像のみブラウザで表示できる。
+  // MinerU 注釈 PDF は PDF 入力時のみ生成する。原本は PDF/画像のみブラウザで表示できる。
 
   // 文書選択時、ブラウザで表示できない形式（Excel 等）は解析テキストを初期表示にする。
   const selectDoc = (d: DocumentSummary) => {
@@ -196,7 +196,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
               <>
                 <div className="flex items-center gap-2 border-b-[0.5px] border-divider px-3 py-2">
                   <div className="flex gap-1">
-                    {([["pdf", "原本"], ...(isPdf ? [["layout", "レイアウト"] as [Tab, string]] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
+                    {([["pdf", "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
                       <button key={t} onClick={() => setTab(t)} className={cn(
                         "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
                         tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
@@ -232,6 +232,9 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   )}
                   {tab === "layout" && isPdf && (
                     <iframe title={`${selected.filename} レイアウト`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />
+                  )}
+                  {tab === "span" && isPdf && (
+                    <iframe title={`${selected.filename} Span`} src={`/api/documents/${encodeURIComponent(selected.id)}/span`} className="h-full w-full border-0" />
                   )}
                   {tab === "html" && (
                     <div className="mx-auto max-w-[820px] p-5">

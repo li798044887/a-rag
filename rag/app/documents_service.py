@@ -27,13 +27,23 @@ def mineru_dir_for(raw_path: str) -> str:
     return str(Path(raw_path).with_suffix("")) + "_mineru"
 
 
-def find_layout_pdf(raw_path: str) -> Path | None:
-    """MinerU 生出力配下のレイアウト注釈付き PDF（*_layout.pdf）を探して返す。無ければ None。"""
+def _find_mineru_pdf(raw_path: str, suffix: str) -> Path | None:
+    """MinerU 生出力配下の指定 suffix PDF を探して返す。無ければ None。"""
     base = Path(mineru_dir_for(raw_path))
     if not base.is_dir():
         return None
-    matches = sorted(base.rglob("*_layout.pdf"))
+    matches = sorted(base.rglob(f"*_{suffix}.pdf"))
     return matches[-1] if matches else None
+
+
+def find_layout_pdf(raw_path: str) -> Path | None:
+    """MinerU 生出力配下のレイアウト注釈付き PDF（*_layout.pdf）を探して返す。無ければ None。"""
+    return _find_mineru_pdf(raw_path, "layout")
+
+
+def find_span_pdf(raw_path: str) -> Path | None:
+    """MinerU 生出力配下の span 注釈付き PDF（*_span.pdf）を探して返す。無ければ None。"""
+    return _find_mineru_pdf(raw_path, "span")
 
 
 def cleanup_document_files(raw_path: str, parsed_md_path: str | None = None) -> None:
