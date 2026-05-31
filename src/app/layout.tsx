@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import { THEME_STORAGE_KEY } from "@/lib/constants";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({

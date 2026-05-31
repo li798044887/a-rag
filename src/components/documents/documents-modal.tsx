@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import katex from "katex";
 import { Icon } from "@/components/icons";
 import { HtmlTable } from "@/components/sources/html-table";
 import { parseSectionBody } from "@/components/sources/parse-section-body";
@@ -19,7 +20,43 @@ const STATUS_LABEL: Record<string, string> = {
   parsing: "解析中", chunking: "チャンク化", embedding: "埋め込み", indexing: "索引化",
 };
 
-/** チャンク本文を整形描画する（表は HtmlTable、画像は inline、その他は素テキスト）。
+function renderTex(tex: string, display: boolean): string | null {
+  try {
+    return katex.renderToString(tex.trim(), { displayMode: display, throwOnError: false });
+  } catch {
+    return null;
+  }
+}
+
+/** 素テキスト中の TeX 数式（$$…$$ ディスプレイ / $…$ インライン）を KaTeX で描画し、
+ *  数式以外はそのまま表示する。 */
+function MathText({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  for (const m of text.matchAll(/\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g)) {
+    const idx = m.index ?? 0;
+    if (idx > last) parts.push(text.slice(last, idx));
+    const display = m[1] !== undefined;
+    const html = renderTex(display ? m[1] : m[2], display);
+    if (html) {
+      parts.push(
+        <span
+          key={`m${key++}`}
+          className={display ? "my-2 block overflow-x-auto" : ""}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />,
+      );
+    } else {
+      parts.push(m[0]); // 解析失敗時は生のまま
+    }
+    last = idx + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <div className="whitespace-pre-wrap text-[13px] leading-[1.7] text-fg-2">{parts}</div>;
+}
+
+/** チャンク本文を整形描画する（表は HtmlTable、画像は inline、数式は KaTeX、その他は素テキスト）。
  *  一次資料パネルと同じ parseSectionBody を流用する。 */
 function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
   const segs = parseSectionBody(chunk.text);
@@ -33,7 +70,7 @@ function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
         if (s.kind === "image")
           // eslint-disable-next-line @next/next/no-img-element
           return <img key={i} src={s.src} alt={s.alt} className="my-1.5 max-w-full rounded-lg border-[0.5px] border-divider" />;
-        return <div key={i} className="whitespace-pre-wrap text-[13px] leading-[1.7] text-fg-2">{s.text}</div>;
+        return <MathText key={i} text={s.text} />;
       })}
     </div>
   );
