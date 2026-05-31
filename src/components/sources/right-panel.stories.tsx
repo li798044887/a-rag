@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { fn } from "storybook/test";
+import { expect, fn } from "storybook/test";
 import { RightPanel } from "@/components/sources/right-panel";
 import { SAMPLE_SOURCES, CITATION_MAP } from "@/lib/data";
 
@@ -61,5 +61,45 @@ export const WithImage: Story = {
     ],
     activeSourceId: "img-doc",
     highlightSectionId: "sec-img",
+  },
+};
+
+
+/** 数式チャンクは HTML整形で KaTeX 表示し、解析テキストへ切り替えると生テキストを確認できる。 */
+export const EquationModes: Story = {
+  args: {
+    sources: [
+      {
+        id: "eq-doc",
+        type: "doc",
+        title: "equations.pdf",
+        path: "equations.pdf",
+        author: "",
+        date: "",
+        sections: [
+          {
+            id: "eq-sec",
+            heading: "熱収支式",
+            body: "\\frac{Q}{A}=h(T_s-T_\\infty)",
+            highlight: true,
+            blockType: "equation",
+            page: 0,
+          },
+        ],
+      },
+    ],
+    citationMap: { 1: { sourceId: "eq-doc", sectionId: "eq-sec" } },
+    activeSourceId: "eq-doc",
+    highlightSectionId: "eq-sec",
+  },
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    await expect(canvas.getByRole("button", { name: "HTML整形" })).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "解析テキスト" })).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "元PDF" })).toBeInTheDocument();
+    await expect(canvasElement.querySelector(".katex-display")).not.toBeNull();
+
+    await userEvent.click(canvas.getByRole("button", { name: "解析テキスト" }));
+    await expect(canvasElement.querySelector(".katex-display")).toBeNull();
+    await expect(canvasElement.textContent).toContain("\\frac{Q}{A}");
   },
 };
