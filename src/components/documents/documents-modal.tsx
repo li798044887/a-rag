@@ -2,20 +2,42 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
+import { HtmlTable } from "@/components/sources/html-table";
+import { parseSectionBody } from "@/components/sources/parse-section-body";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
 import { getFileMeta } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
-import type { DocumentPreview, DocumentSummary } from "@/lib/types";
+import type { DocumentPreview, DocumentPreviewChunk, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
 
-type Tab = "pdf" | "layout" | "text" | "images";
+type Tab = "pdf" | "layout" | "text" | "html" | "images";
 const IMG_RE = /!\[[^\]]*\]\((\/api\/documents\/[^)\s]+)\)/g;
 
 const STATUS_LABEL: Record<string, string> = {
   ready: "索引済み", error: "エラー", queued: "待機中", processing: "処理中",
   parsing: "解析中", chunking: "チャンク化", embedding: "埋め込み", indexing: "索引化",
 };
+
+/** チャンク本文を整形描画する（表は HtmlTable、画像は inline、その他は素テキスト）。
+ *  一次資料パネルと同じ parseSectionBody を流用する。 */
+function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
+  const segs = parseSectionBody(chunk.text);
+  return (
+    <div className="mb-5">
+      {chunk.heading_path && (
+        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">{chunk.heading_path}</div>
+      )}
+      {segs.map((s, i) => {
+        if (s.kind === "table") return <HtmlTable key={i} html={s.html} className="my-1.5" />;
+        if (s.kind === "image")
+          // eslint-disable-next-line @next/next/no-img-element
+          return <img key={i} src={s.src} alt={s.alt} className="my-1.5 max-w-full rounded-lg border-[0.5px] border-divider" />;
+        return <div key={i} className="whitespace-pre-wrap text-[13px] leading-[1.7] text-fg-2">{s.text}</div>;
+      })}
+    </div>
+  );
+}
 
 export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   open: boolean;
@@ -182,7 +204,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
               <>
                 <div className="flex items-center gap-2 border-b-[0.5px] border-divider px-3 py-2">
                   <div className="flex gap-1">
-                    {([["pdf", "原本"], ...(isPdf ? [["layout", "レイアウト"] as [Tab, string]] : []), ["text", "解析テキスト"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
+                    {([["pdf", "原本"], ...(isPdf ? [["layout", "レイアウト"] as [Tab, string]] : []), ["html", "HTML"], ["text", "解析テキスト"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
                       <button key={t} onClick={() => setTab(t)} className={cn(
                         "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
                         tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
@@ -218,6 +240,13 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   )}
                   {tab === "layout" && isPdf && (
                     <iframe title={`${selected.filename} レイアウト`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />
+                  )}
+                  {tab === "html" && (
+                    <div className="mx-auto max-w-[820px] p-5">
+                      {previewLoading && <div className="text-[12px] text-muted">読み込み中…</div>}
+                      {preview?.chunks.map((c) => <RenderedChunk key={c.chunk_id} chunk={c} />)}
+                      {!previewLoading && !preview?.chunks.length && <div className="text-[12px] text-muted">表示できる内容がありません</div>}
+                    </div>
                   )}
                   {tab === "text" && (
                     <div className="mx-auto max-w-[760px] p-5">
