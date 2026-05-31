@@ -15,7 +15,7 @@ import { usePanelWidth } from "@/components/workspace/use-panel-width";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { DropOverlay } from "@/components/uploads/uploads";
 import { MODELS, SCOPE_PRESETS } from "@/lib/data";
-import { useAgent } from "@/hooks/use-agent";
+import { LIVE_KEY, isPendingThreadId, useAgent } from "@/hooks/use-agent";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -60,7 +60,7 @@ export function Workspace() {
   });
 
   const [phase, setPhase] = useState<Phase>("empty");
-  const [activeThreadId, setActiveThreadId] = useState("th-current");
+  const [activeThreadId, setActiveThreadId] = useState(LIVE_KEY);
   // 実行中(ライブ)会話の threadId。サイドバーへの即時登録 / アクティブ判定に使う。
   const [liveId, setLiveId] = useState<string | null>(null);
   const [userQuery, setUserQuery] = useState("");
@@ -117,11 +117,8 @@ export function Workspace() {
   // 完了/中断した場合や、スレッド切替で戻った場合に正しく反映する）。
   // wasMobile と同じ render-phase パターンで、cascading effect を避ける。
   //
-  // 空の下書き ("th-current") では追従させない。このキーは「下書き」と「実 id 確定前の
-  // 走行 run の一時キー」を兼ねるため、下書きへ戻った直後に残存/並行ターンが phase を
-  // 勝手に running へ巻き戻してしまう（新規スレッドを押したのに実行中表示になる不具合）。
-  // 実 run は onThread で実 id へ移行し、それ以降この同期が正しく状態を追う。
-  const activeStatus = activeThreadId === "th-current" ? undefined : lastTurn?.status;
+  // 空の下書きでは追従させない。実行中の新規 run は pending key を持つため同期対象。
+  const activeStatus = activeThreadId === LIVE_KEY ? undefined : lastTurn?.status;
   const statusKey = activeStatus ? `${activeThreadId}:${activeStatus}` : "";
   const [syncedStatusKey, setSyncedStatusKey] = useState("");
   if (statusKey && statusKey !== syncedStatusKey) {
@@ -193,7 +190,7 @@ export function Workspace() {
       const curLast = cur?.turns[cur.turns.length - 1];
       const continueId = regen != null
         ? activeThreadId
-        : (activeThreadId !== "th-current" && cur && curLast?.status !== "running" ? activeThreadId : undefined);
+        : (activeThreadId !== LIVE_KEY && !isPendingThreadId(activeThreadId) && cur && curLast?.status !== "running" ? activeThreadId : undefined);
       if (continueId) setLiveId(continueId);
 
       const navAtStart = navToken.current;
@@ -201,9 +198,15 @@ export function Workspace() {
       await agent.run(finalQuery, attachNames, continueId, model.id, {
         truncateFrom: regen ?? undefined,
         regenerateFrom: regen ?? undefined,
-        onThread: (id) => {
+        onPendingThread: (id) => {
           setLiveId(id);
           if (navToken.current === navAtStart) setActiveThreadId(id);
+        },
+        onThread: (id, previousId) => {
+          setLiveId(id);
+          setActiveThreadId((current) => (
+            current === previousId || navToken.current === navAtStart ? id : current
+          ));
         },
         onDone: (id, status) => {
           if (status === "error") push("実行に失敗しました", "error");
@@ -244,7 +247,7 @@ export function Workspace() {
   const newChat = () => {
     // ライブ実行は中断しない（バックグラウンドで継続、サイドバーから戻れる）。空の下書きへ。
     navToken.current++;
-    setActiveThreadId("th-current");
+    setActiveThreadId(LIVE_KEY);
     setPhase("empty");
     setUserQuery("");
     setComposerValue("");
@@ -328,7 +331,7 @@ export function Workspace() {
       // アクティブだったスレッドを消したら下書きへ戻す。
       if (id === activeThreadId) {
         navToken.current++;
-        setActiveThreadId("th-current");
+        setActiveThreadId(LIVE_KEY);
         setPhase("empty");
         setUserQuery("");
         setRightPanelOpen(false);
@@ -373,7 +376,7 @@ export function Workspace() {
       // （実行中ならライブ進捗が見える）。phase は同期エフェクトが追従。
       const exTurns = existing.turns;
       setUserQuery(exTurns[exTurns.length - 1]?.query ?? "");
-    } else if (id === "th-current") {
+    } else if (id === LIVE_KEY) {
       setUserQuery("");
       setPhase("empty");
     } else {
@@ -394,12 +397,12 @@ export function Workspace() {
             setUserQuery(loaded[loaded.length - 1]?.query || "");
             setPhase("done");
           } else {
-            setActiveThreadId("th-current");
+            setActiveThreadId(LIVE_KEY);
             setPhase("empty");
           }
         })
         .catch(() => {
-          setActiveThreadId("th-current");
+          setActiveThreadId(LIVE_KEY);
           setPhase("empty");
         });
     }

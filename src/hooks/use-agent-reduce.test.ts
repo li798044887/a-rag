@@ -1,5 +1,12 @@
 import { expect, test } from "vitest";
-import { emptyTurn, reduceTurn } from "@/hooks/use-agent";
+import {
+  appendRunTurn,
+  emptyTurn,
+  LIVE_KEY,
+  moveConversation,
+  PENDING_THREAD_PREFIX,
+  reduceTurn,
+} from "@/hooks/use-agent";
 import type { AgentEvent } from "@/lib/types";
 
 test("reduceTurn appends unknown steps and updates known ones", () => {
@@ -31,4 +38,18 @@ test("reduceTurn streams answer and finalizes on done", () => {
   expect(turn.status).toBe("done");
   expect(turn.tokens).toBe(12);
   expect(turn.citationMap[1]).toMatchObject({ sourceId: "d1" });
+});
+
+test("pending new-thread runs are isolated from stale draft turns", () => {
+  const draft = { turns: [emptyTurn("前回の質問", [])] };
+  const pendingId = `${PENDING_THREAD_PREFIX}1`;
+
+  const withPending = appendRunTurn({ [LIVE_KEY]: draft }, pendingId, "今回の質問", [], undefined);
+
+  expect(withPending[LIVE_KEY].turns.map((turn) => turn.query)).toEqual(["前回の質問"]);
+  expect(withPending[pendingId].turns.map((turn) => turn.query)).toEqual(["今回の質問"]);
+
+  const moved = moveConversation(withPending, pendingId, "thread-1", emptyTurn("今回の質問", []));
+  expect(moved["thread-1"].turns.map((turn) => turn.query)).toEqual(["今回の質問"]);
+  expect(moved[LIVE_KEY].turns.map((turn) => turn.query)).toEqual(["前回の質問"]);
 });

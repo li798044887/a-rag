@@ -11,6 +11,11 @@ export interface ConvState {
 }
 
 export const LIVE_KEY = "th-current";
+export const PENDING_THREAD_PREFIX = `${LIVE_KEY}:pending:`;
+
+export function isPendingThreadId(id: string): boolean {
+  return id.startsWith(PENDING_THREAD_PREFIX);
+}
 
 export function emptyTurn(query: string, attachments: string[]): Turn {
   return {
@@ -18,6 +23,33 @@ export function emptyTurn(query: string, attachments: string[]): Turn {
     sourceIds: [], sources: [], tokens: 0, durationMs: 0,
     status: "running", attachments,
   };
+}
+
+export function appendRunTurn(
+  prev: Record<string, ConvState>,
+  key: string,
+  query: string,
+  attachments: string[],
+  truncateFrom: number | undefined,
+): Record<string, ConvState> {
+  const turns = prev[key]?.turns ?? [];
+  const base = truncateFrom != null ? turns.slice(0, truncateFrom) : turns;
+  return { ...prev, [key]: { turns: [...base, emptyTurn(query, attachments)] } };
+}
+
+export function moveConversation(
+  prev: Record<string, ConvState>,
+  from: string,
+  to: string,
+  fallbackTurn: Turn,
+): Record<string, ConvState> {
+  const moved = prev[from]?.turns ?? [];
+  const existing = from === to ? [] : (prev[to]?.turns ?? []);
+  const merged = [...existing, ...moved];
+  const next = { ...prev };
+  delete next[from];
+  next[to] = { turns: merged.length ? merged : [fallbackTurn] };
+  return next;
 }
 
 /** 1ターンに対する AgentEvent の畳み込み（純関数・テスト対象）。 */
@@ -53,6 +85,7 @@ export function reduceTurn(t: Turn, event: AgentEvent): Turn {
 export function useAgent() {
   const [convs, setConvs] = useState<Record<string, ConvState>>({});
   const controllers = useRef<Record<string, AbortController>>({});
+  const pendingSeq = useRef(0);
 
   const get = useCallback((id: string): ConvState | undefined => convs[id], [convs]);
 
@@ -75,23 +108,18 @@ export function useAgent() {
       attachments: string[],
       threadId: string | undefined,
       modelId: string | undefined,
-      cb: { onThread?: (id: string) => void; onDone?: (id: string, status: ConvStatus) => void;
+      cb: { onPendingThread?: (id: string) => void; onThread?: (id: string, previousId?: string) => void; onDone?: (id: string, status: ConvStatus) => void;
             truncateFrom?: number; regenerateFrom?: number } = {},
     ): Promise<{ status: ConvStatus; threadId: string }> => {
       const ctrl = new AbortController();
-      let key = threadId ?? LIVE_KEY;
+      const pendingKey = threadId ? null : `${PENDING_THREAD_PREFIX}${++pendingSeq.current}`;
+      let key = threadId ?? pendingKey!;
 
-      // 新しいターンを末尾に追加。truncateFrom 指定時はその index 以降を捨ててから追加（再生成）。
-      const appendTurn = (k: string) => setConvs((prev) => {
-        const turns = prev[k]?.turns ?? [];
-        const base = cb.truncateFrom != null ? turns.slice(0, cb.truncateFrom) : turns;
-        return { ...prev, [k]: { turns: [...base, emptyTurn(query, attachments)] } };
-      });
-
-      // 楽観的に新しいターンを即追加（新規は LIVE_KEY、既存はそのスレッドへ）。
+      // 楽観的に新しいターンを即追加（新規は run ごとの pending key、既存はそのスレッドへ）。
       // 新規スレッドの実 id 確定（X-Thread-Id）までの本文空白フラッシュを防ぐ。
       controllers.current[key] = ctrl;
-      appendTurn(key);
+      setConvs((prev) => appendRunTurn(prev, key, query, attachments, cb.truncateFrom));
+      if (pendingKey) cb.onPendingThread?.(pendingKey);
 
       const finish = (status: ConvStatus): { status: ConvStatus; threadId: string } => {
         setConvs((prev) => {
@@ -117,23 +145,18 @@ export function useAgent() {
 
         const realId = res.headers.get("X-Thread-Id") || key;
         if (realId !== key) {
+          const previousKey = key;
           controllers.current[realId] = ctrl;
           delete controllers.current[key];
-          // 仮キーのターンを実キーへ移し、ターンが無ければ emptyTurn を1つ用意（空エントリを残さない）。
-          setConvs((prev) => {
-            const moved = threadId ? [] : (prev[key]?.turns ?? []);
-            const merged = [...(prev[realId]?.turns ?? []), ...moved];
-            const next = { ...prev };
-            delete next[key];
-            next[realId] = { turns: merged.length ? merged : [emptyTurn(query, attachments)] };
-            return next;
-          });
+          // 仮キーのターンだけを実キーへ移す。下書きキーの残存ターンは混ぜない。
+          setConvs((prev) => moveConversation(prev, previousKey, realId, emptyTurn(query, attachments)));
           key = realId;
+          cb.onThread?.(key, previousKey);
         } else {
           if (!controllers.current[key]) controllers.current[key] = ctrl;
           setConvs((prev) => (prev[key]?.turns.length ? prev : { ...prev, [key]: { turns: [emptyTurn(query, attachments)] } }));
+          cb.onThread?.(key);
         }
-        cb.onThread?.(key);
 
         if (!res.ok || !res.body) return finish("error");
 
