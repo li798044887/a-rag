@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { parseTableHtml, type InlineSegment } from "@/components/sources/parse-table-html";
+import { TeXText } from "@/components/sources/tex-text";
 import { useOverflow } from "@/components/sources/use-overflow";
 import { TableSheet } from "@/components/sources/table-sheet";
 import { cn } from "@/lib/utils";
 
-function Seg({ s }: { s: InlineSegment }) {
+function Seg({ s, renderMath }: { s: InlineSegment; renderMath?: boolean }) {
   const cls = cn(s.bold && "font-semibold", s.italic && "italic", s.underline && "underline");
   if (s.href) {
     return (
@@ -15,23 +16,25 @@ function Seg({ s }: { s: InlineSegment }) {
       </a>
     );
   }
-  return cls ? <span className={cls}>{s.text}</span> : <>{s.text}</>;
+  const content = renderMath ? <TeXText text={s.text} /> : s.text;
+  return cls ? <span className={cls}>{content}</span> : <>{content}</>;
 }
 
-function Lines({ lines }: { lines: InlineSegment[][] }) {
+function Lines({ lines, renderMath }: { lines: InlineSegment[][]; renderMath?: boolean }) {
   return (
     <>
       {lines.map((line, i) => (
         <span key={i} className="block">
-          {line.map((s, j) => <Seg key={j} s={s} />)}
+          {line.map((s, j) => <Seg key={j} s={s} renderMath={renderMath} />)}
         </span>
       ))}
     </>
   );
 }
 
-/** テーブルHTML文字列を整形描画する。解析できない場合は素のテキストにフォールバック。 */
-export function HtmlTable({ html, className }: { html: string; className?: string }) {
+/** テーブルHTML文字列を整形描画する。解析できない場合は素のテキストにフォールバック。
+ *  renderMath=true でセル内の TeX 数式を KaTeX 描画する（既定は無効＝引用パネルの通貨 $ 誤爆を避ける）。 */
+export function HtmlTable({ html, className, renderMath }: { html: string; className?: string; renderMath?: boolean }) {
   const model = parseTableHtml(html);
   const { ref, overflow } = useOverflow<HTMLDivElement>();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -59,7 +62,7 @@ export function HtmlTable({ html, className }: { html: string; className?: strin
                     c.header ? "bg-surface-2 text-left font-semibold text-fg" : "text-fg-2",
                   )}
                 >
-                  <Lines lines={c.lines} />
+                  <Lines lines={c.lines} renderMath={renderMath} />
                 </Tag>
               );
             })}
