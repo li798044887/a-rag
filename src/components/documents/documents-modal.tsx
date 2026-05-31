@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
-import { HtmlTable } from "@/components/sources/html-table";
-import { parseSectionBody } from "@/components/sources/parse-section-body";
-import { TeXText } from "@/components/sources/tex-text";
+import { RenderedSectionBody } from "@/components/sources/rendered-section-body";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
 import { getFileMeta } from "@/lib/file-types";
@@ -20,26 +18,15 @@ const STATUS_LABEL: Record<string, string> = {
   parsing: "解析中", chunking: "チャンク化", embedding: "埋め込み", indexing: "索引化",
 };
 
-/** チャンク本文を整形描画する（表は HtmlTable、画像は inline、数式は KaTeX、その他は素テキスト）。
- *  一次資料パネルと同じ parseSectionBody を流用する。 */
+/** チャンク本文を HTML整形ビューで描画する。
+ *  一次資料パネルと同じ本文レンダラを使う。 */
 function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
-  const segs = parseSectionBody(chunk.text);
   return (
     <div className="mb-5">
       {chunk.heading_path && (
         <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">{chunk.heading_path}</div>
       )}
-      {segs.map((s, i) => {
-        if (s.kind === "table") return <HtmlTable key={i} html={s.html} className="my-1.5" renderMath />;
-        if (s.kind === "image")
-          // eslint-disable-next-line @next/next/no-img-element
-          return <img key={i} src={s.src} alt={s.alt} className="my-1.5 max-w-full rounded-lg border-[0.5px] border-divider" />;
-        return (
-          <div key={i} className="whitespace-pre-wrap text-[13px] leading-[1.7] text-fg-2">
-            <TeXText text={s.text} />
-          </div>
-        );
-      })}
+      <RenderedSectionBody body={chunk.text} blockType={chunk.block_type} />
     </div>
   );
 }
