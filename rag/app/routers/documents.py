@@ -8,7 +8,8 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.db import SessionLocal
 from app.documents_service import (
-    assets_dir_for, cleanup_document_files, list_documents, resolve_within, select_chunks,
+    assets_dir_for, cleanup_document_files, find_layout_pdf, list_documents,
+    resolve_within, select_chunks,
 )
 from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
@@ -225,6 +226,24 @@ def get_document_raw(document_id: str, owner_user_id: str, download: bool = Fals
         filename=filename,
         content_disposition_type="attachment" if download else "inline",
     )
+
+
+@router.get("/documents/{document_id}/layout",
+            dependencies=[Depends(require_internal_token)])
+def get_document_layout(document_id: str, owner_user_id: str):
+    session = SessionLocal()
+    try:
+        doc = session.get(Document, document_id)
+        if not doc or doc.owner_user_id != owner_user_id:
+            raise HTTPException(status_code=404, detail="document not found")
+        raw_path = doc.raw_path
+    finally:
+        session.close()
+    layout = find_layout_pdf(raw_path)
+    if layout is None or not layout.is_file():
+        raise HTTPException(status_code=404, detail="layout not found")
+    return FileResponse(str(layout), media_type="application/pdf",
+                        content_disposition_type="inline")
 
 
 @router.get("/documents/{document_id}/assets/{asset_path:path}",

@@ -27,6 +27,15 @@ def mineru_dir_for(raw_path: str) -> str:
     return str(Path(raw_path).with_suffix("")) + "_mineru"
 
 
+def find_layout_pdf(raw_path: str) -> Path | None:
+    """MinerU 生出力配下のレイアウト注釈付き PDF（*_layout.pdf）を探して返す。無ければ None。"""
+    base = Path(mineru_dir_for(raw_path))
+    if not base.is_dir():
+        return None
+    matches = sorted(base.rglob("*_layout.pdf"))
+    return matches[-1] if matches else None
+
+
 def cleanup_document_files(raw_path: str, parsed_md_path: str | None = None) -> None:
     """文書に紐づく実体（原本・解析MD・_assets・_mineru）を best-effort で削除する。"""
     for f in (raw_path, parsed_md_path):

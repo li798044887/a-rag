@@ -9,7 +9,7 @@ import { cn, formatFileSize } from "@/lib/utils";
 import type { DocumentPreview, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
 
-type Tab = "pdf" | "text" | "images";
+type Tab = "pdf" | "layout" | "text" | "images";
 const IMG_RE = /!\[[^\]]*\]\((\/api\/documents\/[^)\s]+)\)/g;
 
 const STATUS_LABEL: Record<string, string> = {
@@ -173,7 +173,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
               <>
                 <div className="flex items-center gap-2 border-b-[0.5px] border-divider px-3 py-2">
                   <div className="flex gap-1">
-                    {([["pdf", "原本PDF"], ["text", "解析テキスト"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
+                    {([["pdf", "原本PDF"], ["layout", "レイアウト"], ["text", "解析テキスト"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
                       <button key={t} onClick={() => setTab(t)} className={cn(
                         "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
                         tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
@@ -191,6 +191,9 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                 <div className="min-h-0 flex-1 overflow-auto bg-bg-2">
                   {tab === "pdf" && (
                     <iframe title={selected.filename} src={`/api/documents/${encodeURIComponent(selected.id)}/raw`} className="h-full w-full border-0" />
+                  )}
+                  {tab === "layout" && (
+                    <iframe title={`${selected.filename} レイアウト`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />
                   )}
                   {tab === "text" && (
                     <div className="mx-auto max-w-[760px] p-5">
