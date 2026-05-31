@@ -50,7 +50,7 @@ export function ConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-[120] grid animate-[ar-scale-in_0.15s_ease-out] place-items-center bg-[rgba(20,18,15,0.45)] p-6 backdrop-blur-[4px] max-md:items-end max-md:p-0"
+      className="fixed inset-0 z-[120] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.45)] p-6 backdrop-blur-[4px] motion-reduce:animate-none max-md:items-end max-md:p-0"
       onClick={onCancel}
     >
       <div
@@ -59,7 +59,7 @@ export function ConfirmModal({
         aria-labelledby="confirm-modal-title"
         aria-describedby={description ? "confirm-modal-desc" : undefined}
         onClick={(e) => e.stopPropagation()}
-        className="flex w-[400px] max-w-full flex-col gap-4 rounded-[16px] border-[0.5px] border-divider-strong bg-surface p-[22px_22px_18px] shadow-e3 max-md:w-full max-md:animate-[ar-pop-in_0.22s_ease-out] max-md:rounded-[18px_18px_0_0] max-md:p-[18px_18px_max(18px,env(safe-area-inset-bottom))]"
+        className="flex w-[400px] max-w-full animate-pop-in flex-col gap-4 rounded-[16px] border-[0.5px] border-divider-strong bg-surface p-[22px_22px_18px] shadow-e3 motion-reduce:animate-none max-md:w-full max-md:rounded-[18px_18px_0_0] max-md:p-[18px_18px_max(18px,env(safe-area-inset-bottom))]"
       >
         <div className="flex flex-col gap-2">
           <h3

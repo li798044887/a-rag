@@ -21,11 +21,11 @@ export function TableSheet({ onClose, children }: { onClose: () => void; childre
       aria-modal="true"
       aria-label="表の全画面表示"
       onClick={onClose}
-      className="fixed inset-0 z-[120] flex animate-[ar-scale-in_0.15s_ease-out] flex-col bg-[rgba(20,18,15,0.45)] p-4 backdrop-blur-[4px] max-md:p-0"
+      className="fixed inset-0 z-[120] flex animate-overlay-in flex-col bg-[rgba(20,18,15,0.45)] p-4 backdrop-blur-[4px] motion-reduce:animate-none max-md:p-0"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col overflow-hidden rounded-[14px] border-[0.5px] border-divider-strong bg-surface shadow-e3 max-md:rounded-none"
+        className="mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 animate-pop-in flex-col overflow-hidden rounded-[14px] border-[0.5px] border-divider-strong bg-surface shadow-e3 motion-reduce:animate-none max-md:rounded-none"
       >
         <div className="flex h-12 shrink-0 items-center justify-between border-b-[0.5px] border-divider px-4">
           <span className="text-[13px] font-semibold text-fg">表</span>

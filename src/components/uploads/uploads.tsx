@@ -123,8 +123,8 @@ export function UserAttachments({ files }: { files: StagedFile[] }) {
 export function DropOverlay({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return (
-    <div className="pointer-events-none fixed inset-0 z-[300] grid animate-[ar-fade-up_0.12s_ease-out] place-items-center bg-[rgba(20,18,15,0.55)] backdrop-blur-[4px]">
-      <div className="w-[420px] max-w-[80vw] rounded-[18px] border-2 border-dashed border-accent bg-surface p-10 text-center text-fg shadow-e3 max-md:w-[calc(100vw-48px)] max-md:p-7">
+    <div className="pointer-events-none fixed inset-0 z-[300] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.55)] backdrop-blur-[4px] motion-reduce:animate-none">
+      <div className="w-[420px] max-w-[80vw] animate-pop-in rounded-[18px] border-2 border-dashed border-accent bg-surface p-10 text-center text-fg shadow-e3 motion-reduce:animate-none max-md:w-[calc(100vw-48px)] max-md:p-7">
         <svg viewBox="0 0 48 48" width="40" height="40" className="mx-auto mb-3 text-accent">
           <path d="M14 28V14a4 4 0 014-4h11l9 9v17a4 4 0 01-4 4H14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinejoin="round" />
           <path d="M29 10v9h9" stroke="currentColor" strokeWidth="2" fill="none" strokeLinejoin="round" />

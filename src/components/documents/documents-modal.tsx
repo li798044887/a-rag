@@ -101,12 +101,12 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] grid animate-[ar-fade-up_0.12s_ease-out] place-items-center bg-[rgba(20,18,15,0.55)] p-4 backdrop-blur-[3px]" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.55)] p-4 backdrop-blur-[3px] motion-reduce:animate-none" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="documents-modal-title"
-        className="flex h-[88vh] w-[90vw] max-w-[1180px] flex-col overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-e3 max-md:h-[92vh] max-md:w-full"
+        className="flex h-[88vh] w-[90vw] max-w-[1180px] animate-pop-in flex-col overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-e3 motion-reduce:animate-none max-md:h-[92vh] max-md:w-full"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

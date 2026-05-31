@@ -40,13 +40,13 @@ export function HelpModal({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[90] grid animate-[ar-scale-in_0.15s_ease-out] place-items-center bg-[rgba(20,18,15,0.48)] p-6 max-md:p-0"
+      className="fixed inset-0 z-[90] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.48)] p-6 motion-reduce:animate-none max-md:p-0"
       role="dialog"
       aria-modal="true"
       aria-label="ARag ヘルプ"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="grid h-[min(680px,92vh)] w-[min(960px,100%)] grid-cols-[220px_1fr] overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-[0_30px_80px_rgba(0,0,0,0.32)] max-md:h-full max-md:max-h-screen max-md:w-full max-md:grid-cols-1 max-md:grid-rows-[auto_1fr] max-md:rounded-none max-md:border-0">
+      <div className="grid h-[min(680px,92vh)] w-[min(960px,100%)] animate-pop-in grid-cols-[220px_1fr] overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-[0_30px_80px_rgba(0,0,0,0.32)] motion-reduce:animate-none max-md:h-full max-md:max-h-screen max-md:w-full max-md:grid-cols-1 max-md:grid-rows-[auto_1fr] max-md:rounded-none max-md:border-0">
         {/* Sidebar */}
         <aside className="flex flex-col border-r-[0.5px] border-divider bg-surface-2 p-[18px_12px_14px] max-md:flex-row max-md:items-center max-md:gap-2 max-md:overflow-x-auto max-md:border-b-[0.5px] max-md:border-r-0 max-md:p-2.5">
           <div className="mb-2.5 flex items-center gap-2.5 border-b-[0.5px] border-divider px-2 pb-3.5 pt-0.5 max-md:m-0 max-md:shrink-0 max-md:border-b-0 max-md:border-r-[0.5px] max-md:border-divider max-md:px-1 max-md:pr-2.5 max-md:pb-0">

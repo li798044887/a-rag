@@ -207,10 +207,10 @@ export function SettingsModal({
   const selectInput = "h-[30px] w-[180px] rounded-[7px] border border-divider-strong bg-surface px-2 text-[12.5px] text-fg outline-none max-md:w-full";
 
   return (
-    <div className="fixed inset-0 z-[100] grid animate-[ar-scale-in_0.15s_ease-out] place-items-center bg-[rgba(20,18,15,0.45)] p-6 backdrop-blur-[4px] max-md:p-0" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.45)] p-6 backdrop-blur-[4px] motion-reduce:animate-none max-md:p-0" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="grid h-[540px] max-h-full w-[760px] max-w-full grid-cols-[200px_1fr] overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-e3 max-md:h-full max-md:max-h-none max-md:w-full max-md:grid-cols-1 max-md:grid-rows-[auto_1fr] max-md:rounded-none max-md:border-0"
+        className="grid h-[540px] max-h-full w-[760px] max-w-full animate-pop-in grid-cols-[200px_1fr] overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-e3 motion-reduce:animate-none max-md:h-full max-md:max-h-none max-md:w-full max-md:grid-cols-1 max-md:grid-rows-[auto_1fr] max-md:rounded-none max-md:border-0"
       >
         {/* Side nav */}
         <div className="flex flex-col gap-0.5 border-r-[0.5px] border-divider bg-bg-2 p-[16px_10px] max-md:flex-row max-md:overflow-x-auto max-md:border-b-[0.5px] max-md:border-r-0 max-md:p-[8px_10px] max-md:[scrollbar-width:none]">

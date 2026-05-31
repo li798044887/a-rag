@@ -194,6 +194,14 @@
     opacity: 1;
   }
 }
+@keyframes ar-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 @keyframes ar-scale-in {
   from {
     transform: scale(0.96);
@@ -221,6 +229,7 @@
   --animate-soft-pulse: ar-pulse 1.4s ease-in-out infinite;
   --animate-hl-pulse: ar-hl-pulse 1.6s ease-out;
   --animate-toast-in: ar-toast-in 0.24s cubic-bezier(0.3, 0.7, 0.4, 1);
+  --animate-overlay-in: ar-overlay-in 0.16s cubic-bezier(0.3, 0.7, 0.4, 1) both;
   --animate-fade-up: ar-fade-up 0.3s cubic-bezier(0.3, 0.7, 0.4, 1) both;
   --animate-scale-in: ar-scale-in 0.18s cubic-bezier(0.3, 0.7, 0.4, 1) both;
   --animate-pop-in: ar-pop-in 0.16s cubic-bezier(0.3, 0.7, 0.4, 1) both;
