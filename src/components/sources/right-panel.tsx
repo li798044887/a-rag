@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { HtmlTable } from "@/components/sources/html-table";
 import { PanelResizer } from "@/components/sources/panel-resizer";
-import { parseSectionBody } from "@/components/sources/parse-section-body";
+import { PlainSectionBody, RenderedSectionBody } from "@/components/sources/rendered-section-body";
 import type { CitationMap, Source, SourceType } from "@/lib/types";
 
 export type RightPanelAction = "open-source" | "download" | "share";
@@ -49,55 +48,12 @@ function SourceIcon({ type }: { type: SourceType }) {
 
 const iconBtn = "grid h-[26px] w-[26px] place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg";
 
-const proseCls = "whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2";
-
-/**
- * セクション本文を描画する。本文は素のテキスト・HTMLテーブル・markdown 画像の混在を
- * 取りうる（expandedText 由来で見出し＋表が連結される等）。parseSectionBody で
- * 順序付きセグメントへ分割し、種類ごとに描画する。
- */
-function SectionImage({ src, alt }: { src: string; alt: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <div className="rounded-[8px] border-[0.5px] border-divider bg-surface-2 px-3 py-4 text-center text-[11.5px] text-muted">
-        画像を読み込めませんでした{alt ? `（${alt}）` : ""}
-      </div>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- 認証付き動的アセットのため next/image は使わない
-    <img
-      src={src}
-      alt={alt}
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className="my-1 max-w-full rounded-[8px] border-[0.5px] border-divider"
-    />
-  );
-}
-
-function SectionBody({ body }: { body: string }) {
-  const segs = parseSectionBody(body);
-  if (segs.length === 0) return <div className={proseCls}>{body}</div>;
-  if (segs.length === 1 && segs[0].kind === "text") {
-    return <div className={proseCls}>{segs[0].text}</div>;
-  }
-  return (
-    <div className="flex flex-col gap-1.5">
-      {segs.map((s, i) => {
-        if (s.kind === "table") return <HtmlTable key={i} html={s.html} className="my-1" />;
-        if (s.kind === "image") return <SectionImage key={i} src={s.src} alt={s.alt} />;
-        return <div key={i} className={proseCls}>{s.text}</div>;
-      })}
-    </div>
-  );
-}
+type ViewMode = "html" | "text" | "pdf";
 
 export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction, resizable, panelWidth = 420, onResizeWidth }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
-  const [viewMode, setViewMode] = useState<"structured" | "pdf">("structured");
+  const [viewMode, setViewMode] = useState<ViewMode>("html");
 
   useEffect(() => {
     if (!highlightSectionId || !hlRef.current || !bodyRef.current) return;
@@ -110,8 +66,8 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
   // ハイライト中セクション → 先頭セクションの順でページを決定（0-based を PDF の 1-based へ）。
   const hlSec = active?.sections.find((s) => s.id === highlightSectionId);
   const pdfPage = ((hlSec?.page ?? active?.sections[0]?.page ?? 0) | 0) + 1;
-  // PDF を持たない資料では常に構造化表示にフォールバックする（state はそのまま保持）。
-  const effectiveMode = isPdf ? viewMode : "structured";
+  // PDF を持たない資料では HTML整形にフォールバックする。
+  const effectiveMode: ViewMode = isPdf ? viewMode : (viewMode === "pdf" ? "html" : viewMode);
 
   const citationNum = (id: string) => {
     const entry = Object.entries(citationMap).find(([, c]) => c.sourceId === id);
@@ -201,9 +157,9 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
           <span className="min-w-[32px] font-mono text-[9.5px] uppercase tracking-[0.05em] text-muted-2">パス</span>
           <code className="break-all font-mono text-[11px] text-fg-2">{active.path}</code>
         </div>
-        {isPdf && (
+        {active && (
           <div className="mt-1 flex gap-1">
-            {([["structured", "構造化"], ["pdf", "元PDF"]] as const).map(([mode, label]) => (
+            {([["html", "HTML整形"], ["text", "解析テキスト"], ...(isPdf ? [["pdf", "元PDF"]] as const : [])] as const).map(([mode, label]) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
@@ -256,7 +212,11 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
                 </div>
               )}
               <h3 className="mb-1.5 text-[12.5px] font-bold tracking-[-0.005em] text-fg">{sec.heading}</h3>
-              <SectionBody body={sec.body} />
+              {effectiveMode === "text" ? (
+                <PlainSectionBody body={sec.body} />
+              ) : (
+                <RenderedSectionBody body={sec.body} blockType={sec.blockType} />
+              )}
             </div>
           );
         })}
