@@ -31,6 +31,15 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   const [previewLoading, setPreviewLoading] = useState(false);
 
   const selected = docs.items.find((d) => d.id === selectedId) ?? null;
+  const isPdf = selected?.mime === "application/pdf";
+  const isImage = selected?.mime.startsWith("image/") ?? false;
+  // レイアウト注釈 PDF は MinerU が PDF 入力時のみ生成する。原本は PDF/画像のみブラウザで表示できる。
+
+  // 文書選択時、ブラウザで表示できない形式（Excel 等）は解析テキストを初期表示にする。
+  const selectDoc = (d: DocumentSummary) => {
+    setSelectedId(d.id);
+    setTab(d.mime === "application/pdf" || d.mime.startsWith("image/") ? "pdf" : "text");
+  };
 
   // 選択文書のプレビュー（全チャンク）を取得。
   useEffect(() => {
@@ -130,7 +139,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                 return (
                   <button
                     key={d.id}
-                    onClick={() => { setSelectedId(d.id); setTab("pdf"); }}
+                    onClick={() => selectDoc(d)}
                     className={cn(
                       "group/dr my-px flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors",
                       selectedId === d.id ? "bg-surface-2 shadow-e1" : "hover:bg-divider",
@@ -173,7 +182,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
               <>
                 <div className="flex items-center gap-2 border-b-[0.5px] border-divider px-3 py-2">
                   <div className="flex gap-1">
-                    {([["pdf", "原本PDF"], ["layout", "レイアウト"], ["text", "解析テキスト"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
+                    {([["pdf", "原本"], ...(isPdf ? [["layout", "レイアウト"] as [Tab, string]] : []), ["text", "解析テキスト"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
                       <button key={t} onClick={() => setTab(t)} className={cn(
                         "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
                         tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
@@ -189,10 +198,25 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto bg-bg-2">
-                  {tab === "pdf" && (
+                  {tab === "pdf" && isPdf && (
                     <iframe title={selected.filename} src={`/api/documents/${encodeURIComponent(selected.id)}/raw`} className="h-full w-full border-0" />
                   )}
-                  {tab === "layout" && (
+                  {tab === "pdf" && isImage && (
+                    <div className="grid h-full place-items-center p-5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/documents/${encodeURIComponent(selected.id)}/raw`} alt={selected.filename} className="max-h-full max-w-full rounded-lg border-[0.5px] border-divider" />
+                    </div>
+                  )}
+                  {tab === "pdf" && !isPdf && !isImage && (
+                    <div className="grid h-full place-items-center p-8 text-center">
+                      <div className="max-w-[380px]">
+                        <div className="mb-1.5 text-[13px] font-semibold text-fg">この形式はブラウザでプレビューできません</div>
+                        <div className="mb-4 text-[12px] leading-[1.6] text-muted">「解析テキスト」タブで抽出済みの内容を確認するか、原本をダウンロードしてください。</div>
+                        <a href={`/api/documents/${encodeURIComponent(selected.id)}/raw?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2">原本をダウンロード</a>
+                      </div>
+                    </div>
+                  )}
+                  {tab === "layout" && isPdf && (
                     <iframe title={`${selected.filename} レイアウト`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />
                   )}
                   {tab === "text" && (
