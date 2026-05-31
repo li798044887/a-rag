@@ -59,6 +59,8 @@ def test_delete_removes_vectors_chunks_jobs_doc_and_files(client, monkeypatch):
                         headers={"x-internal-token": settings.rag_internal_token})
     assert res.status_code == 204
     assert deleted["vectors"] == "d1"
+    assert deleted["chunks"] is True
+    assert deleted["jobs"] is True
     assert deleted["doc"] is True
     assert deleted["files"] == ("/u/d1.pdf", None)
 

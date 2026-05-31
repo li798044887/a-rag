@@ -32,3 +32,13 @@ def test_list_passes_filters_and_returns_payload(client, monkeypatch):
     assert body["next_cursor"] == "CUR"
     assert body["items"][0]["chunk_count"] == 4
     assert seen == {"owner_user_id": "u1", "limit": 10, "cursor": None, "q": "設計", "status": "ready"}
+
+
+def test_list_invalid_cursor_returns_400(client, monkeypatch):
+    def boom(*a, **k):
+        raise ValueError("invalid cursor")
+
+    monkeypatch.setattr(documents_router, "_list_documents", boom)
+    res = client.get("/documents?owner_user_id=u1&cursor=@@bad@@",
+                     headers={"x-internal-token": settings.rag_internal_token})
+    assert res.status_code == 400

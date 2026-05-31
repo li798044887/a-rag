@@ -36,7 +36,10 @@ def _list_documents(owner_user_id: str, limit: int, cursor: str | None,
 def list_documents_endpoint(owner_user_id: str, limit: int = 30,
                             cursor: str | None = None, q: str | None = None,
                             status: str | None = None):
-    return _list_documents(owner_user_id, min(max(limit, 1), 100), cursor, q, status)
+    try:
+        return _list_documents(owner_user_id, min(max(limit, 1), 100), cursor, q, status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid cursor")
 
 
 def _upload_dir() -> Path:

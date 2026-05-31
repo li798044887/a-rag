@@ -81,7 +81,10 @@ def list_documents(session, *, owner_user_id: str, limit: int = 30,
 
     page = _base().order_by(Document.created_at.desc(), Document.id.desc())
     if cursor:
-        ts, cid = decode_cursor(cursor)
+        try:
+            ts, cid = decode_cursor(cursor)
+        except Exception as exc:  # noqa: BLE001 — 不正/破損カーソルは 400 にする
+            raise ValueError("invalid cursor") from exc
         page = page.filter(tuple_(Document.created_at, Document.id) < (ts, cid))
     docs = page.limit(limit + 1).all()
     has_more = len(docs) > limit

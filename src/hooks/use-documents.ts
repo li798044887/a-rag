@@ -62,17 +62,18 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
 
   const remove = useCallback(async (id: string) => {
     const prev = items;
+    const prevTotal = total;
     setItems((cur) => cur.filter((d) => d.id !== id));
     setTotal((t) => Math.max(0, t - 1));
     const r = await fetch(`/api/documents/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
     if (!r || !r.ok) {
       setItems(prev);
-      setTotal(prev.length);
+      setTotal(prevTotal);
       onToastRef.current?.("削除に失敗しました", "error");
       return;
     }
     onToastRef.current?.("文書を削除しました", "success");
-  }, [items]);
+  }, [items, total]);
 
   const retry = useCallback(async (jobId: string, id: string) => {
     setItems((cur) => cur.map((d) => (d.id === id ? { ...d, status: "processing", error: null } : d)));
