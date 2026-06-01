@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { isConvertibleToPdf } from "@/lib/file-types";
+import { isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
 
 test("isConvertibleToPdf: Office 形式は true（拡張子の大小無視）", () => {
   for (const name of [
@@ -14,5 +14,17 @@ test("isConvertibleToPdf: Office 形式は true（拡張子の大小無視）", 
 test("isConvertibleToPdf: 既にプレビュー可能/対象外は false", () => {
   for (const name of ["a.pdf", "a.png", "a.jpg", "a.txt", "a.md", "a.csv", "noext"]) {
     expect(isConvertibleToPdf(name), name).toBe(false);
+  }
+});
+
+test("isSpreadsheet: 表計算形式は true（拡張子の大小無視）", () => {
+  for (const name of ["data.xlsx", "old.xls", "calc.ods", "DATA.XLSX"]) {
+    expect(isSpreadsheet(name), name).toBe(true);
+  }
+});
+
+test("isSpreadsheet: それ以外は false", () => {
+  for (const name of ["a.csv", "a.docx", "a.pdf", "a.png", "noext"]) {
+    expect(isSpreadsheet(name), name).toBe(false);
   }
 });

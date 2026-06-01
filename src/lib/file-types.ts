@@ -45,3 +45,12 @@ export function isConvertibleToPdf(name: string): boolean {
   const ext = (name.split(".").pop() || "").toLowerCase();
   return name.includes(".") && CONVERTIBLE_EXTS.has(ext);
 }
+
+// SheetJS でネイティブ描画する表計算形式（拡張子・小文字）。CSV は解析テキストで足りるため対象外。
+const SPREADSHEET_EXTS = new Set(["xlsx", "xls", "ods"]);
+
+// 原本をブラウザ上で Excel 風グリッド描画できる形式かを拡張子で判定する。
+export function isSpreadsheet(name: string): boolean {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  return name.includes(".") && SPREADSHEET_EXTS.has(ext);
+}
