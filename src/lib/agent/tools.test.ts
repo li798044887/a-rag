@@ -154,3 +154,26 @@ test("retrieve tool pushes nested sub-steps with parentId to the bus", async () 
   const vsDone = subSteps.find((e) => e.step.name === "vector_search" && e.step.status === "done");
   expect(vsDone!.step.output).toMatchObject({ count: 1 });
 });
+
+test("retrieve tool scopes to attachmentDocIds when provided", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(),
+    attachmentDocIds: ["docA", "docB"] });
+
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-scope", messages: [] } as never);
+
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenLastCalledWith(
+    expect.objectContaining({ documentIds: ["docA", "docB"] }));
+});
+
+test("retrieve tool passes undefined documentIds without attachments", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-noscope", messages: [] } as never);
+
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenLastCalledWith(
+    expect.objectContaining({ documentIds: undefined }));
+});

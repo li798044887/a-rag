@@ -18,6 +18,8 @@ export interface BuildToolsInput {
   ownerUserId: string;
   meta: Map<string, ToolCallMeta>;
   bus: StepBus;
+  /** 添付ありターンでは retrieve をこの文書群に排他スコープする。空/未指定なら全体検索。 */
+  attachmentDocIds?: string[];
 }
 
 const RETRIEVE_TOP_K = 6;
@@ -94,7 +96,7 @@ function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string): 
   return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummary(ev.stage, ev.count) } };
 }
 
-export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput): ToolSet {
+export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds }: BuildToolsInput): ToolSet {
   return {
     retrieve: tool({
       description:
@@ -107,6 +109,7 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
       execute: async ({ query }, { toolCallId }) => {
         const chunks = await retrieveChunksStream({
           query, ownerUserId, topK: RETRIEVE_TOP_K, candidateK: RETRIEVE_CANDIDATE_K,
+          documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
           onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, query)),
         });
         const lines = chunks.map((c) => {
