@@ -209,7 +209,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
               </button>
               {uploadMenuOpen && (
                 <>
-                  {/* 按钮与下拉菜单之间的透明桥接层，防止鼠标移过间隙时触发 onMouseLeave */}
+                  {/* ボタンとプルダウンメニューの間に透明なブリッジ領域を設け、マウスが隙間を通過した際に onMouseLeave が発火しないようにする */}
                   <div className="absolute left-0 top-[28px] z-10 h-[6px] w-full" />
                   <div className="absolute right-0 top-[34px] z-10 w-[176px] animate-scale-in overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface-elev p-1 shadow-e2 motion-reduce:animate-none"
                        onMouseLeave={() => setUploadMenuOpen(false)}>
