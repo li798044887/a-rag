@@ -56,3 +56,21 @@ def test_retrieve_stream_requires_token():
 def test_retrieve_request_defaults_to_cpu_friendly_candidate_count():
     req = RetrieveRequest(query="x", owner_user_id="u1")
     assert req.candidate_k == 10
+
+
+def test_retrieve_accepts_document_ids(monkeypatch):
+    captured = {}
+
+    def fake_run(req):
+        captured["document_ids"] = req.document_ids
+        return [RetrievedChunk(chunk_id="c1", document_id="docA", document_title="t",
+                               heading_path="H", page_start=0, page_end=0, block_type="text",
+                               text="body", expanded_text="exp", score=0.9)]
+
+    monkeypatch.setattr(retrieve_router, "_run_retrieve", fake_run)
+    client = TestClient(app)
+    res = client.post("/retrieve", headers={"x-internal-token": settings.rag_internal_token},
+                      json={"query": "本文", "owner_user_id": "u1",
+                            "top_k": 5, "document_ids": ["docA"]})
+    assert res.status_code == 200
+    assert captured["document_ids"] == ["docA"]

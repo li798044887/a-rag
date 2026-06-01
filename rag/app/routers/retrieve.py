@@ -23,7 +23,8 @@ def _run_retrieve(req: RetrieveRequest) -> list[RetrievedChunk]:
         return run_retrieve_service(
             session, store, embedder, get_reranker(),
             query=req.rewritten or req.query, owner_user_id=req.owner_user_id,
-            top_k=req.top_k, candidate_k=req.candidate_k)
+            top_k=req.top_k, candidate_k=req.candidate_k,
+            document_ids=req.document_ids)
     finally:
         session.close()
 
@@ -42,7 +43,8 @@ def _stream_ndjson(req: RetrieveRequest):
         for ev in retrieve_stream(
                 session, store, embedder, get_reranker(),
                 query=req.rewritten or req.query, owner_user_id=req.owner_user_id,
-                top_k=req.top_k, candidate_k=req.candidate_k):
+                top_k=req.top_k, candidate_k=req.candidate_k,
+                document_ids=req.document_ids):
             if ev.get("stage") == "result":
                 payload = {"stage": "result", "chunks": [c.model_dump() for c in ev["chunks"]]}
             else:

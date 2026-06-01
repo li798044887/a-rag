@@ -37,6 +37,7 @@ class RetrieveRequest(BaseModel):
     owner_user_id: str
     top_k: int = Field(default=6, ge=1, le=50)
     candidate_k: int = Field(default=10, ge=1, le=500)
+    document_ids: list[str] | None = None
 
 
 class RetrieveResponse(BaseModel):
