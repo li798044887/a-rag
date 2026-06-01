@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, within } from "storybook/test";
+import { expect, fn } from "storybook/test";
 import { SpreadsheetGrid } from "@/components/documents/spreadsheet-grid";
 import type { GridModel } from "@/components/documents/spreadsheet-model";
 
@@ -62,8 +62,8 @@ export const Merged: Story = {
     totalRows: 2,
   },
   play: async ({ canvas }) => {
-    const cell = within(canvas.getByText("月次予定").closest("td")!);
-    await expect(cell).toBeTruthy();
+    const cell = canvas.getByText("月次予定").closest("td");
+    await expect(cell).toHaveAttribute("colspan", "2");
   },
 };
 
