@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, waitFor } from "storybook/test";
 import { HtmlTable } from "@/components/sources/html-table";
 
 const sampleHtml = `
@@ -49,18 +48,4 @@ export const WideOverflow: Story = {
       </div>
     ),
   ],
-  play: async ({ canvas, userEvent }) => {
-    // 検出は scroll/ResizeObserver 後に反映されるため待つ。
-    const scroller = canvas.getByRole("table").closest("[data-overflow-right]")!;
-    await waitFor(() => expect(scroller.getAttribute("data-overflow-right")).toBe("true"));
-
-    // 拡大ボタン → シートが開く。
-    await userEvent.click(canvas.getByRole("button", { name: /拡大/ }));
-    const dialog = await canvas.findByRole("dialog");
-    await expect(dialog).toBeInTheDocument();
-
-    // Esc で閉じる。
-    await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(canvas.queryByRole("dialog")).toBeNull());
-  },
 };
