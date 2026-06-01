@@ -165,6 +165,9 @@ export function Workspace() {
         : query || (ready.length ? "添付ファイルについて要点をまとめて" : "");
       if (!finalQuery) return;
       const attachNames = regen != null ? (regenTurn?.attachments ?? []) : ready.map((f) => f.name);
+      const attachDocIds = regen != null
+        ? (regenTurn?.attachmentDocIds ?? [])
+        : ready.map((f) => f.documentId).filter((x): x is string => !!x);
 
       setUserQuery(finalQuery);
       setUserAttachments(regen != null ? [] : ready);
@@ -195,7 +198,7 @@ export function Workspace() {
 
       const navAtStart = navToken.current;
 
-      await agent.run(finalQuery, attachNames, continueId, model.id, {
+      await agent.run(finalQuery, attachNames, attachDocIds, continueId, model.id, {
         truncateFrom: regen ?? undefined,
         regenerateFrom: regen ?? undefined,
         onPendingThread: (id) => {

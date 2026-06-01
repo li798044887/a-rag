@@ -44,7 +44,7 @@ test("pending new-thread runs are isolated from stale draft turns", () => {
   const draft = { turns: [emptyTurn("前回の質問", [])] };
   const pendingId = `${PENDING_THREAD_PREFIX}1`;
 
-  const withPending = appendRunTurn({ [LIVE_KEY]: draft }, pendingId, "今回の質問", [], undefined);
+  const withPending = appendRunTurn({ [LIVE_KEY]: draft }, pendingId, "今回の質問", [], [], undefined);
 
   expect(withPending[LIVE_KEY].turns.map((turn) => turn.query)).toEqual(["前回の質問"]);
   expect(withPending[pendingId].turns.map((turn) => turn.query)).toEqual(["今回の質問"]);

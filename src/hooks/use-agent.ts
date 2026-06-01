@@ -17,11 +17,11 @@ export function isPendingThreadId(id: string): boolean {
   return id.startsWith(PENDING_THREAD_PREFIX);
 }
 
-export function emptyTurn(query: string, attachments: string[]): Turn {
+export function emptyTurn(query: string, attachments: string[], attachmentDocIds: string[] = []): Turn {
   return {
     query, steps: [], answer: "", streaming: false, citationMap: {},
     sourceIds: [], sources: [], tokens: 0, durationMs: 0,
-    status: "running", attachments,
+    status: "running", attachments, attachmentDocIds,
   };
 }
 
@@ -30,11 +30,12 @@ export function appendRunTurn(
   key: string,
   query: string,
   attachments: string[],
+  attachmentDocIds: string[],
   truncateFrom: number | undefined,
 ): Record<string, ConvState> {
   const turns = prev[key]?.turns ?? [];
   const base = truncateFrom != null ? turns.slice(0, truncateFrom) : turns;
-  return { ...prev, [key]: { turns: [...base, emptyTurn(query, attachments)] } };
+  return { ...prev, [key]: { turns: [...base, emptyTurn(query, attachments, attachmentDocIds)] } };
 }
 
 export function moveConversation(
@@ -106,6 +107,7 @@ export function useAgent() {
     async (
       query: string,
       attachments: string[],
+      attachmentDocIds: string[],
       threadId: string | undefined,
       modelId: string | undefined,
       cb: { onPendingThread?: (id: string) => void; onThread?: (id: string, previousId?: string) => void; onDone?: (id: string, status: ConvStatus) => void;
@@ -118,7 +120,7 @@ export function useAgent() {
       // 楽観的に新しいターンを即追加（新規は run ごとの pending key、既存はそのスレッドへ）。
       // 新規スレッドの実 id 確定（X-Thread-Id）までの本文空白フラッシュを防ぐ。
       controllers.current[key] = ctrl;
-      setConvs((prev) => appendRunTurn(prev, key, query, attachments, cb.truncateFrom));
+      setConvs((prev) => appendRunTurn(prev, key, query, attachments, attachmentDocIds, cb.truncateFrom));
       if (pendingKey) cb.onPendingThread?.(pendingKey);
 
       const finish = (status: ConvStatus): { status: ConvStatus; threadId: string } => {
@@ -139,7 +141,7 @@ export function useAgent() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, attachments, threadId, model: modelId, regenerateFrom: cb.regenerateFrom }),
+          body: JSON.stringify({ query, attachments, attachmentDocIds, threadId, model: modelId, regenerateFrom: cb.regenerateFrom }),
           signal: ctrl.signal,
         });
 
@@ -149,12 +151,12 @@ export function useAgent() {
           controllers.current[realId] = ctrl;
           delete controllers.current[key];
           // 仮キーのターンだけを実キーへ移す。下書きキーの残存ターンは混ぜない。
-          setConvs((prev) => moveConversation(prev, previousKey, realId, emptyTurn(query, attachments)));
+          setConvs((prev) => moveConversation(prev, previousKey, realId, emptyTurn(query, attachments, attachmentDocIds)));
           key = realId;
           cb.onThread?.(key, previousKey);
         } else {
           if (!controllers.current[key]) controllers.current[key] = ctrl;
-          setConvs((prev) => (prev[key]?.turns.length ? prev : { ...prev, [key]: { turns: [emptyTurn(query, attachments)] } }));
+          setConvs((prev) => (prev[key]?.turns.length ? prev : { ...prev, [key]: { turns: [emptyTurn(query, attachments, attachmentDocIds)] } }));
           cb.onThread?.(key);
         }
 
