@@ -39,18 +39,20 @@ vi.mock("ai", async (orig) => {
   };
 });
 
-vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
+// 既定モデルは deepseek-flash で、DeepSeek 経路は createAnthropic で生成する。
+// streamText はモック済みのため返すモデル値は実際には使われない。
+vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model", createAnthropic: () => () => "model" }));
 
 import { streamText } from "ai";
 import { retrieveChunksStream } from "@/lib/agent/retrieve-client";
 import { runAgent, buildUserContent } from "@/lib/agent/run";
 import type { AgentEvent } from "@/lib/types";
 
-process.env.ANTHROPIC_API_KEY = "test-key";
+process.env.DEEPSEEK_API_KEY = "test-key";
 
 // 各テストでキーやモック差し替えが他テストへ漏れないよう確実に復元する。
 afterEach(() => {
-  process.env.ANTHROPIC_API_KEY = "test-key";
+  process.env.DEEPSEEK_API_KEY = "test-key";
   vi.mocked(streamText).mockClear();
 });
 
@@ -137,7 +139,7 @@ test("runAgent emits an error step on tool-error and continues to stream the ans
 });
 
 test("runAgent returns the missing-key reason and empty sources when no API key is set", async () => {
-  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.DEEPSEEK_API_KEY;
 
   const events: AgentEvent[] = [];
   for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
@@ -145,7 +147,7 @@ test("runAgent returns the missing-key reason and empty sources when no API key 
   }
 
   const answer = events.filter((e) => e.type === "answer-delta").map((e) => e.text).join("");
-  expect(answer).toContain("ANTHROPIC_API_KEY");
+  expect(answer).toContain("DEEPSEEK_API_KEY");
 
   const done = events.find((e) => e.type === "done");
   if (!done || done.type !== "done") throw new Error("done event missing");

@@ -30,12 +30,14 @@ vi.mock("ai", async (orig) => {
   };
 });
 
-vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
+// 既定モデルは deepseek-flash で、DeepSeek 経路は createAnthropic で生成する。
+// streamText はモック済みのため返すモデル値は実際には使われない。
+vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model", createAnthropic: () => () => "model" }));
 
 import { runAgent } from "@/lib/agent/run";
 import type { AgentEvent } from "@/lib/types";
 
-process.env.ANTHROPIC_API_KEY = "test-key";
+process.env.DEEPSEEK_API_KEY = "test-key";
 
 test("retrieve failure surfaces an error step and still finishes gracefully", async () => {
   const events: AgentEvent[] = [];

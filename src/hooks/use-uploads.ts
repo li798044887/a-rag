@@ -14,10 +14,20 @@ interface PickedFile {
   relPath?: string;
 }
 
+/** ✕ ボタンの操作種別を状態から決める。
+ *  uploading=送信中POSTのabort / queued=サーバ側キャンセル / processing=不可 / それ以外=ローカル除去。 */
+export function uploadActionFor(status: UploadStatus): "abort" | "cancel" | "none" | "remove" {
+  if (status === "uploading") return "abort";
+  if (status === "queued") return "cancel";
+  if (status === "processing") return "none";
+  return "remove";
+}
+
 /** rag のステージ status を粗い UploadStatus に丸める。 */
 function toUploadStatus(s: string): UploadStatus {
   if (s === "ready") return "ready";
   if (s === "error") return "error";
+  if (s === "queued") return "queued";
   return "processing";
 }
 
@@ -68,6 +78,7 @@ export function useUploads(onToast?: PushToast) {
   // アップロード進捗アニメ用の interval と、SSE 用の AbortController を id ごとに保持。
   const timers = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const streams = useRef<Record<string, AbortController>>({});
+  const uploads = useRef<Record<string, AbortController>>({});
 
   const filesRef = useRef(files);
   useEffect(() => { filesRef.current = files; }, [files]);
@@ -144,6 +155,42 @@ export function useUploads(onToast?: PushToast) {
   );
 
   const removeFile = useCallback((id: string) => {
+    const file = filesRef.current.find((f) => f.id === id);
+    const action = file ? uploadActionFor(file.status) : "remove";
+
+    // processing は取り消し不可（✕ は出さないが、保険でここでも no-op）。
+    if (action === "none") return;
+
+    // uploading: 送信中の upload POST を中断してから除去。
+    if (action === "abort") {
+      uploads.current[id]?.abort();
+      delete uploads.current[id];
+      // この後、共通のローカル除去（filter + clearTimer + clearStream）へフォールスルーする。
+    }
+
+    // queued: サーバ側キャンセルAPIを呼ぶ。成功で除去、409 は処理中として残す。
+    if (action === "cancel" && file?.jobId) {
+      const jobId = file.jobId;
+      fetch(`/api/uploads/${jobId}/cancel`, { method: "POST" })
+        .then((res) => {
+          if (res.status === 409) {
+            onToastRef.current?.("処理中のため取り消せません", "info");
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing" } : f)));
+            return;
+          }
+          if (!res.ok) {
+            onToastRef.current?.("取り消しに失敗しました", "error");
+            return;
+          }
+          clearTimer(id);
+          clearStream(id);
+          setFiles((prev) => prev.filter((f) => f.id !== id));
+        })
+        .catch(() => onToastRef.current?.("取り消しに失敗しました", "error"));
+      return;
+    }
+
+    // abort / remove: ローカル除去。
     setFiles((prev) => prev.filter((f) => f.id !== id));
     clearTimer(id);
     clearStream(id);
@@ -184,20 +231,27 @@ export function useUploads(onToast?: PushToast) {
 
         const form = new FormData();
         form.append("file", file);
-        fetch("/api/upload", { method: "POST", body: form })
+        const uploadCtrl = new AbortController();
+        uploads.current[id] = uploadCtrl;
+        fetch("/api/upload", { method: "POST", body: form, signal: uploadCtrl.signal })
           .then(async (res) => {
+            // ✕ で中断済みなら何もしない（SSE 開始や削除済みファイルへの更新を避ける）。
+            if (uploadCtrl.signal.aborted) return;
             clearTimer(id);
+            delete uploads.current[id];
             if (!res.ok) {
               const { error } = await res.json().catch(() => ({ error: "アップロードに失敗しました" }));
               setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error } : f)));
               return;
             }
             const { documentId, jobId } = (await res.json()) as { documentId: string; jobId: string };
-            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 10, jobId, documentId } : f)));
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "queued", progress: 0, jobId, documentId } : f)));
             startStreaming(id, jobId, file.name);
           })
           .catch(() => {
             clearTimer(id);
+            delete uploads.current[id];
+            if (uploadCtrl.signal.aborted) return; // ✕ による中断はエラー表示しない
             setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: "ネットワークエラー" } : f)));
           });
       });
@@ -250,6 +304,8 @@ export function useUploads(onToast?: PushToast) {
   const clear = useCallback(() => {
     Object.keys(timers.current).forEach(clearTimer);
     Object.keys(streams.current).forEach(clearStream);
+    Object.values(uploads.current).forEach((c) => c.abort());
+    uploads.current = {};
     setFiles([]);
   }, [clearTimer, clearStream]);
 

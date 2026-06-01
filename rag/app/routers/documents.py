@@ -146,6 +146,43 @@ async def retry_job(job_id: str, owner_user_id: str | None = None):
     return result
 
 
+@router.post("/jobs/{job_id}/cancel", status_code=204,
+             dependencies=[Depends(require_internal_token)])
+def cancel_job(job_id: str, owner_user_id: str | None = None):
+    """待機中(queued)ジョブの取り消し。行と生ファイルを削除する。
+    queued 以外は 409。Worker 着手との競合は status 条件付き DELETE で原子化。"""
+    session = SessionLocal()
+    raw_path: str | None = None
+    parsed_md_path: str | None = None
+    try:
+        job = session.get(IngestJob, job_id)
+        if not job or (owner_user_id is not None and job.owner_user_id != owner_user_id):
+            raise HTTPException(status_code=404, detail="job not found")
+        if job.status != "queued":
+            raise HTTPException(status_code=409, detail=f"job is {job.status}, cannot cancel")
+        doc = session.get(Document, job.document_id)
+        raw_path = doc.raw_path if doc else None
+        parsed_md_path = doc.parsed_md_path if doc else None
+        # status='queued' の行だけを原子的に削除。0件なら Worker が着手済みなので 409。
+        deleted = (
+            session.query(IngestJob)
+            .filter(IngestJob.id == job_id, IngestJob.status == "queued")
+            .delete()
+        )
+        if not deleted:
+            session.rollback()
+            raise HTTPException(status_code=409, detail="job is no longer queued, cannot cancel")
+        if doc:
+            QdrantStore().delete_by_document(doc.id)
+            session.query(Chunk).filter(Chunk.document_id == doc.id).delete()
+            session.delete(doc)
+        session.commit()
+    finally:
+        session.close()
+    cleanup_document_files(raw_path, parsed_md_path)
+    return Response(status_code=204)
+
+
 @router.delete("/documents/{document_id}", status_code=204,
                dependencies=[Depends(require_internal_token)])
 def delete_document(document_id: str, owner_user_id: str):
