@@ -50,7 +50,8 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
     doc = session.get(Document, document_id)
     job = session.get(IngestJob, job_id)
     if not doc or not job:
-        raise RuntimeError(f"document or job not found: doc={document_id} job={job_id}")
+        # キャンセル等で行が消えた後に Worker が拾った場合。エラーにせず no-op で終える。
+        return
     try:
         store.ensure_collection()
 
