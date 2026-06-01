@@ -17,7 +17,16 @@ export interface RunInput {
   threadId: string;
   history?: ModelMessage[];
   attachments?: string[];
+  attachmentDocIds?: string[];
   modelId?: string;
+}
+
+/** 添付ありターンでは user メッセージ先頭に添付名の文脈を付け、曖昧な質問でも添付を解決させる。 */
+export function buildUserContent(query: string, attachments: string[], attachmentDocIds: string[]): string {
+  if (attachmentDocIds.length && attachments.length) {
+    return `[添付ファイル: ${attachments.join("、")}]\n${query}`;
+  }
+  return query;
 }
 
 const SYSTEM =
@@ -36,7 +45,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
 }
 
 async function pump(
-  { query, ownerUserId, threadId, history, modelId }: RunInput,
+  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds }: RunInput,
   bus: StepBus,
 ): Promise<void> {
   // pump の本体は何が throw しても必ず bus.close() する。これを欠くと runAgent の
@@ -57,9 +66,10 @@ async function pump(
 
     const registry = new CitationRegistry();
     const meta = new Map<string, ToolCallMeta>();
-    const tools = buildTools({ registry, ownerUserId, meta, bus });
+    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds });
 
-    const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: query }];
+    const userContent = buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);
+    const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: userContent }];
 
     const result = streamText({
       model: resolution.models.chat,

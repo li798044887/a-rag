@@ -43,7 +43,7 @@ vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model" }));
 
 import { streamText } from "ai";
 import { retrieveChunksStream } from "@/lib/agent/retrieve-client";
-import { runAgent } from "@/lib/agent/run";
+import { runAgent, buildUserContent } from "@/lib/agent/run";
 import type { AgentEvent } from "@/lib/types";
 
 process.env.ANTHROPIC_API_KEY = "test-key";
@@ -183,4 +183,14 @@ test("runAgent emits rewrite_query sibling and nested retrieve sub-steps", async
   expect(rwI).toBeLessThan(rRunI);
   expect(rRunI).toBeLessThan(vsI);
   expect(vsI).toBeLessThan(rDoneI);
+});
+
+test("buildUserContent prepends attachment names when docIds present", () => {
+  const out = buildUserContent("これ何？", ["a.json", "b.pdf"], ["docA", "docB"]);
+  expect(out).toBe("[添付ファイル: a.json、b.pdf]\nこれ何？");
+});
+
+test("buildUserContent returns plain query when no attachment docIds", () => {
+  expect(buildUserContent("通常の質問", [], [])).toBe("通常の質問");
+  expect(buildUserContent("通常の質問", ["a.json"], [])).toBe("通常の質問");
 });
