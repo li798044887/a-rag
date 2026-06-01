@@ -192,7 +192,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
           </div>
           <div className="flex items-center gap-2">
             {/* アップロード（スプリットボタン）: 本体=ファイル選択 / ▾=フォルダ選択 */}
-            <div className="relative flex" onMouseLeave={() => setUploadMenuOpen(false)}>
+            <div className="relative flex">
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="flex h-7 items-center gap-1.5 rounded-l-[7px] bg-accent pl-2.5 pr-2 text-[12.5px] font-semibold text-white transition-[filter] hover:brightness-105"
@@ -208,20 +208,25 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                 <Icon name="chevronDown" size={12} />
               </button>
               {uploadMenuOpen && (
-                <div className="absolute right-0 top-[34px] z-10 w-[176px] animate-scale-in overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface-elev p-1 shadow-e2 motion-reduce:animate-none">
-                  <button
-                    onClick={() => { setUploadMenuOpen(false); fileInputRef.current?.click(); }}
-                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-fg hover:bg-divider"
-                  >
-                    <Icon name="doc" size={13} /> ファイルを選択
-                  </button>
-                  <button
-                    onClick={() => { setUploadMenuOpen(false); folderInputRef.current?.click(); }}
-                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-fg hover:bg-divider"
-                  >
-                    <Icon name="folders" size={13} /> フォルダを選択
-                  </button>
-                </div>
+                <>
+                  {/* ボタンとプルダウンメニューの間に透明なブリッジ領域を設け、マウスが隙間を通過した際に onMouseLeave が発火しないようにする */}
+                  <div className="absolute left-0 top-[28px] z-10 h-[6px] w-full" />
+                  <div className="absolute right-0 top-[34px] z-10 w-[176px] animate-scale-in overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface-elev p-1 shadow-e2 motion-reduce:animate-none"
+                       onMouseLeave={() => setUploadMenuOpen(false)}>
+                    <button
+                      onClick={() => { setUploadMenuOpen(false); fileInputRef.current?.click(); }}
+                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-fg hover:bg-divider"
+                    >
+                      <Icon name="doc" size={13} /> ファイルを選択
+                    </button>
+                    <button
+                      onClick={() => { setUploadMenuOpen(false); folderInputRef.current?.click(); }}
+                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-fg hover:bg-divider"
+                    >
+                      <Icon name="folders" size={13} /> フォルダを選択
+                    </button>
+                  </div>
+                </>
               )}
             </div>
             <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
