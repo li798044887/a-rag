@@ -200,7 +200,9 @@ export const SUGGESTED_PROMPTS: SuggestedPrompt[] = [
 ];
 
 export const MODELS: ModelOption[] = [
-  { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "推奨", desc: "汎用・最も賢い" },
+  { id: "deepseek-flash", label: "DeepSeek Flash", tag: "推奨", desc: "高速・低コスト" },
+  { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", tag: "高精度", desc: "高性能推論モデル" },
+  { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "", desc: "汎用・最も賢い" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", tag: "高速", desc: "高速・低コスト" },
   { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 標準" },
 ];
