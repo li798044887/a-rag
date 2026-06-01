@@ -175,12 +175,12 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.55)] p-4 backdrop-blur-[3px] motion-reduce:animate-none" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.55)] p-4 backdrop-blur-[3px] motion-reduce:animate-none max-md:p-0" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="documents-modal-title"
-        className="flex h-[88vh] w-[90vw] max-w-[1180px] animate-pop-in flex-col overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-e3 motion-reduce:animate-none max-md:h-[92vh] max-md:w-full"
+        className="flex h-[88vh] w-[90vw] max-w-[1180px] animate-pop-in flex-col overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-e3 motion-reduce:animate-none max-md:h-full max-md:w-full max-md:rounded-none max-md:border-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -257,7 +257,10 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
         <div className="flex min-h-0 flex-1">
           {/* Left: list（カラム全体がフォルダ対応のドロップ領域） */}
           <div
-            className="relative flex w-[320px] shrink-0 flex-col border-r-[0.5px] border-divider max-md:w-[180px]"
+            className={cn(
+              "relative flex w-[320px] shrink-0 flex-col border-r-[0.5px] border-divider max-md:w-full max-md:border-r-0",
+              selected && "max-md:hidden",
+            )}
             onDragEnter={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
             onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
             onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); }}
@@ -338,21 +341,29 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
           </div>
 
           {/* Right: preview */}
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className={cn("flex min-w-0 flex-1 flex-col", !selected && "max-md:hidden")}>
             {!selected ? (
               <div className="grid flex-1 place-items-center text-[12.5px] text-muted">左から文書を選択してください</div>
             ) : (
               <>
-                <div className="flex items-center gap-2 border-b-[0.5px] border-divider px-3 py-2">
-                  <div className="flex gap-1">
+                <div className="flex items-center gap-2 border-b-[0.5px] border-divider px-3 py-2 max-md:px-2.5">
+                  {/* モバイル: プレビューから一覧へ戻る */}
+                  <button
+                    onClick={() => setSelectedId(null)}
+                    aria-label="一覧へ戻る"
+                    className="hidden h-7 w-7 shrink-0 place-items-center rounded-[7px] text-muted hover:bg-divider hover:text-fg max-md:grid"
+                  >
+                    <Icon name="chevronLeft" size={15} />
+                  </button>
+                  <div className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
                     {([["pdf", isConvertible ? "PDF変換原本" : "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
                       <button key={t} onClick={() => setTab(t)} className={cn(
-                        "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
+                        "shrink-0 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
                         tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
                       )}>{label}</button>
                     ))}
                   </div>
-                  <div className="ml-auto flex items-center gap-1">
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
                     {(selected.status === "error" || selected.status === "ready") && selected.latest_job_id && (
                       <button onClick={() => docs.retry(selected.latest_job_id!, selected.id)} className="rounded-md border-0 bg-transparent px-2 py-1 text-[12px] font-medium text-fg-2 hover:bg-divider" title="再索引">再索引</button>
                     )}
