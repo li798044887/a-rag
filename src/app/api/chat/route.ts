@@ -13,9 +13,11 @@ export async function POST(req: Request) {
   const claims = await getSessionClaims();
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { query, threadId, model, regenerateFrom } = (await req.json().catch(() => ({}))) as {
-    query?: string; threadId?: string; model?: string; regenerateFrom?: number;
-  };
+  const { query, threadId, model, regenerateFrom, attachments, attachmentDocIds } =
+    (await req.json().catch(() => ({}))) as {
+      query?: string; threadId?: string; model?: string; regenerateFrom?: number;
+      attachments?: string[]; attachmentDocIds?: string[];
+    };
   const q = query || "";
 
   // スレッドを確定（無ければ作成、タイトルは query から）
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
       let done: Extract<AgentEvent, { type: "done" }> | null = null;
 
       try {
-        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history })) {
+        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history, attachments, attachmentDocIds })) {
           if (event.type === "answer-delta") answer += event.text;
           if (event.type === "step") {
             const idx = steps.findIndex((s) => s.id === event.step.id);
