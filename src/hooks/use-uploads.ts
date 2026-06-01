@@ -18,6 +18,7 @@ interface PickedFile {
 function toUploadStatus(s: string): UploadStatus {
   if (s === "ready") return "ready";
   if (s === "error") return "error";
+  if (s === "queued") return "queued";
   return "processing";
 }
 
@@ -193,7 +194,7 @@ export function useUploads(onToast?: PushToast) {
               return;
             }
             const { documentId, jobId } = (await res.json()) as { documentId: string; jobId: string };
-            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 10, jobId, documentId } : f)));
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "queued", progress: 0, jobId, documentId } : f)));
             startStreaming(id, jobId, file.name);
           })
           .catch(() => {
