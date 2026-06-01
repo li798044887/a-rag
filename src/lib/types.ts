@@ -147,6 +147,10 @@ export interface AppUser {
 // ── Uploads ─────────────────────────────────────────────────────────────────
 export type UploadStatus = "uploading" | "processing" | "ready" | "error";
 
+// rag worker の段階キー（parsing→chunking→embedding→indexing→ready）。
+// SSE 進捗で受け取り、段階ステッパーの現在位置に使う。
+export type IngestStage = "parsing" | "chunking" | "embedding" | "indexing" | "ready";
+
 export interface StagedFile {
   id: string;
   name: string;
@@ -157,6 +161,16 @@ export interface StagedFile {
   chunks?: number;
   error?: string;
   jobId?: string;
+  /** rag の現在段階キー（SSE 由来）。ステッパー表示に使う。 */
+  stage?: IngestStage;
+  /** 段階の日本語ラベル（例: 「埋め込み生成」）。SSE の stage_detail。 */
+  stageDetail?: string;
+  /** フォルダアップロード時の相対パス（キューのグループ表示用、UIのみ）。 */
+  relPath?: string;
+  /** 処理開始時刻（epoch ms）。所要時間の算出に使う。 */
+  startedAt?: number;
+  /** 索引化完了までの所要時間（ms）。ready 到達時に確定。 */
+  durationMs?: number;
 }
 
 // ── Documents (管理) ────────────────────────────────────────────────────────

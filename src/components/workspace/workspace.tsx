@@ -457,11 +457,11 @@ export function Workspace() {
     };
     const onOver = (e: DragEvent) => hasFiles(e) && e.preventDefault();
     const onDrop = (e: DragEvent) => {
-      if (!e.dataTransfer?.files?.length) return;
+      if (!e.dataTransfer?.items?.length && !e.dataTransfer?.files?.length) return;
       e.preventDefault();
       counter = 0;
       setDragging(false);
-      uploads.addFiles(e.dataTransfer.files);
+      void uploads.addFromDataTransfer(e.dataTransfer);
     };
     window.addEventListener("dragenter", onEnter);
     window.addEventListener("dragleave", onLeave);

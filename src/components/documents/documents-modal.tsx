@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { RenderedSectionBody } from "@/components/sources/rendered-section-body";
+import { DocumentsUploadQueue } from "@/components/uploads/uploads";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
+import { useUploads } from "@/hooks/use-uploads";
+import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
 import { getFileMeta, isConvertibleToPdf } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
 import type { DocumentPreview, DocumentPreviewChunk, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
+
+// 純正 PDF ビューアの黒いクロムを隠し、紙系の世界観に馴染ませる。
+const PDF_VIEW_PARAMS = "#toolbar=0&navpanes=0&statusbar=0&view=FitH";
 
 type Tab = "pdf" | "layout" | "span" | "text" | "html" | "images";
 const IMG_RE = /!\[[^\]]*\]\((\/api\/documents\/[^)\s]+)\)/g;
@@ -64,7 +70,7 @@ function RenderedPdfPreview({ docId, filename }: { docId: string; filename: stri
   if (state === "loading" || !url) {
     return <div className="grid h-full place-items-center text-[12px] text-muted">変換中…</div>;
   }
-  return <iframe title={filename} src={url} className="h-full w-full border-0" />;
+  return <iframe title={filename} src={url + PDF_VIEW_PARAMS} className="h-full w-full border-0" />;
 }
 
 /** チャンク本文を HTML整形ビューで描画する。
@@ -87,11 +93,27 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   onToast?: PushToast;
 }) {
   const docs = useDocuments(open, onToast);
+  const uploads = useUploads(onToast);
   const { confirm, dialog } = useConfirm();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("pdf");
   const [preview, setPreview] = useState<DocumentPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+
+  // アップロード完了を検知したら一覧を再取得して新規文書を反映する。
+  const readyCount = uploads.files.filter((f) => f.status === "ready").length;
+  useEffect(() => {
+    if (!open || !readyCount) return;
+    void docs.load();
+    onChanged?.();
+    // load/onChanged は参照安定でないため readyCount のみを依存に絞る。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyCount, open]);
 
   const selected = docs.items.find((d) => d.id === selectedId) ?? null;
   const isPdf = selected?.mime === "application/pdf";
@@ -168,14 +190,84 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
             <span id="documents-modal-title">アップロード文書</span>
             <span className="font-mono text-[11px] font-normal text-muted">{docs.total}件</span>
           </div>
-          <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
-            <svg viewBox="0 0 12 12" width="12" height="12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-          </button>
+          <div className="flex items-center gap-2">
+            {/* アップロード（スプリットボタン）: 本体=ファイル選択 / ▾=フォルダ選択 */}
+            <div className="relative flex" onMouseLeave={() => setUploadMenuOpen(false)}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-7 items-center gap-1.5 rounded-l-[7px] bg-accent pl-2.5 pr-2 text-[12.5px] font-semibold text-white transition-[filter] hover:brightness-105"
+              >
+                <Icon name="plus" size={13} />
+                アップロード
+              </button>
+              <button
+                onClick={() => setUploadMenuOpen((v) => !v)}
+                aria-label="アップロード方法"
+                className="grid h-7 w-6 place-items-center rounded-r-[7px] border-l border-[rgba(255,255,255,0.25)] bg-accent text-white transition-[filter] hover:brightness-105"
+              >
+                <Icon name="chevronDown" size={12} />
+              </button>
+              {uploadMenuOpen && (
+                <div className="absolute right-0 top-[34px] z-10 w-[176px] animate-scale-in overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface-elev p-1 shadow-e2 motion-reduce:animate-none">
+                  <button
+                    onClick={() => { setUploadMenuOpen(false); fileInputRef.current?.click(); }}
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-fg hover:bg-divider"
+                  >
+                    <Icon name="doc" size={13} /> ファイルを選択
+                  </button>
+                  <button
+                    onClick={() => { setUploadMenuOpen(false); folderInputRef.current?.click(); }}
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-fg hover:bg-divider"
+                  >
+                    <Icon name="folders" size={13} /> フォルダを選択
+                  </button>
+                </div>
+              )}
+            </div>
+            <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
+              <svg viewBox="0 0 12 12" width="12" height="12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+            </button>
+          </div>
         </div>
+        {/* 隠し input: ファイル複数選択 / フォルダ選択（webkitdirectory）。値は毎回リセットして同一選択でも発火させる。 */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={ACCEPTED_FILE_TYPES}
+          className="hidden"
+          onChange={(e) => { uploads.addFiles(e.target.files); e.target.value = ""; }}
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          // @ts-expect-error webkitdirectory は標準型に未定義だが Chromium/WebKit で有効。
+          webkitdirectory=""
+          directory=""
+          multiple
+          className="hidden"
+          onChange={(e) => { uploads.addFiles(e.target.files); e.target.value = ""; }}
+        />
 
         <div className="flex min-h-0 flex-1">
-          {/* Left: list */}
-          <div className="flex w-[320px] shrink-0 flex-col border-r-[0.5px] border-divider max-md:w-[180px]">
+          {/* Left: list（カラム全体がフォルダ対応のドロップ領域） */}
+          <div
+            className="relative flex w-[320px] shrink-0 flex-col border-r-[0.5px] border-divider max-md:w-[180px]"
+            onDragEnter={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
+            onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+            onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); }}
+            onDrop={(e) => { e.preventDefault(); dragDepth.current = 0; setDragging(false); void uploads.addFromDataTransfer(e.dataTransfer); }}
+          >
+            {dragging && (
+              <div className="pointer-events-none absolute inset-1.5 z-20 grid place-items-center rounded-[12px] border-2 border-dashed border-accent bg-accent-soft backdrop-blur-[2px]">
+                <div className="text-center">
+                  <span className="inline-flex text-accent"><Icon name="folders" size={26} /></span>
+                  <div className="mt-1.5 text-[12.5px] font-bold text-fg">ファイル / フォルダをドロップ</div>
+                  <div className="text-[11px] text-muted">そのまま索引化されます</div>
+                </div>
+              </div>
+            )}
+            <DocumentsUploadQueue files={uploads.files} onRemove={uploads.removeFile} onRetry={uploads.retry} onClear={uploads.clear} />
             <div className="flex flex-col gap-2 p-2.5">
               <div className="relative">
                 <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-2"><Icon name="search" size={12} /></span>
@@ -265,7 +357,9 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto bg-bg-2">
                   {tab === "pdf" && isPdf && (
-                    <iframe title={selected.filename} src={`/api/documents/${encodeURIComponent(selected.id)}/raw`} className="h-full w-full border-0" />
+                    <div className="h-full p-3">
+                      <iframe title={selected.filename} src={`/api/documents/${encodeURIComponent(selected.id)}/raw${PDF_VIEW_PARAMS}`} className="h-full w-full rounded-[10px] border-[0.5px] border-divider-strong bg-surface shadow-e1" />
+                    </div>
                   )}
                   {tab === "pdf" && isImage && (
                     <div className="grid h-full place-items-center p-5">
@@ -274,7 +368,11 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                     </div>
                   )}
                   {tab === "pdf" && !isPdf && !isImage && isConvertible && (
-                    <RenderedPdfPreview key={selected.id} docId={selected.id} filename={selected.filename} />
+                    <div className="h-full p-3">
+                      <div className="h-full overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface shadow-e1">
+                        <RenderedPdfPreview key={selected.id} docId={selected.id} filename={selected.filename} />
+                      </div>
+                    </div>
                   )}
                   {tab === "pdf" && !isPdf && !isImage && !isConvertible && (
                     <UnsupportedPreview docId={selected.id} />
