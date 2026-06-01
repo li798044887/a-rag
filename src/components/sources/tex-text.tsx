@@ -39,10 +39,19 @@ export function TeXText({ text }: { text: string }) {
   return <>{parts}</>;
 }
 
-/** MinerU の equation ブロックは `$...$` なしの LaTeX として保存されるため、
- *  文字列全体をディスプレイ数式として描画する。 */
+/** `$$…$$` / `$…$` の囲みが付いていれば剥がす。KaTeX は数式モード内の `$` を
+ *  解釈できずエラー（赤字で生文字列）になるため、囲み付きの式を救済する。 */
+function stripMathDelimiters(text: string): string {
+  const t = text.trim();
+  if (t.startsWith("$$") && t.endsWith("$$") && t.length >= 4) return t.slice(2, -2).trim();
+  if (t.startsWith("$") && t.endsWith("$") && t.length >= 2) return t.slice(1, -1).trim();
+  return t;
+}
+
+/** equation ブロックを文字列全体としてディスプレイ数式で描画する。MinerU は通常
+ *  `$...$` なしの LaTeX を保存するが、`$$…$$` 付きで保存される場合もあるため剥がす。 */
 export function TeXBlock({ text }: { text: string }) {
-  const html = renderTexToHtml(text, true);
+  const html = renderTexToHtml(stripMathDelimiters(text), true);
   if (!html) {
     return <div className="whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2 [overflow-wrap:anywhere]">{text}</div>;
   }
