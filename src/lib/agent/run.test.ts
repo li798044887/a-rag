@@ -185,9 +185,13 @@ test("runAgent emits rewrite_query sibling and nested retrieve sub-steps", async
   expect(vsI).toBeLessThan(rDoneI);
 });
 
-test("buildUserContent prepends attachment names when docIds present", () => {
+test("buildUserContent instructs retrieve and names attachments when docIds present", () => {
   const out = buildUserContent("これ何？", ["a.json", "b.pdf"], ["docA", "docB"]);
-  expect(out).toBe("[添付ファイル: a.json、b.pdf]\nこれ何？");
+  expect(out).toContain("a.json、b.pdf");
+  expect(out).toContain("retrieve");
+  expect(out).toContain("これ何？");
+  // モデルが拒否しないよう、直接読めないと答えるなと明示する。
+  expect(out).toContain("直接読めない");
 });
 
 test("buildUserContent returns plain query when no attachment docIds", () => {

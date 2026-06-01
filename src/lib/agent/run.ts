@@ -21,10 +21,17 @@ export interface RunInput {
   modelId?: string;
 }
 
-/** 添付ありターンでは user メッセージ先頭に添付名の文脈を付け、曖昧な質問でも添付を解決させる。 */
+/** 添付ありターンでは、添付ファイルが知識ベースへ取り込み済みで retrieve で検索できる旨を
+ *  明示し、必ず retrieve を使うよう指示する。これがないとモデルは「ファイルを直接読めない」と
+ *  誤解して retrieve を呼ばずに拒否する。 */
 export function buildUserContent(query: string, attachments: string[], attachmentDocIds: string[]): string {
   if (attachmentDocIds.length && attachments.length) {
-    return `[添付ファイル: ${attachments.join("、")}]\n${query}`;
+    return (
+      `ユーザーは次のファイルを添付しました（既に知識ベースへ取り込み済み）: ${attachments.join("、")}。\n` +
+      `これらのファイルの内容は retrieve ツールで検索できます。必ず retrieve を使ってファイルの内容を調べてから回答してください。` +
+      `「ファイルを直接読めない」などと答えてはいけません。\n\n` +
+      `質問: ${query}`
+    );
   }
   return query;
 }
