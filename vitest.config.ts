@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => ({
         test: {
           name: "unit",
           environment: "node",
-          include: ["src/**/*.test.ts"],
+          include: ["src/**/*.test.{ts,tsx}"],
           // .env.local 等を読み込んでテストへ注入する。第3引数 "" で接頭辞フィルタを外し
           // DATABASE_URL も含める（DB テストが正しい接続先 host:5433 を使えるようにする）。
           env: loadEnv(mode, process.cwd(), ""),
