@@ -8,6 +8,16 @@ import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { ModelOption, ScopeValue, StagedFile } from "@/lib/types";
 
+/** 送信可否判定。添付が1件でも処理中(pending)なら送信不可。空入力かつ ready 添付なしも不可。 */
+export function composerSubmitState(
+  { value, attachments, running }: { value: string; attachments: StagedFile[]; running: boolean },
+): { pending: boolean; canSubmit: boolean } {
+  const pending = attachments.some((a) => a.status === "uploading" || a.status === "processing");
+  const hasReady = attachments.some((a) => a.status === "ready");
+  const canSubmit = !running && !pending && (value.trim() !== "" || hasReady);
+  return { pending, canSubmit };
+}
+
 interface Props {
   value: string;
   onChange: (v: string) => void;
@@ -51,7 +61,7 @@ export function Composer({
     ta.style.height = Math.min(180, ta.scrollHeight) + "px";
   }, [value]);
 
-  const canSubmit = !!(value.trim() || attachments.length);
+  const { pending, canSubmit } = composerSubmitState({ value, attachments, running });
   const toolBtn = "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] border-0 bg-transparent px-2 text-[12px] font-medium text-muted hover:bg-divider hover:text-fg max-md:h-8";
 
   return (
@@ -89,7 +99,7 @@ export function Composer({
           onKeyDown={(e) => {
             // IME 変換確定の Enter（isComposing / keyCode 229）は送信しない
             if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-            if (e.key === "Enter" && !e.shiftKey && !running) {
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               if (canSubmit) onSubmit();
             }
@@ -155,6 +165,7 @@ export function Composer({
             <button
               type="submit"
               disabled={!canSubmit}
+              title={pending ? "アップロード完了までお待ちください" : undefined}
               className={cn(
                 "grid h-8 w-8 shrink-0 place-items-center rounded-lg border-0 text-white transition-[background,filter] max-md:h-[34px] max-md:w-[34px]",
                 canSubmit ? "bg-accent hover:brightness-105" : "cursor-not-allowed bg-divider text-muted-2",
@@ -170,6 +181,8 @@ export function Composer({
       <div className="pt-2 text-center font-mono text-[10.5px] text-muted-2 max-md:hidden">
         {running ? (
           "⌘+⌫ で実行をキャンセル"
+        ) : pending ? (
+          "アップロード完了までお待ちください…"
         ) : (
           <>
             Enterで送信 · Shift+Enterで改行 · ファイルをドラッグ&ドロップ · <kbd>⌘N</kbd> で新規スレッド
