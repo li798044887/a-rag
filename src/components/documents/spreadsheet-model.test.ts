@@ -19,10 +19,17 @@ test("sheetToGrid: 値・整形済み表示・数値判定・空セル", () => {
   expect(g.rowCount).toBe(3);
   expect(g.colCount).toBe(2);
   expect(g.cells[0]).toEqual(["日付", "数量"]);
-  expect(g.cells[1][1]).toBe("12"); // cell.w（整形済み）
+  expect(g.cells[1][1]).toBe("12"); // .w 無しのため cell.v フォールバック経路の検証
   expect(g.numeric[1][1]).toBe(true); // 数値セル
   expect(g.numeric[0][0]).toBe(false); // 文字列セル
   expect(g.cells[2][0]).toBeNull(); // 空セル
+});
+
+test("sheetToGrid: cell.w（整形済み表示）を cell.v より優先する", () => {
+  const ws = XLSX.utils.aoa_to_sheet([[0.5]]);
+  (ws["A1"] as { w?: string }).w = "50%";
+  const g = sheetToGrid(ws);
+  expect(g.cells[0][0]).toBe("50%"); // v(0.5) ではなく w を表示
 });
 
 test("sheetToGrid: !merges を左上起点 + span へ正規化", () => {
