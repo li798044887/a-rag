@@ -5,6 +5,7 @@ import { Icon } from "@/components/icons";
 import { getFileMeta } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
 import type { IngestStage, StagedFile } from "@/lib/types";
+import { uploadActionFor } from "@/hooks/use-uploads";
 
 // rag worker の段階（worker.py の遷移と一致）。索引化後は ready。
 const STAGES: { key: IngestStage; label: string }[] = [
@@ -80,6 +81,12 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
               <span>アップロード中… {file.progress}%</span>
             </>
           )}
+          {file.status === "queued" && (
+            <>
+              <span className="h-[9px] w-[9px] shrink-0 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
+              <span>待機中…</span>
+            </>
+          )}
           {file.status === "processing" && (
             <>
               <span className="h-[9px] w-[9px] shrink-0 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
@@ -127,15 +134,17 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
         )}
         {file.status === "processing" && <IngestStepper stage={file.stage} />}
       </div>
-      <button
-        className="grid h-[22px] w-[22px] place-items-center rounded-[5px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
-        onClick={() => onRemove(file.id)}
-        aria-label="削除"
-      >
-        <svg viewBox="0 0 12 12" width="10" height="10">
-          <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-        </svg>
-      </button>
+      {uploadActionFor(file.status) !== "none" && (
+        <button
+          className="grid h-[22px] w-[22px] place-items-center rounded-[5px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
+          onClick={() => onRemove(file.id)}
+          aria-label={uploadActionFor(file.status) === "remove" ? "削除" : "取り消し"}
+        >
+          <svg viewBox="0 0 12 12" width="10" height="10">
+            <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
