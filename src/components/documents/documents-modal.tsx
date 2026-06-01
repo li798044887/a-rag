@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { RenderedSectionBody } from "@/components/sources/rendered-section-body";
 import { DocumentsUploadQueue } from "@/components/uploads/uploads";
+import { SpreadsheetPreview } from "@/components/documents/spreadsheet-preview";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
 import { useUploads } from "@/hooks/use-uploads";
 import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
-import { getFileMeta, isConvertibleToPdf } from "@/lib/file-types";
+import { getFileMeta, isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
 import type { DocumentPreview, DocumentPreviewChunk, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
@@ -120,6 +121,8 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   const isImage = selected?.mime.startsWith("image/") ?? false;
   // Office 系原本はサーバ側で PDF 変換してプレビューできる（拡張子で判定）。
   const isConvertible = selected ? isConvertibleToPdf(selected.filename) : false;
+  // 表計算は PDF 化せず Excel 風グリッドでネイティブ描画する（PDF/画像/Office PDF 変換より優先）。
+  const isSheet = selected ? isSpreadsheet(selected.filename) : false;
   // MinerU 注釈 PDF は PDF 入力時のみ生成する。
 
   // 文書選択時、原本プレビュー可能（PDF/画像/Office）なら原本タブ、それ以外は解析テキストを初期表示にする。
@@ -356,7 +359,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                     <Icon name="chevronLeft" size={15} />
                   </button>
                   <div className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
-                    {([["pdf", isConvertible ? "PDF変換原本" : "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
+                    {([["pdf", isSheet ? "スプレッドシート" : isConvertible ? "PDF変換原本" : "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
                       <button key={t} onClick={() => setTab(t)} className={cn(
                         "shrink-0 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
                         tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
@@ -383,14 +386,21 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       <img src={`/api/documents/${encodeURIComponent(selected.id)}/raw`} alt={selected.filename} className="max-h-full max-w-full rounded-lg border-[0.5px] border-divider" />
                     </div>
                   )}
-                  {tab === "pdf" && !isPdf && !isImage && isConvertible && (
+                  {tab === "pdf" && !isPdf && !isImage && isSheet && (
+                    <div className="h-full p-3">
+                      <div className="h-full overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface shadow-e1">
+                        <SpreadsheetPreview key={selected.id} docId={selected.id} filename={selected.filename} />
+                      </div>
+                    </div>
+                  )}
+                  {tab === "pdf" && !isPdf && !isImage && !isSheet && isConvertible && (
                     <div className="h-full p-3">
                       <div className="h-full overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface shadow-e1">
                         <RenderedPdfPreview key={selected.id} docId={selected.id} filename={selected.filename} />
                       </div>
                     </div>
                   )}
-                  {tab === "pdf" && !isPdf && !isImage && !isConvertible && (
+                  {tab === "pdf" && !isPdf && !isImage && !isSheet && !isConvertible && (
                     <UnsupportedPreview docId={selected.id} />
                   )}
                   {tab === "layout" && isPdf && (
