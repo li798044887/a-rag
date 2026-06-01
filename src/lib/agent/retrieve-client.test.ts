@@ -80,6 +80,30 @@ test("retrieveChunksStream sends candidate_k when provided", async () => {
   expect(JSON.parse(init!.body as string).candidate_k).toBe(10);
 });
 
+test("retrieveChunksStream sends document_ids when provided", async () => {
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response('{"stage":"result","chunks":[]}\n', { status: 200 }));
+  process.env.RAG_SERVICE_URL = "http://rag:8000";
+
+  await retrieveChunksStream({
+    query: "q", ownerUserId: "u1", topK: 6, documentIds: ["docA", "docB"], onStage: () => {},
+  });
+
+  const [, init] = spy.mock.calls[0];
+  expect(JSON.parse(init!.body as string).document_ids).toEqual(["docA", "docB"]);
+});
+
+test("retrieveChunksStream sends null document_ids by default", async () => {
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response('{"stage":"result","chunks":[]}\n', { status: 200 }));
+  process.env.RAG_SERVICE_URL = "http://rag:8000";
+
+  await retrieveChunksStream({ query: "q", ownerUserId: "u1", topK: 6, onStage: () => {} });
+
+  const [, init] = spy.mock.calls[0];
+  expect(JSON.parse(init!.body as string).document_ids).toBeNull();
+});
+
 test("retrieveChunksStream forwards detail fields (hits/selected/model/dims)", async () => {
   const ndjson =
     '{"stage":"embed","status":"done","ms":1,"model":"BAAI/bge-m3","dims":1024}\n' +

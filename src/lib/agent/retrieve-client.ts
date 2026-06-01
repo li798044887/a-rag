@@ -34,6 +34,7 @@ export async function retrieveChunks(input: {
   ownerUserId: string;
   topK?: number;
   candidateK?: number;
+  documentIds?: string[];
 }): Promise<RetrievedChunk[]> {
   const res = await ragFetch("/retrieve", {
     method: "POST",
@@ -44,6 +45,7 @@ export async function retrieveChunks(input: {
       owner_user_id: input.ownerUserId,
       top_k: input.topK ?? 6,
       candidate_k: input.candidateK ?? undefined,
+      document_ids: input.documentIds ?? null,
     }),
   });
   if (!res.ok) {
@@ -74,6 +76,7 @@ export async function retrieveChunksStream(input: {
   ownerUserId: string;
   topK?: number;
   candidateK?: number;
+  documentIds?: string[];
   onStage: (ev: RetrieveStageEvent) => void;
 }): Promise<RetrievedChunk[]> {
   const res = await ragFetch("/retrieve/stream", {
@@ -85,6 +88,7 @@ export async function retrieveChunksStream(input: {
       owner_user_id: input.ownerUserId,
       top_k: input.topK ?? 6,
       candidate_k: input.candidateK ?? undefined,
+      document_ids: input.documentIds ?? null,
     }),
   });
   if (!res.ok || !res.body) {
