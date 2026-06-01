@@ -11,6 +11,8 @@ export const ACCENT_PRESETS = ["#3FA77E", "#D97757", "#3D7EE6", "#8B6FE0"] as co
 
 export const DEFAULT_ACCENT = ACCENT_PRESETS[0];
 
-/** Accepted upload extensions (mirrors the composer file input). */
+/** Accepted upload extensions (mirrors the composer file input).
+ *  MinerU が解析できる docx/xlsx/pptx・PDF・画像と、テキストパーサで扱う
+ *  md/txt/json/csv に限定する。旧バイナリ(.doc/.xls/.ppt)は変換器が無く未対応。 */
 export const ACCEPTED_FILE_TYPES =
-  ".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.md,.json,.png,.jpg,.jpeg";
+  ".pdf,.docx,.xlsx,.csv,.pptx,.txt,.md,.json,.png,.jpg,.jpeg";

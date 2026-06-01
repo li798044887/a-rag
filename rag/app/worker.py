@@ -11,7 +11,7 @@ from app.documents_service import assets_dir_for, record_workspace_activity
 from app.embedding.base import Embedder
 from app.embedding.factory import get_embedder
 from app.models import Chunk, Document, IngestJob
-from app.parsing.mineru import parse as mineru_parse
+from app.parsing.dispatch import parse_document
 from app.parsing.types import ParsedDocument
 from app.queue import redis_settings
 from app.vectorstore.qdrant import QdrantStore
@@ -60,7 +60,7 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
         session.commit()
         store.delete_by_document(doc.id)
 
-        _set(job, doc, session, status="parsing", progress=10, detail="MinerU 解析中")
+        _set(job, doc, session, status="parsing", progress=10, detail="解析中")
         out_dir = str(Path(doc.raw_path).with_suffix("")) + "_mineru"
         parsed = parse_fn(doc.raw_path, out_dir)
         doc.page_count = parsed.page_count
@@ -123,7 +123,7 @@ async def ingest_document(ctx: dict, document_id: str, job_id: str) -> None:
             session.commit()
             raise
         await asyncio.to_thread(
-            run_ingest, session, store, embedder, mineru_parse, document_id, job_id
+            run_ingest, session, store, embedder, parse_document, document_id, job_id
         )
     finally:
         session.close()
