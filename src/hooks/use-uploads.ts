@@ -304,6 +304,8 @@ export function useUploads(onToast?: PushToast) {
   const clear = useCallback(() => {
     Object.keys(timers.current).forEach(clearTimer);
     Object.keys(streams.current).forEach(clearStream);
+    Object.values(uploads.current).forEach((c) => c.abort());
+    uploads.current = {};
     setFiles([]);
   }, [clearTimer, clearStream]);
 
