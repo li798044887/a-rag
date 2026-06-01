@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Python venv and rag service files
     "rag/**",
+    // MSW auto-generated service worker (do not edit)
+    "public/mockServiceWorker.js",
   ]),
 ]);
 
