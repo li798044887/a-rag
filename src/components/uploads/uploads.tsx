@@ -60,6 +60,7 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
         "relative flex items-center gap-2.5 rounded-[9px] border-[0.5px] border-divider-strong bg-surface-2 py-2 pl-2 pr-2.5 transition-colors hover:bg-bg-2",
         file.status === "ready" && "border-accent bg-accent-soft",
         file.status === "error" && "border-[rgba(184,58,31,0.3)] bg-[rgba(184,58,31,0.08)]",
+        file.status === "skipped" && "border-dashed opacity-60",
       )}
     >
       <span
@@ -96,6 +97,12 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
                 {meta.label} · {formatFileSize(file.size)} · {file.pages || file.chunks}件のチャンクを索引化
                 {elapsed ? ` · ${elapsed}` : ""}
               </span>
+            </>
+          )}
+          {file.status === "skipped" && (
+            <>
+              <span className="text-muted-2">⊘</span>
+              <span>未対応の形式のためスキップ</span>
             </>
           )}
           {file.status === "error" && (
@@ -208,7 +215,10 @@ function QueueGroup({ folder, files, onRemove, onRetry }: {
   const [open, setOpen] = useState(true);
   const done = files.filter((f) => f.status === "ready").length;
   const failed = files.filter((f) => f.status === "error").length;
-  const active = files.length - done - failed;
+  const skipped = files.filter((f) => f.status === "skipped").length;
+  // スキップは完了の分母から除外する（取り込み対象のみを母数に）。
+  const target = files.length - skipped;
+  const active = target - done - failed;
 
   // フォルダ無し（個別ファイル）はヘッダーを出さずにそのまま並べる。
   if (!folder) {
@@ -228,7 +238,7 @@ function QueueGroup({ folder, files, onRemove, onRetry }: {
         <Icon name="folder" size={13} />
         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-fg" title={folder}>{folder}</span>
         <span className="shrink-0 font-mono text-[10.5px] text-muted">
-          {done}/{files.length} 完了{failed ? ` · ${failed}失敗` : ""}
+          {done}/{target} 完了{failed ? ` · ${failed}失敗` : ""}{skipped ? ` · ${skipped}スキップ` : ""}
         </span>
         {active > 0 && <span className="h-[10px] w-[10px] shrink-0 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />}
         <svg viewBox="0 0 12 12" width="10" height="10" className={cn("shrink-0 text-muted transition-transform", open && "rotate-90")}>
@@ -250,15 +260,16 @@ export function DocumentsUploadQueue({ files, onRemove, onRetry, onClear }: {
 }) {
   if (!files.length) return null;
   const groups = groupByFolder(files);
-  const total = files.length;
+  const skipped = files.filter((f) => f.status === "skipped").length;
+  const target = files.length - skipped; // スキップを除いた取り込み対象数。
   const done = files.filter((f) => f.status === "ready").length;
-  const allDone = done === total;
+  const allDone = done + skipped === files.length;
 
   return (
     <div className="flex max-h-[40%] shrink-0 flex-col border-b-[0.5px] border-divider bg-surface-2">
       <div className="flex items-center gap-2 px-3 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">アップロード</span>
-        <span className="font-mono text-[10.5px] text-muted">{done}/{total}</span>
+        <span className="font-mono text-[10.5px] text-muted">{done}/{target}{skipped ? ` · ${skipped}スキップ` : ""}</span>
         {onClear && (
           <button
             onClick={onClear}

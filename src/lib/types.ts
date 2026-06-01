@@ -145,7 +145,7 @@ export interface AppUser {
 }
 
 // ── Uploads ─────────────────────────────────────────────────────────────────
-export type UploadStatus = "uploading" | "processing" | "ready" | "error";
+export type UploadStatus = "uploading" | "processing" | "ready" | "error" | "skipped";
 
 // rag worker の段階キー（parsing→chunking→embedding→indexing→ready）。
 // SSE 進捗で受け取り、段階ステッパーの現在位置に使う。

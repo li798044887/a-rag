@@ -156,6 +156,17 @@ export function useUploads(onToast?: PushToast) {
       const accepted = picked.filter((p) => isAccepted(p.file.name));
       const rejected = picked.filter((p) => !isAccepted(p.file.name));
 
+      // 未対応フォーマットはアップロードせず、スキップとしてキューに可視化する。
+      if (rejected.length) {
+        setFiles((prev) => [
+          ...prev,
+          ...rejected.map(({ file, relPath }) => ({
+            id: uid("f_"), name: file.name, size: file.size, status: "skipped" as const, progress: 0, relPath,
+          })),
+        ]);
+        onToastRef.current?.(`未対応の形式 ${rejected.length}件をスキップしました`, "info");
+      }
+
       accepted.forEach(({ file, relPath }) => {
         const id = uid("f_");
         setFiles((prev) => [...prev, { id, name: file.name, size: file.size, status: "uploading", progress: 0, relPath, startedAt: Date.now() }]);
@@ -190,8 +201,6 @@ export function useUploads(onToast?: PushToast) {
             setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: "ネットワークエラー" } : f)));
           });
       });
-
-      if (rejected.length) onToastRef.current?.(`未対応の形式: ${rejected.map((r) => r.file.name).join(", ")}`, "error");
     },
     [clearTimer, startStreaming],
   );
