@@ -248,7 +248,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
               <>
                 <div className="flex items-center gap-2 border-b-[0.5px] border-divider px-3 py-2">
                   <div className="flex gap-1">
-                    {([["pdf", "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
+                    {([["pdf", isConvertible ? "PDF変換" : "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
                       <button key={t} onClick={() => setTab(t)} className={cn(
                         "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
                         tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
