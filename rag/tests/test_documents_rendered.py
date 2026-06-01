@@ -1,7 +1,8 @@
 from pathlib import Path
 
 from app.config import settings
-from app.documents_service import is_convertible, rendered_pdf_for
+from app import documents_service
+from app.documents_service import convert_to_pdf, is_convertible, rendered_pdf_for
 from app.routers import documents as documents_router
 
 
@@ -22,6 +23,53 @@ def test_is_convertible_false_for_already_previewable_or_unknown():
 def test_rendered_pdf_for_is_sibling_of_raw():
     raw = "/data/uploads/abc_sheet.xlsx"
     assert rendered_pdf_for(raw) == Path("/data/uploads/abc_sheet_rendered.pdf")
+
+
+def test_convert_to_pdf_works_into_cache(tmp_path, monkeypatch):
+    """soffice をモックし、生成 PDF がキャッシュパスへ確定されること。"""
+    raw = tmp_path / "x_sheet.xlsx"
+    raw.write_bytes(b"xlsxdata")
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        outdir = Path(cmd[cmd.index("--outdir") + 1])
+        captured["outdir"] = outdir
+        (outdir / (raw.stem + ".pdf")).write_bytes(b"%PDF-1.4\n%%EOF\n")
+        class _R:
+            returncode = 0
+            stdout = b""
+            stderr = b""
+        return _R()
+
+    monkeypatch.setattr(documents_service.subprocess, "run", fake_run)
+    out = convert_to_pdf(str(raw))
+    assert out == rendered_pdf_for(str(raw))
+    assert out.is_file() and out.read_bytes().startswith(b"%PDF")
+
+
+def test_convert_to_pdf_uses_dest_filesystem_for_tempdir(tmp_path, monkeypatch):
+    """回帰防止: 一時出力は出力先と同じFS（cache.parent）配下に作る。
+
+    /tmp 配下に作ると Docker ボリューム(/data/uploads)へ os.replace する際に
+    cross-device link (Errno 18) で失敗する。"""
+    raw = tmp_path / "x_sheet.xlsx"
+    raw.write_bytes(b"xlsxdata")
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        outdir = Path(cmd[cmd.index("--outdir") + 1])
+        captured["outdir"] = outdir
+        (outdir / (raw.stem + ".pdf")).write_bytes(b"%PDF-1.4\n")
+        class _R:
+            returncode = 0
+            stdout = b""
+            stderr = b""
+        return _R()
+
+    monkeypatch.setattr(documents_service.subprocess, "run", fake_run)
+    convert_to_pdf(str(raw))
+    # 一時ディレクトリは出力先(rendered pdf)と同じ親ディレクトリ配下にある
+    assert captured["outdir"].parent == rendered_pdf_for(str(raw)).parent
 
 
 # --- エンドポイント ---

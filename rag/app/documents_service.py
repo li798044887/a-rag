@@ -43,7 +43,11 @@ def convert_to_pdf(raw_path: str) -> Path:
         return cache
 
     raw = Path(raw_path)
-    with tempfile.TemporaryDirectory(prefix="soffice_") as tmp:
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    # 一時ディレクトリは出力先と同じファイルシステム上に作る。/tmp（コンテナ rootfs）と
+    # /data/uploads（Docker ボリューム）は別デバイスのため、またいで os.replace すると
+    # cross-device link (Errno 18) で失敗する。同一FS内なら rename はアトミック。
+    with tempfile.TemporaryDirectory(prefix=".soffice_", dir=cache.parent) as tmp:
         profile = Path(tmp) / "profile"
         subprocess.run(
             [
@@ -56,7 +60,6 @@ def convert_to_pdf(raw_path: str) -> Path:
         produced = Path(tmp) / (raw.stem + ".pdf")
         if not produced.is_file():
             raise RuntimeError(f"soffice produced no pdf for {raw_path}")
-        cache.parent.mkdir(parents=True, exist_ok=True)
         os.replace(produced, cache)
     return cache
 
