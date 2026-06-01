@@ -48,9 +48,14 @@ class QdrantStore:
     def count(self) -> int:
         return self.client.count(self.collection).count
 
-    def _owner_filter(self, owner_user_id: str) -> models.Filter:
-        return models.Filter(must=[models.FieldCondition(
-            key="owner_user_id", match=models.MatchValue(value=owner_user_id))])
+    def _scope_filter(self, owner_user_id: str,
+                      document_ids: list[str] | None = None) -> models.Filter:
+        must = [models.FieldCondition(
+            key="owner_user_id", match=models.MatchValue(value=owner_user_id))]
+        if document_ids:
+            must.append(models.FieldCondition(
+                key="document_id", match=models.MatchAny(any=list(document_ids))))
+        return models.Filter(must=must)
 
     @staticmethod
     def _payloads(res) -> list[dict]:
@@ -62,23 +67,25 @@ class QdrantStore:
         return out
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=0.5, max=4))
-    def dense_search(self, query_dense: list[float], owner_user_id: str, limit: int = 40) -> list[dict]:
+    def dense_search(self, query_dense: list[float], owner_user_id: str, limit: int = 40,
+                     document_ids: list[str] | None = None) -> list[dict]:
         if not self.client.collection_exists(self.collection):
             return []
         res = self.client.query_points(
             self.collection, query=query_dense, using=DENSE, limit=limit,
-            query_filter=self._owner_filter(owner_user_id), with_payload=True)
+            query_filter=self._scope_filter(owner_user_id, document_ids), with_payload=True)
         return self._payloads(res)
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=0.5, max=4))
-    def sparse_search(self, query_sparse: dict[int, float], owner_user_id: str, limit: int = 40) -> list[dict]:
+    def sparse_search(self, query_sparse: dict[int, float], owner_user_id: str, limit: int = 40,
+                      document_ids: list[str] | None = None) -> list[dict]:
         if not self.client.collection_exists(self.collection):
             return []
         res = self.client.query_points(
             self.collection,
             query=models.SparseVector(indices=list(query_sparse.keys()), values=list(query_sparse.values())),
             using=SPARSE, limit=limit,
-            query_filter=self._owner_filter(owner_user_id), with_payload=True)
+            query_filter=self._scope_filter(owner_user_id, document_ids), with_payload=True)
         return self._payloads(res)
 
     def delete_by_document(self, document_id: str) -> None:

@@ -56,3 +56,24 @@ def test_dense_and_sparse_search_filter_owner():
     assert all("chunk_id" in h and "text" in h and "score" in h for h in dense)
     assert all("chunk_id" in h and "text" in h and "score" in h for h in sparse)
     store.drop()
+
+
+_SCOPE_COLL = "test_scope_" + uuid.uuid4().hex[:8]
+
+
+def test_dense_and_sparse_search_filter_document_ids():
+    e = StubEmbedder(dim=8)
+    store = QdrantStore(collection=_SCOPE_COLL, dim=8)
+    store.ensure_collection()
+    store.upsert([_split_row(e, "添付された設計メモ", owner="u1", doc="docA"),
+                  _split_row(e, "別の社内資料", owner="u1", doc="docB")])
+    qv = e.embed(["設計メモ"])[0]
+
+    dense = store.dense_search(qv.dense, owner_user_id="u1", limit=10, document_ids=["docA"])
+    sparse = store.sparse_search(qv.sparse, owner_user_id="u1", limit=10, document_ids=["docA"])
+    assert len(dense) == 1 and dense[0]["document_id"] == "docA"
+    assert len(sparse) == 1 and sparse[0]["document_id"] == "docA"
+
+    dense_all = store.dense_search(qv.dense, owner_user_id="u1", limit=10)
+    assert len(dense_all) == 2
+    store.drop()
