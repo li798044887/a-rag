@@ -153,6 +153,7 @@ def cancel_job(job_id: str, owner_user_id: str | None = None):
     queued 以外は 409。Worker 着手との競合は status 条件付き DELETE で原子化。"""
     session = SessionLocal()
     raw_path: str | None = None
+    parsed_md_path: str | None = None
     try:
         job = session.get(IngestJob, job_id)
         if not job or (owner_user_id is not None and job.owner_user_id != owner_user_id):
@@ -161,6 +162,7 @@ def cancel_job(job_id: str, owner_user_id: str | None = None):
             raise HTTPException(status_code=409, detail=f"job is {job.status}, cannot cancel")
         doc = session.get(Document, job.document_id)
         raw_path = doc.raw_path if doc else None
+        parsed_md_path = doc.parsed_md_path if doc else None
         # status='queued' の行だけを原子的に削除。0件なら Worker が着手済みなので 409。
         deleted = (
             session.query(IngestJob)
@@ -171,12 +173,13 @@ def cancel_job(job_id: str, owner_user_id: str | None = None):
             session.rollback()
             raise HTTPException(status_code=409, detail="job is no longer queued, cannot cancel")
         if doc:
+            QdrantStore().delete_by_document(doc.id)
+            session.query(Chunk).filter(Chunk.document_id == doc.id).delete()
             session.delete(doc)
         session.commit()
     finally:
         session.close()
-    if raw_path:
-        cleanup_document_files(raw_path, None)
+    cleanup_document_files(raw_path, parsed_md_path)
     return Response(status_code=204)
 
 
