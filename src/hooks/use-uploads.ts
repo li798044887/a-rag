@@ -192,8 +192,8 @@ export function useUploads(onToast?: PushToast) {
               setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error } : f)));
               return;
             }
-            const { jobId } = (await res.json()) as { documentId: string; jobId: string };
-            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 10, jobId } : f)));
+            const { documentId, jobId } = (await res.json()) as { documentId: string; jobId: string };
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 10, jobId, documentId } : f)));
             startStreaming(id, jobId, file.name);
           })
           .catch(() => {

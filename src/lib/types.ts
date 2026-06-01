@@ -94,6 +94,8 @@ export interface Turn {
   durationMs: number;
   status: "running" | "done" | "cancelled" | "error";
   attachments: string[];
+  /** 添付の documentId（添付ありターンの retrieve スコープ・再生成再利用に使う。in-memory のみ）。 */
+  attachmentDocIds?: string[];
 }
 
 // ── Models / prompts / scope ────────────────────────────────────────────────
@@ -161,6 +163,8 @@ export interface StagedFile {
   chunks?: number;
   error?: string;
   jobId?: string;
+  /** アップロード応答で確定する rag 側 documentId（添付スコープ検索に使う）。 */
+  documentId?: string;
   /** rag の現在段階キー（SSE 由来）。ステッパー表示に使う。 */
   stage?: IngestStage;
   /** 段階の日本語ラベル（例: 「埋め込み生成」）。SSE の stage_detail。 */
