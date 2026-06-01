@@ -128,7 +128,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   // 文書選択時、原本プレビュー可能（PDF/画像/Office）なら原本タブ、それ以外は解析テキストを初期表示にする。
   const selectDoc = (d: DocumentSummary) => {
     setSelectedId(d.id);
-    const previewable = d.mime === "application/pdf" || d.mime.startsWith("image/") || isConvertibleToPdf(d.filename);
+    const previewable = d.mime === "application/pdf" || d.mime.startsWith("image/") || isSpreadsheet(d.filename) || isConvertibleToPdf(d.filename);
     setTab(previewable ? "pdf" : "text");
   };
 
