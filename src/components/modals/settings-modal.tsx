@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { MODELS } from "@/lib/data";
 import { ACCENT_PRESETS } from "@/lib/constants";
@@ -13,6 +13,8 @@ interface Props {
   onClose: () => void;
   model: ModelOption;
   onModelChange: (m: ModelOption) => void;
+  /** open になったとき表示するセクション。null/未指定なら現在のセクションを維持。 */
+  requestedSection?: SettingsSection | null;
   tweaks: Tweaks;
   setTweak: <K extends keyof Tweaks>(key: K, value: Tweaks[K]) => void;
   user: AppUser;
@@ -21,7 +23,8 @@ interface Props {
   onRevokeAllSessions: () => Promise<void> | void;
 }
 
-type Section = "model" | "sources" | "agent" | "appearance" | "security" | "account";
+export type SettingsSection = "model" | "sources" | "agent" | "appearance" | "security" | "account";
+type Section = SettingsSection;
 
 const NAV: { id: Section; label: string; icon: IconName }[] = [
   { id: "model", label: "モデル", icon: "brain" },
@@ -140,6 +143,7 @@ export function SettingsModal({
   onClose,
   model,
   onModelChange,
+  requestedSection,
   tweaks,
   setTweak,
   user,
@@ -150,6 +154,12 @@ export function SettingsModal({
   const [section, setSection] = useState<Section>(() =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches ? "account" : "model",
   );
+  // モーダルが閉→開に変わった時、要求セクションがあればそこへ移動（例: 対話BOXのモデルボタン → モデルタブ）。
+  const prevOpen = useRef(false);
+  useEffect(() => {
+    if (open && !prevOpen.current && requestedSection) setSection(requestedSection);
+    prevOpen.current = open;
+  }, [open, requestedSection]);
   // Mock settings (no backend in scope). The modal stays mounted across open/close,
   // so this state persists for the session — only a full reload resets it.
   const [connectors, setConnectors] = useState<Record<string, boolean>>(() =>

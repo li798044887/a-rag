@@ -8,7 +8,7 @@ import { Transcript } from "@/components/chat/messages";
 import { ToastViewport } from "@/components/feedback/toast-viewport";
 import { DocumentsModal } from "@/components/documents/documents-modal";
 import { HelpModal } from "@/components/modals/help-modal";
-import { SettingsModal } from "@/components/modals/settings-modal";
+import { SettingsModal, type SettingsSection } from "@/components/modals/settings-modal";
 import { ShareModal } from "@/components/modals/share-modal";
 import { RightPanel, type RightPanelAction } from "@/components/sources/right-panel";
 import { usePanelWidth } from "@/components/workspace/use-panel-width";
@@ -50,6 +50,8 @@ export function Workspace() {
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [panelWidth, handleResizeWidth] = usePanelWidth();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 設定モーダルを開く際に表示するセクション。null なら SettingsModal 既定のまま。
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。
@@ -58,6 +60,12 @@ export function Workspace() {
     const saved = localStorage.getItem(MODEL_STORAGE_KEY);
     return MODELS.find((m) => m.id === saved) ?? MODELS[0];
   });
+
+  // 設定モーダルを指定セクションで開く（section 省略時は既定セクション）。
+  const openSettings = useCallback((section?: SettingsSection) => {
+    setSettingsSection(section ?? null);
+    setSettingsOpen(true);
+  }, []);
 
   const [phase, setPhase] = useState<Phase>("empty");
   const [activeThreadId, setActiveThreadId] = useState(LIVE_KEY);
@@ -484,7 +492,7 @@ export function Workspace() {
       const mod = e.metaKey || e.ctrlKey;
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (mod && e.key === "n") return e.preventDefault(), newChat();
-      if (mod && e.key === "k") return e.preventDefault(), setSettingsOpen(true);
+      if (mod && e.key === "k") return e.preventDefault(), openSettings();
       if (mod && e.key === "b") return e.preventDefault(), setSidebarCollapsed((c) => !c);
       if (mod && e.key === "/") return e.preventDefault(), setSidebarCollapsed(false);
       if (e.key === "?" && e.shiftKey && !mod && tag !== "input" && tag !== "textarea") {
@@ -554,7 +562,7 @@ export function Workspace() {
         activeThreadId={activeThreadId}
         onSelectThread={selectThread}
         onNewChat={newChat}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => openSettings()}
         onOpenHelp={() => setHelpOpen(true)}
         onSignOut={signOut}
         onToggleTheme={() => setTweak("dark", !tweaks.dark)}
@@ -698,7 +706,7 @@ export function Workspace() {
             onSubmit={() => startRun(composerValue)}
             onStop={stopRun}
             model={model}
-            onChangeModel={() => setSettingsOpen(true)}
+            onChangeModel={() => openSettings("model")}
             running={phase === "running"}
             attachments={uploads.files}
             onAttachFiles={uploads.addFiles}
@@ -761,6 +769,7 @@ export function Workspace() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         model={model}
+        requestedSection={settingsSection}
         onModelChange={(m) => {
           setModel(m);
           localStorage.setItem(MODEL_STORAGE_KEY, m.id);
