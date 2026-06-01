@@ -165,6 +165,7 @@ export function useUploads(onToast?: PushToast) {
     if (action === "abort") {
       uploads.current[id]?.abort();
       delete uploads.current[id];
+      // この後、共通のローカル除去（filter + clearTimer + clearStream）へフォールスルーする。
     }
 
     // queued: サーバ側キャンセルAPIを呼ぶ。成功で除去、409 は処理中として残す。
@@ -234,6 +235,8 @@ export function useUploads(onToast?: PushToast) {
         uploads.current[id] = uploadCtrl;
         fetch("/api/upload", { method: "POST", body: form, signal: uploadCtrl.signal })
           .then(async (res) => {
+            // ✕ で中断済みなら何もしない（SSE 開始や削除済みファイルへの更新を避ける）。
+            if (uploadCtrl.signal.aborted) return;
             clearTimer(id);
             delete uploads.current[id];
             if (!res.ok) {
