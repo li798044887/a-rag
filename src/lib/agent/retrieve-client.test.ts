@@ -19,6 +19,17 @@ test("retrieveChunks posts to rag /retrieve and returns chunks", async () => {
   expect((init!.headers as Record<string, string>)["x-internal-token"]).toBe("dev-internal-token");
 });
 
+test("retrieveChunks sends candidate_k when provided", async () => {
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ chunks: [] }), { status: 200 }));
+  process.env.RAG_SERVICE_URL = "http://rag:8000";
+
+  await retrieveChunks({ query: "q", ownerUserId: "u1", topK: 6, candidateK: 10 });
+
+  const [, init] = spy.mock.calls[0];
+  expect(JSON.parse(init!.body as string).candidate_k).toBe(10);
+});
+
 test("fetchDocument posts to rag /documents/{id}/chunks and maps chunks", async () => {
   const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(JSON.stringify({ document_id: "d1", document_title: "設計.pdf",
@@ -54,6 +65,19 @@ test("retrieveChunksStream parses NDJSON: forwards stages and returns result chu
   expect(stages.map((s) => s.stage)).toEqual(["embed", "vector_search"]);
   expect(stages[1].count).toBe(3);
   expect(chunks[0].chunkId).toBe("c1");
+});
+
+test("retrieveChunksStream sends candidate_k when provided", async () => {
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response('{"stage":"result","chunks":[]}\n', { status: 200 }));
+  process.env.RAG_SERVICE_URL = "http://rag:8000";
+
+  await retrieveChunksStream({
+    query: "q", ownerUserId: "u1", topK: 6, candidateK: 10, onStage: () => {},
+  });
+
+  const [, init] = spy.mock.calls[0];
+  expect(JSON.parse(init!.body as string).candidate_k).toBe(10);
 });
 
 test("retrieveChunksStream forwards detail fields (hits/selected/model/dims)", async () => {

@@ -3,6 +3,7 @@ import json
 from app.config import settings
 from app.main import app
 from app.routers import retrieve as retrieve_router
+from app.schemas import RetrieveRequest
 from app.schemas import RetrievedChunk
 from fastapi.testclient import TestClient
 
@@ -50,3 +51,8 @@ def test_retrieve_stream_requires_token():
     client = TestClient(app)
     res = client.post("/retrieve/stream", json={"query": "x", "owner_user_id": "u1"})
     assert res.status_code == 401
+
+
+def test_retrieve_request_defaults_to_cpu_friendly_candidate_count():
+    req = RetrieveRequest(query="x", owner_user_id="u1")
+    assert req.candidate_k == 10

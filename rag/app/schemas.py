@@ -36,7 +36,7 @@ class RetrieveRequest(BaseModel):
     rewritten: str | None = None
     owner_user_id: str
     top_k: int = Field(default=6, ge=1, le=50)
-    candidate_k: int = Field(default=40, ge=1, le=500)
+    candidate_k: int = Field(default=10, ge=1, le=500)
 
 
 class RetrieveResponse(BaseModel):

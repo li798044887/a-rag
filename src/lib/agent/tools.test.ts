@@ -38,6 +38,17 @@ test("retrieve tool registers citations and returns numbered text", async () => 
   expect(meta.get("call-1")).toMatchObject({ name: "retrieve", summary: expect.stringContaining("1") });
 });
 
+test("retrieve tool uses a bounded rerank candidate count", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-candidates", messages: [] } as never);
+
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenLastCalledWith(
+    expect.objectContaining({ candidateK: 10 }));
+});
+
 test("fetch_document resolves a citation ref to the real document/chunk ids", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();

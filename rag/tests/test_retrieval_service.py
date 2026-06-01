@@ -1,4 +1,5 @@
 import uuid
+import logging
 
 from app.db import SessionLocal
 from app.models import Chunk, Document
@@ -107,7 +108,8 @@ def test_retrieve_stream_emits_stages_in_order():
     session.commit(); session.close()
 
 
-def test_retrieve_stream_done_events_carry_detail():
+def test_retrieve_stream_done_events_carry_detail(caplog):
+    caplog.set_level(logging.INFO, logger="app.retrieval.service")
     e, r = StubEmbedder(dim=8), StubReranker()
     store = QdrantStore(collection="test_detail_" + uuid.uuid4().hex[:8], dim=8)
     store.ensure_collection()
@@ -151,6 +153,8 @@ def test_retrieve_stream_done_events_carry_detail():
 
     exp = by["expand"]
     assert exp["count"] == len(rr["selected"])
+    assert "stage=rerank status=start candidate_count=" in caplog.text
+    assert "stage=rerank status=done" in caplog.text
 
     store.drop()
     session.query(Chunk).filter_by(document_id=doc.id).delete()

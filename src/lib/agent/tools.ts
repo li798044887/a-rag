@@ -21,6 +21,7 @@ export interface BuildToolsInput {
 }
 
 const RETRIEVE_TOP_K = 6;
+const RETRIEVE_CANDIDATE_K = 10;
 
 const STAGE_LABEL: Record<string, string> = {
   embed: "クエリ埋め込み",
@@ -105,7 +106,7 @@ export function buildTools({ registry, ownerUserId, meta, bus }: BuildToolsInput
       }),
       execute: async ({ query }, { toolCallId }) => {
         const chunks = await retrieveChunksStream({
-          query, ownerUserId, topK: RETRIEVE_TOP_K,
+          query, ownerUserId, topK: RETRIEVE_TOP_K, candidateK: RETRIEVE_CANDIDATE_K,
           onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, query)),
         });
         const lines = chunks.map((c) => {
