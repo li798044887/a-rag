@@ -108,6 +108,37 @@ def test_retrieve_stream_emits_stages_in_order():
     session.commit(); session.close()
 
 
+def test_retrieve_scopes_to_document_ids():
+    e, r = StubEmbedder(dim=8), StubReranker()
+    store = QdrantStore(collection="test_scope_svc_" + uuid.uuid4().hex[:8], dim=8)
+    store.ensure_collection()
+    session = SessionLocal()
+    docA = Document(owner_user_id="u1", filename="添付.pdf", mime="application/pdf",
+                    size=1, raw_path="/tmp/a", status="ready")
+    docB = Document(owner_user_id="u1", filename="他.pdf", mime="application/pdf",
+                    size=1, raw_path="/tmp/b", status="ready")
+    session.add_all([docA, docB]); session.flush()
+    for doc, body in ((docA, "添付の本文。"), (docB, "無関係の本文。")):
+        c = Chunk(document_id=doc.id, ordinal=0, heading_path="H", page_start=0,
+                  page_end=0, block_type="text", token_len=len(body), text=body)
+        session.add(c); session.flush()
+        store.upsert([{"chunk_id": c.id, "document_id": doc.id, "owner_user_id": "u1",
+                       "heading_path": "H", "page_start": 0, "page_end": 0,
+                       "block_type": "text", "source_type": "doc", "text": c.text,
+                       "vector": e.embed([c.text])[0]}])
+    session.commit()
+
+    res = retrieve(session, store, e, r, query="本文", owner_user_id="u1",
+                   top_k=5, candidate_k=10, document_ids=[docA.id])
+    assert len(res) == 1
+    assert res[0].document_id == docA.id
+
+    store.drop()
+    session.query(Chunk).filter(Chunk.document_id.in_([docA.id, docB.id])).delete(synchronize_session=False)
+    session.query(Document).filter(Document.id.in_([docA.id, docB.id])).delete(synchronize_session=False)
+    session.commit(); session.close()
+
+
 def test_retrieve_stream_done_events_carry_detail(caplog):
     caplog.set_level(logging.INFO, logger="app.retrieval.service")
     e, r = StubEmbedder(dim=8), StubReranker()

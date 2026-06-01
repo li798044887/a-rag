@@ -69,7 +69,8 @@ def _hit_rows(session: Session, hits: list[dict], title_cache: dict[str, str]) -
 
 def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, reranker: Reranker,
                     *, query: str, owner_user_id: str, top_k: int = 6,
-                    candidate_k: int = DEFAULT_CANDIDATE_K) -> Iterator[dict]:
+                    candidate_k: int = DEFAULT_CANDIDATE_K,
+                    document_ids: list[str] | None = None) -> Iterator[dict]:
     title_cache: dict[str, str] = {}
     reranker_name = getattr(reranker, "name", "?")
     _log_info("retrieve_stream start top_k=%s candidate_k=%s embedder=%s reranker=%s",
@@ -91,8 +92,8 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
     _log_info("retrieve_stream stage=bm25_search status=start limit=%s", candidate_k)
     yield {"stage": "bm25_search", "status": "start"}
     with ThreadPoolExecutor(max_workers=2) as ex:
-        f_dense = ex.submit(_timed, store.dense_search, qv.dense, owner_user_id, candidate_k)
-        f_sparse = ex.submit(_timed, store.sparse_search, qv.sparse, owner_user_id, candidate_k)
+        f_dense = ex.submit(_timed, store.dense_search, qv.dense, owner_user_id, candidate_k, document_ids)
+        f_sparse = ex.submit(_timed, store.sparse_search, qv.sparse, owner_user_id, candidate_k, document_ids)
         dense_hits, dense_ms = f_dense.result()
         _log_info("retrieve_stream stage=vector_search status=done ms=%s count=%s",
                   dense_ms, len(dense_hits))
@@ -165,11 +166,13 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
 
 def retrieve(session: Session, store: QdrantStore, embedder: Embedder, reranker: Reranker,
              *, query: str, owner_user_id: str, top_k: int = 6,
-             candidate_k: int = DEFAULT_CANDIDATE_K) -> list[RetrievedChunk]:
+             candidate_k: int = DEFAULT_CANDIDATE_K,
+             document_ids: list[str] | None = None) -> list[RetrievedChunk]:
     # 非ストリーミング用 drain ラッパ（既存 /retrieve と既存テストを温存）。
     result: list[RetrievedChunk] = []
     for ev in retrieve_stream(session, store, embedder, reranker, query=query,
-                              owner_user_id=owner_user_id, top_k=top_k, candidate_k=candidate_k):
+                              owner_user_id=owner_user_id, top_k=top_k, candidate_k=candidate_k,
+                              document_ids=document_ids):
         if ev.get("stage") == "result":
             result = ev["chunks"]
             break
