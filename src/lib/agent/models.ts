@@ -1,9 +1,10 @@
 /** モデル選択 → AI SDK プロバイダの解決。
  *
  * UI（設定 > モデル）で選んだ model id を、実際の LLM プロバイダ／モデルに変換する。
- * - claude-* … @ai-sdk/anthropic（要 ANTHROPIC_API_KEY）
- * - gpt-*    … @ai-sdk/openai（要 OPENAI_API_KEY）
- *              OPENAI_BASE_URL を設定すれば OpenAI 互換の社内/ローカル LLM も同経路で利用可。
+ * - deepseek-* … DeepSeek API（OpenAI 互換、要 DEEPSEEK_API_KEY）
+ * - claude-*    … @ai-sdk/anthropic（要 ANTHROPIC_API_KEY）
+ * - gpt-*       … @ai-sdk/openai（要 OPENAI_API_KEY）
+ *                 OPENAI_BASE_URL を設定すれば OpenAI 互換の社内/ローカル LLM も同経路で利用可。
  *
  * 各 id ごとに「回答用（chat）」と「クエリ書き換え用（rewrite, 安価モデル）」を返す。
  * キー未設定時は ok:false と日本語の理由を返し、呼び出し側で案内を表示する。 */
@@ -24,12 +25,29 @@ export type ModelResolution =
   | { ok: false; reason: string };
 
 /** UI 既定（MODELS[0]）と一致させる。route 側で model 未指定のときのフォールバック。 */
-export const DEFAULT_MODEL_ID = "claude-sonnet-4-5";
+export const DEFAULT_MODEL_ID = "deepseek-flash";
 
 const ANTHROPIC_REWRITE = "claude-haiku-4-5";
 const OPENAI_REWRITE = "gpt-4o-mini";
 
+/** DeepSeek API モデル名へのマッピング */
+const DEEPSEEK_MODEL_MAP: Record<string, string> = {
+  "deepseek-flash": "deepseek-chat",
+  "deepseek-v4-pro": "deepseek-reasoner",
+};
+
 export function resolveModels(modelId: string = DEFAULT_MODEL_ID): ModelResolution {
+  // DeepSeek (deepseek-*) — OpenAI 互換 API
+  if (modelId.startsWith("deepseek-")) {
+    if (!process.env.DEEPSEEK_API_KEY) return { ok: false, reason: missingKey("DEEPSEEK_API_KEY") };
+    const apiModel = DEEPSEEK_MODEL_MAP[modelId] || "deepseek-chat";
+    const deepseek = createOpenAI({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    });
+    return { ok: true, models: { chat: deepseek(apiModel), rewrite: deepseek("deepseek-chat") } };
+  }
+
   // Anthropic (claude-*)
   if (modelId.startsWith("claude-")) {
     if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: missingKey("ANTHROPIC_API_KEY") };
