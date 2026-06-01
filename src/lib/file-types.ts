@@ -33,3 +33,15 @@ export function getFileMeta(name: string): FileMeta {
     }
   );
 }
+
+// rag 側 CONVERTIBLE_EXTS（documents_service.py）と一致させること。
+// LibreOffice→PDF 変換でブラウザプレビューできる Office 系形式。
+const CONVERTIBLE_EXTS = new Set([
+  "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf",
+]);
+
+// 原本をサーバ側で PDF 変換してプレビューできる形式かを拡張子で判定する。
+export function isConvertibleToPdf(name: string): boolean {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  return name.includes(".") && CONVERTIBLE_EXTS.has(ext);
+}

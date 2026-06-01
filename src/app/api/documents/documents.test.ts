@@ -11,6 +11,7 @@ import { DELETE as docDELETE } from "@/app/api/documents/[id]/route";
 import { GET as previewGET } from "@/app/api/documents/[id]/preview/route";
 import { GET as layoutGET } from "@/app/api/documents/[id]/layout/route";
 import { GET as spanGET } from "@/app/api/documents/[id]/span/route";
+import { GET as renderedGET } from "@/app/api/documents/[id]/rendered/route";
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
@@ -36,5 +37,10 @@ test("documents layout requires auth", async () => {
 
 test("documents span requires auth", async () => {
   const res = await spanGET(new Request("http://x/api/documents/d1/span"), params("d1"));
+  expect(res.status).toBe(401);
+});
+
+test("documents rendered requires auth", async () => {
+  const res = await renderedGET(new Request("http://x/api/documents/d1/rendered"), params("d1"));
   expect(res.status).toBe(401);
 });

@@ -8,8 +8,9 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.db import SessionLocal
 from app.documents_service import (
-    assets_dir_for, cleanup_document_files, find_layout_pdf, list_documents,
-    find_span_pdf, record_workspace_activity, resolve_within, select_chunks, workspace_stats,
+    assets_dir_for, cleanup_document_files, convert_to_pdf, find_layout_pdf,
+    is_convertible, list_documents, find_span_pdf, record_workspace_activity,
+    resolve_within, select_chunks, workspace_stats,
 )
 from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
@@ -242,6 +243,30 @@ def get_document_raw(document_id: str, owner_user_id: str, download: bool = Fals
         filename=filename,
         content_disposition_type="attachment" if download else "inline",
     )
+
+
+@router.get("/documents/{document_id}/rendered",
+            dependencies=[Depends(require_internal_token)])
+def get_document_rendered(document_id: str, owner_user_id: str):
+    """Office 系原本を LibreOffice で PDF 化（遅延・キャッシュ）して inline 返却する。"""
+    session = SessionLocal()
+    try:
+        doc = session.get(Document, document_id)
+        if not doc or doc.owner_user_id != owner_user_id:
+            raise HTTPException(status_code=404, detail="document not found")
+        raw_path = Path(doc.raw_path)
+    finally:
+        session.close()
+    if not is_convertible(str(raw_path)):
+        raise HTTPException(status_code=404, detail="not convertible")
+    if not raw_path.exists():
+        raise HTTPException(status_code=404, detail="file not found")
+    try:
+        pdf = convert_to_pdf(str(raw_path))
+    except Exception as exc:  # 変換失敗（破損・タイムアウト・未対応）
+        raise HTTPException(status_code=422, detail="conversion failed") from exc
+    return FileResponse(str(pdf), media_type="application/pdf",
+                        content_disposition_type="inline")
 
 
 @router.get("/documents/{document_id}/layout",

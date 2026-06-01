@@ -5,7 +5,7 @@ import { Icon } from "@/components/icons";
 import { RenderedSectionBody } from "@/components/sources/rendered-section-body";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
-import { getFileMeta } from "@/lib/file-types";
+import { getFileMeta, isConvertibleToPdf } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
 import type { DocumentPreview, DocumentPreviewChunk, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
@@ -17,6 +17,55 @@ const STATUS_LABEL: Record<string, string> = {
   ready: "索引済み", error: "エラー", queued: "待機中", processing: "処理中",
   parsing: "解析中", chunking: "チャンク化", embedding: "埋め込み", indexing: "索引化",
 };
+
+/** プレビュー不可フォールバック（原本ダウンロード導線）。 */
+function UnsupportedPreview({ docId }: { docId: string }) {
+  return (
+    <div className="grid h-full place-items-center p-8 text-center">
+      <div className="max-w-[380px]">
+        <div className="mb-1.5 text-[13px] font-semibold text-fg">この形式はブラウザでプレビューできません</div>
+        <div className="mb-4 text-[12px] leading-[1.6] text-muted">「解析テキスト」タブで抽出済みの内容を確認するか、原本をダウンロードしてください。</div>
+        <a href={`/api/documents/${encodeURIComponent(docId)}/raw?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2">原本をダウンロード</a>
+      </div>
+    </div>
+  );
+}
+
+/** Office 原本をサーバ側で PDF 変換し iframe 表示する。初回は数秒の変換待ち、
+ *  失敗時はダウンロード導線へ退避する。blob 経由にして HTTP エラーを iframe に晒さない。 */
+function RenderedPdfPreview({ docId, filename }: { docId: string; filename: string }) {
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [url, setUrl] = useState<string | null>(null);
+
+  // docId ごとに key で再マウントされる前提（初期状態 = loading）。
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    (async () => {
+      try {
+        const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/rendered`);
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+        setState("ready");
+      } catch {
+        if (!cancelled) setState("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [docId]);
+
+  if (state === "error") return <UnsupportedPreview docId={docId} />;
+  if (state === "loading" || !url) {
+    return <div className="grid h-full place-items-center text-[12px] text-muted">変換中…</div>;
+  }
+  return <iframe title={filename} src={url} className="h-full w-full border-0" />;
+}
 
 /** チャンク本文を HTML整形ビューで描画する。
  *  一次資料パネルと同じ本文レンダラを使う。 */
@@ -47,12 +96,15 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   const selected = docs.items.find((d) => d.id === selectedId) ?? null;
   const isPdf = selected?.mime === "application/pdf";
   const isImage = selected?.mime.startsWith("image/") ?? false;
-  // MinerU 注釈 PDF は PDF 入力時のみ生成する。原本は PDF/画像のみブラウザで表示できる。
+  // Office 系原本はサーバ側で PDF 変換してプレビューできる（拡張子で判定）。
+  const isConvertible = selected ? isConvertibleToPdf(selected.filename) : false;
+  // MinerU 注釈 PDF は PDF 入力時のみ生成する。
 
-  // 文書選択時、ブラウザで表示できない形式（Excel 等）は解析テキストを初期表示にする。
+  // 文書選択時、原本プレビュー可能（PDF/画像/Office）なら原本タブ、それ以外は解析テキストを初期表示にする。
   const selectDoc = (d: DocumentSummary) => {
     setSelectedId(d.id);
-    setTab(d.mime === "application/pdf" || d.mime.startsWith("image/") ? "pdf" : "text");
+    const previewable = d.mime === "application/pdf" || d.mime.startsWith("image/") || isConvertibleToPdf(d.filename);
+    setTab(previewable ? "pdf" : "text");
   };
 
   // 選択文書のプレビュー（全チャンク）を取得。
@@ -221,14 +273,11 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       <img src={`/api/documents/${encodeURIComponent(selected.id)}/raw`} alt={selected.filename} className="max-h-full max-w-full rounded-lg border-[0.5px] border-divider" />
                     </div>
                   )}
-                  {tab === "pdf" && !isPdf && !isImage && (
-                    <div className="grid h-full place-items-center p-8 text-center">
-                      <div className="max-w-[380px]">
-                        <div className="mb-1.5 text-[13px] font-semibold text-fg">この形式はブラウザでプレビューできません</div>
-                        <div className="mb-4 text-[12px] leading-[1.6] text-muted">「解析テキスト」タブで抽出済みの内容を確認するか、原本をダウンロードしてください。</div>
-                        <a href={`/api/documents/${encodeURIComponent(selected.id)}/raw?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2">原本をダウンロード</a>
-                      </div>
-                    </div>
+                  {tab === "pdf" && !isPdf && !isImage && isConvertible && (
+                    <RenderedPdfPreview key={selected.id} docId={selected.id} filename={selected.filename} />
+                  )}
+                  {tab === "pdf" && !isPdf && !isImage && !isConvertible && (
+                    <UnsupportedPreview docId={selected.id} />
                   )}
                   {tab === "layout" && isPdf && (
                     <iframe title={`${selected.filename} レイアウト`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />

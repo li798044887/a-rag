@@ -1,12 +1,64 @@
 """文書チャンクの選択ロジック（窓掛け・上限）。DB I/O は含まない純関数。"""
 
 import base64
+import os
 import shutil
+import subprocess
+import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 MAX_CHUNKS = 40
 WINDOW = 2
+
+# LibreOffice で PDF 化してブラウザプレビューできる形式（拡張子・小文字）。
+# PDF/画像は既にプレビュー可能、CSV/TXT は解析テキストで足りるため対象外。
+CONVERTIBLE_EXTS = {
+    "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf",
+}
+# soffice 変換のタイムアウト（秒）。巨大ブック等での無限待ちを防ぐ。
+CONVERT_TIMEOUT = 120
+
+
+def is_convertible(path: str) -> bool:
+    """原本パス/ファイル名の拡張子が LibreOffice→PDF 変換対象かを返す。"""
+    return Path(path).suffix.lstrip(".").lower() in CONVERTIBLE_EXTS
+
+
+def rendered_pdf_for(raw_path: str) -> Path:
+    """原本パスから、レンダリング済み PDF のキャッシュパスを決定的に導出する。"""
+    return Path(str(Path(raw_path).with_suffix("")) + "_rendered.pdf")
+
+
+def convert_to_pdf(raw_path: str) -> Path:
+    """原本を LibreOffice headless で PDF 化し、キャッシュパスへ確定して返す。
+
+    既にキャッシュ済みなら soffice を起動せずそれを返す。並行起動時の
+    プロファイル衝突を避けるため毎回ユニークな UserInstallation を渡し、
+    一時ディレクトリへ出力してから os.replace でアトミックに確定する。
+    """
+    cache = rendered_pdf_for(raw_path)
+    if cache.is_file():
+        return cache
+
+    raw = Path(raw_path)
+    with tempfile.TemporaryDirectory(prefix="soffice_") as tmp:
+        profile = Path(tmp) / "profile"
+        subprocess.run(
+            [
+                "soffice", "--headless", "--nologo", "--nofirststartwizard",
+                f"-env:UserInstallation=file://{profile}",
+                "--convert-to", "pdf", "--outdir", tmp, str(raw),
+            ],
+            check=True, capture_output=True, timeout=CONVERT_TIMEOUT,
+        )
+        produced = Path(tmp) / (raw.stem + ".pdf")
+        if not produced.is_file():
+            raise RuntimeError(f"soffice produced no pdf for {raw_path}")
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(produced, cache)
+    return cache
 
 
 def select_chunks(chunks, *, around_ordinal, window=WINDOW, max_chunks=MAX_CHUNKS):
@@ -47,10 +99,12 @@ def find_span_pdf(raw_path: str) -> Path | None:
 
 
 def cleanup_document_files(raw_path: str, parsed_md_path: str | None = None) -> None:
-    """文書に紐づく実体（原本・解析MD・_assets・_mineru）を best-effort で削除する。"""
+    """文書に紐づく実体（原本・解析MD・_rendered.pdf・_assets・_mineru）を best-effort で削除する。"""
     for f in (raw_path, parsed_md_path):
         if f:
             Path(f).unlink(missing_ok=True)
+    if raw_path:
+        rendered_pdf_for(raw_path).unlink(missing_ok=True)
     for d in (assets_dir_for(raw_path), mineru_dir_for(raw_path)):
         shutil.rmtree(d, ignore_errors=True)
 

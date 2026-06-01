@@ -33,6 +33,18 @@ def test_cleanup_removes_raw_assets_mineru_and_parsed_md(tmp_path):
     assert not parsed_md.exists()
 
 
+def test_cleanup_removes_rendered_pdf(tmp_path):
+    raw = tmp_path / "abc_sheet.xlsx"
+    raw.write_bytes(b"xlsx")
+    rendered = tmp_path / "abc_sheet_rendered.pdf"
+    rendered.write_bytes(b"%PDF")
+
+    cleanup_document_files(str(raw), None)
+
+    assert not raw.exists()
+    assert not rendered.exists()
+
+
 def test_cleanup_is_best_effort_on_missing_paths():
     # 存在しないパスでも例外を投げない
     cleanup_document_files("/nonexistent/x.pdf", None)
