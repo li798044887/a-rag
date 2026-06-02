@@ -97,3 +97,13 @@ class WorkspaceStats(BaseModel):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+class BulkDeleteRequest(BaseModel):
+    owner_user_id: str
+    document_ids: list[str]
+
+
+class BulkDeleteResponse(BaseModel):
+    deleted: list[str]
+    not_found: list[str]

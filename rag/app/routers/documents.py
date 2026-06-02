@@ -18,6 +18,7 @@ from app.models import Chunk, Document, IngestJob
 from app.queue import redis_settings
 from app.vectorstore.qdrant import QdrantStore
 from app.schemas import (
+    BulkDeleteRequest, BulkDeleteResponse,
     DocumentListResponse, FetchDocumentRequest, FetchDocumentResponse, FetchedChunk, IngestStarted,
     WorkspaceStats,
 )
@@ -205,26 +206,60 @@ def cancel_job(job_id: str, owner_user_id: str | None = None):
     return Response(status_code=204)
 
 
+def _delete_one(session, doc) -> tuple[str | None, str | None]:
+    """1文書の Qdrant ベクトル/chunks/job/行を削除し、cleanup 対象の生ファイルパスを返す。
+    commit と cleanup_document_files は呼び出し側で行う。"""
+    raw_path, parsed_md_path = doc.raw_path, doc.parsed_md_path
+    QdrantStore().delete_by_document(doc.id)
+    session.query(Chunk).filter(Chunk.document_id == doc.id).delete()
+    session.query(IngestJob).filter(IngestJob.document_id == doc.id).delete()
+    session.delete(doc)
+    return raw_path, parsed_md_path
+
+
 @router.delete("/documents/{document_id}", status_code=204,
                dependencies=[Depends(require_internal_token)])
 def delete_document(document_id: str, owner_user_id: str):
     session = SessionLocal()
+    raw_path: str | None = None
+    parsed_md_path: str | None = None
     try:
         doc = session.get(Document, document_id)
         if not doc or doc.owner_user_id != owner_user_id:
             raise HTTPException(status_code=404, detail="document not found")
-        raw_path = doc.raw_path
-        parsed_md_path = doc.parsed_md_path
-        QdrantStore().delete_by_document(document_id)
-        session.query(Chunk).filter(Chunk.document_id == document_id).delete()
-        session.query(IngestJob).filter(IngestJob.document_id == document_id).delete()
-        session.delete(doc)
+        raw_path, parsed_md_path = _delete_one(session, doc)
         record_workspace_activity(session, owner_user_id=owner_user_id)
         session.commit()
     finally:
         session.close()
     cleanup_document_files(raw_path, parsed_md_path)
     return Response(status_code=204)
+
+
+@router.post("/documents/bulk-delete", response_model=BulkDeleteResponse,
+             dependencies=[Depends(require_internal_token)])
+def bulk_delete_documents(req: BulkDeleteRequest):
+    """複数文書をまとめて削除する。所有者不一致・不在は not_found に入れて部分成功を許容。"""
+    session = SessionLocal()
+    deleted: list[str] = []
+    not_found: list[str] = []
+    files: list[tuple[str | None, str | None]] = []
+    try:
+        for doc_id in req.document_ids:
+            doc = session.get(Document, doc_id)
+            if not doc or doc.owner_user_id != req.owner_user_id:
+                not_found.append(doc_id)
+                continue
+            files.append(_delete_one(session, doc))
+            deleted.append(doc_id)
+        if deleted:
+            record_workspace_activity(session, owner_user_id=req.owner_user_id)
+        session.commit()
+    finally:
+        session.close()
+    for raw, md in files:
+        cleanup_document_files(raw, md)
+    return BulkDeleteResponse(deleted=deleted, not_found=not_found)
 
 
 def _fetch_document(document_id: str, req: FetchDocumentRequest) -> FetchDocumentResponse:
