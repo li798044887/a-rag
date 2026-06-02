@@ -24,3 +24,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (len) headers.set("content-length", len);
   return new NextResponse(res.body, { status: 200, headers });
 }
+
+// 原本の存在確認用（削除済み判定）。本体は流さず、rag へも HEAD で問い合わせて 200/404 だけ返す。
+export async function HEAD(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const claims = await getSessionClaims();
+  if (!claims) return new NextResponse(null, { status: 401 });
+  const { id } = await ctx.params;
+  const res = await ragFetch(
+    `/documents/${encodeURIComponent(id)}/raw?owner_user_id=${encodeURIComponent(claims.sub)}`,
+    { method: "HEAD" },
+  );
+  await res.body?.cancel();
+  return new NextResponse(null, { status: res.ok ? 200 : 404 });
+}
