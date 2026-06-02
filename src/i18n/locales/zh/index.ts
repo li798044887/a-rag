@@ -3,6 +3,7 @@ import { chat } from "./chat";
 import { common } from "./common";
 import { modals } from "./modals";
 import { sidebar } from "./sidebar";
+import { uploads } from "./uploads";
 
 /** zh は辞書の唯一の出所。型 Dictionary はここから導出する。 */
 export const zh = {
@@ -11,6 +12,7 @@ export const zh = {
   common,
   modals,
   sidebar,
+  uploads,
 };
 
 export type Dictionary = typeof zh;

@@ -6,17 +6,18 @@ import { getFileMeta } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
 import type { IngestStage, StagedFile } from "@/lib/types";
 import { uploadActionFor } from "@/hooks/use-uploads";
-
-// rag worker の段階（worker.py の遷移と一致）。索引化後は ready。
-const STAGES: { key: IngestStage; label: string }[] = [
-  { key: "parsing", label: "解析" },
-  { key: "chunking", label: "チャンク化" },
-  { key: "embedding", label: "埋め込み" },
-  { key: "indexing", label: "索引化" },
-];
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 
 /** 解析→チャンク化→埋め込み→索引化 の段階ステッパー。SSE の stage で現在位置を点灯する。 */
 function IngestStepper({ stage }: { stage?: IngestStage }) {
+  const { t } = useT();
+  const STAGES: { key: IngestStage; label: string }[] = [
+    { key: "parsing", label: t.uploads.stageParsing },
+    { key: "chunking", label: t.uploads.stageChunking },
+    { key: "embedding", label: t.uploads.stageEmbedding },
+    { key: "indexing", label: t.uploads.stageIndexing },
+  ];
   // 現在段階のインデックス（ready は全完了扱い、未取得は先頭手前）。
   const active = stage === "ready" ? STAGES.length : stage ? STAGES.findIndex((s) => s.key === stage) : 0;
   return (
@@ -50,11 +51,14 @@ function IngestStepper({ stage }: { stage?: IngestStage }) {
 }
 
 function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemove: (id: string) => void; onRetry?: (id: string) => void }) {
+  const { t } = useT();
   const meta = getFileMeta(file.name);
   const ext = (file.name.split(".").pop() || "").toUpperCase();
   // 解析段階はファイル形式で表示（例: 「PDF 解析中」「XLSX 解析中」）。
-  const processingText = file.stage === "parsing" ? `${ext} 解析中` : file.stageDetail || "処理中…";
-  const elapsed = file.durationMs != null ? `${(file.durationMs / 1000).toFixed(1)}秒` : null;
+  const processingText = file.stage === "parsing"
+    ? interpolate(t.uploads.parsingFile, { ext })
+    : file.stageDetail || t.uploads.processing;
+  const elapsed = file.durationMs != null ? interpolate(t.uploads.durationSuffix, { n: (file.durationMs / 1000).toFixed(1) }) : null;
   return (
     <div
       className={cn(
@@ -78,13 +82,13 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
           {file.status === "uploading" && (
             <>
               <span className="h-[9px] w-[9px] shrink-0 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
-              <span>アップロード中… {file.progress}%</span>
+              <span>{interpolate(t.uploads.uploading, { progress: file.progress })}</span>
             </>
           )}
           {file.status === "queued" && (
             <>
               <span className="h-[9px] w-[9px] shrink-0 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
-              <span>待機中…</span>
+              <span>{t.uploads.queued}</span>
             </>
           )}
           {file.status === "processing" && (
@@ -92,7 +96,7 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
               <span className="h-[9px] w-[9px] shrink-0 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
               <span>
                 {processingText}
-                {file.stage === "embedding" && file.chunks ? ` · ${file.chunks}チャンク` : ""}
+                {file.stage === "embedding" && file.chunks ? ` · ${interpolate(t.uploads.chunkSuffix, { n: file.chunks })}` : ""}
                 {` · ${file.progress}%`}
               </span>
             </>
@@ -101,7 +105,11 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
             <>
               <span className="text-accent">✓</span>
               <span>
-                {meta.label} · {formatFileSize(file.size)} · {file.pages || file.chunks}件のチャンクを索引化
+                {interpolate(t.uploads.readyDetail, {
+                  type: meta.label,
+                  size: formatFileSize(file.size),
+                  n: file.pages ?? file.chunks ?? 0,
+                })}
                 {elapsed ? ` · ${elapsed}` : ""}
               </span>
             </>
@@ -109,19 +117,19 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
           {file.status === "skipped" && (
             <>
               <span className="text-muted-2">⊘</span>
-              <span>未対応の形式のためスキップ</span>
+              <span>{t.uploads.skippedStatus}</span>
             </>
           )}
           {file.status === "error" && (
             <>
               <span className="text-[#B83A1F]">!</span>
-              <span>{file.error || "エラー"}</span>
+              <span>{file.error || t.uploads.errorFallback}</span>
               {onRetry && file.jobId && (
                 <button
                   className="ml-1 rounded-[4px] border-0 bg-transparent px-1.5 py-0.5 text-[10px] font-semibold text-[#B83A1F] hover:bg-[rgba(184,58,31,0.12)]"
                   onClick={() => onRetry(file.id)}
                 >
-                  再試行
+                  {t.uploads.retryButton}
                 </button>
               )}
             </>
@@ -138,7 +146,7 @@ function AttachmentChip({ file, onRemove, onRetry }: { file: StagedFile; onRemov
         <button
           className="grid h-[22px] w-[22px] place-items-center rounded-[5px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
           onClick={() => onRemove(file.id)}
-          aria-label={uploadActionFor(file.status) === "remove" ? "削除" : "取り消し"}
+          aria-label={uploadActionFor(file.status) === "remove" ? t.uploads.ariaRemove : t.uploads.ariaCancel}
         >
           <svg viewBox="0 0 12 12" width="10" height="10">
             <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
@@ -161,12 +169,13 @@ export function AttachmentTray({ files, onRemove, onRetry }: { files: StagedFile
 }
 
 export function UserAttachments({ files }: { files: StagedFile[] }) {
+  const { t } = useT();
   if (!files.length) return null;
   return (
     <div className="mb-1 rounded-[10px] border-[0.5px] border-divider bg-surface-2 px-3 py-2.5">
       <div className="mb-2 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-muted">
         <Icon name="paperclip" size={11} />
-        添付されたファイル
+        {t.uploads.attachedFiles}
       </div>
       <div className="flex flex-wrap gap-1.5">
         {files.map((f) => {
@@ -190,6 +199,7 @@ export function UserAttachments({ files }: { files: StagedFile[] }) {
 }
 
 export function DropOverlay({ visible }: { visible: boolean }) {
+  const { t } = useT();
   if (!visible) return null;
   return (
     <div className="pointer-events-none fixed inset-0 z-[300] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.55)] backdrop-blur-[4px] motion-reduce:animate-none">
@@ -199,8 +209,8 @@ export function DropOverlay({ visible }: { visible: boolean }) {
           <path d="M29 10v9h9" stroke="currentColor" strokeWidth="2" fill="none" strokeLinejoin="round" />
           <path d="M10 32v9M5 36.5l5-5 5 5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <div className="mb-1.5 text-[17px] font-bold">ファイルをここにドロップ</div>
-        <div className="text-[12.5px] leading-[1.5] text-muted">フォルダもOK · PDF · Word · Excel · PowerPoint · CSV · 画像 — 自動的に索引化されます</div>
+        <div className="mb-1.5 text-[17px] font-bold">{t.uploads.dropTitle}</div>
+        <div className="text-[12.5px] leading-[1.5] text-muted">{t.uploads.dropSubtitle}</div>
       </div>
     </div>
   );
@@ -221,6 +231,7 @@ function groupByFolder(files: StagedFile[]): { folder: string | null; files: Sta
 function QueueGroup({ folder, files, onRemove, onRetry }: {
   folder: string | null; files: StagedFile[]; onRemove: (id: string) => void; onRetry?: (id: string) => void;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(true);
   const done = files.filter((f) => f.status === "ready").length;
   const failed = files.filter((f) => f.status === "error").length;
@@ -247,7 +258,9 @@ function QueueGroup({ folder, files, onRemove, onRetry }: {
         <Icon name="folder" size={13} />
         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-fg" title={folder}>{folder}</span>
         <span className="shrink-0 font-mono text-[10.5px] text-muted">
-          {done}/{target} 完了{failed ? ` · ${failed}失敗` : ""}{skipped ? ` · ${skipped}スキップ` : ""}
+          {interpolate(t.uploads.groupDone, { done, target })}
+          {failed ? ` · ${interpolate(t.uploads.groupFailed, { n: failed })}` : ""}
+          {skipped ? ` · ${interpolate(t.uploads.groupSkipped, { n: skipped })}` : ""}
         </span>
         {active > 0 && <span className="h-[10px] w-[10px] shrink-0 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />}
         <svg viewBox="0 0 12 12" width="10" height="10" className={cn("shrink-0 text-muted transition-transform", open && "rotate-90")}>
@@ -267,6 +280,7 @@ function QueueGroup({ folder, files, onRemove, onRetry }: {
 export function DocumentsUploadQueue({ files, onRemove, onRetry, onClear }: {
   files: StagedFile[]; onRemove: (id: string) => void; onRetry?: (id: string) => void; onClear?: () => void;
 }) {
+  const { t } = useT();
   if (!files.length) return null;
   const groups = groupByFolder(files);
   const skipped = files.filter((f) => f.status === "skipped").length;
@@ -277,14 +291,17 @@ export function DocumentsUploadQueue({ files, onRemove, onRetry, onClear }: {
   return (
     <div className="flex min-h-0 max-h-[50vh] flex-col border-b-[0.5px] border-divider bg-surface-2 max-md:max-h-[55vh]">
       <div className="flex items-center gap-2 px-3 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">アップロード</span>
-        <span className="font-mono text-[10.5px] text-muted">{done}/{target}{skipped ? ` · ${skipped}スキップ` : ""}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">{t.uploads.queueHeader}</span>
+        <span className="font-mono text-[10.5px] text-muted">
+          {interpolate(t.uploads.queueProgress, { done, target })}
+          {skipped ? ` · ${interpolate(t.uploads.queueSkipped, { n: skipped })}` : ""}
+        </span>
         {onClear && (
           <button
             onClick={onClear}
             className="ml-auto rounded-[5px] border-0 bg-transparent px-1.5 py-0.5 text-[10.5px] font-medium text-muted hover:bg-divider hover:text-fg"
           >
-            {allDone ? "クリア" : "すべて非表示"}
+            {allDone ? t.uploads.clearAll : t.uploads.hideAll}
           </button>
         )}
       </div>
@@ -298,3 +315,4 @@ export function DocumentsUploadQueue({ files, onRemove, onRetry, onClear }: {
     </div>
   );
 }
+
