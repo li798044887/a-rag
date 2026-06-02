@@ -80,7 +80,12 @@ export async function POST(req: Request) {
                 pending.delete(jobId);
                 return;
               }
-              const job = (await r.json()) as JobSnapshot;
+              const job = (await r.json().catch(() => null)) as JobSnapshot | null;
+              if (!job) {
+                send(formatFrame(jobId, { status: "error", progress: 0, stage_detail: "", error: "レスポンス解析エラー" }));
+                pending.delete(jobId);
+                return;
+              }
               send(formatFrame(jobId, job));
               if (isTerminalJobStatus(job.status)) pending.delete(jobId);
             }),
@@ -89,7 +94,7 @@ export async function POST(req: Request) {
           await new Promise((res) => setTimeout(res, POLL_MS));
         }
       } catch {
-        // 全体例外時は接続を閉じるのみ（個別ジョブのエラーは上で送出済み）。
+        // 想定外の全体例外時のみ接続を閉じる（個別エラーは各ジョブで送出済み）。
       } finally {
         close();
       }
