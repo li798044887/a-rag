@@ -45,7 +45,8 @@ vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model", createAnthropic:
 
 import { streamText } from "ai";
 import { retrieveChunksStream } from "@/lib/agent/retrieve-client";
-import { runAgent, buildUserContent } from "@/lib/agent/run";
+import { runAgent } from "@/lib/agent/run";
+import { getAgentPrompts } from "@/lib/agent/prompts";
 import type { AgentEvent } from "@/lib/types";
 
 process.env.DEEPSEEK_API_KEY = "test-key";
@@ -58,7 +59,7 @@ afterEach(() => {
 
 test("runAgent runs tool loop, streams answer, finishes with sources+citationMap", async () => {
   const events: AgentEvent[] = [];
-  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {
     events.push(e);
   }
 
@@ -101,7 +102,7 @@ test("runAgent surfaces only the sources actually cited in the answer", async ()
   });
 
   const events: AgentEvent[] = [];
-  for await (const e of runAgent({ query: "q", ownerUserId: "u1", threadId: "t1" })) events.push(e);
+  for await (const e of runAgent({ query: "q", ownerUserId: "u1", threadId: "t1", locale: "ja" })) events.push(e);
 
   const done = events.find((e) => e.type === "done");
   if (!done || done.type !== "done") throw new Error("done event missing");
@@ -124,7 +125,7 @@ test("runAgent emits an error step on tool-error and continues to stream the ans
   } as never);
 
   const events: AgentEvent[] = [];
-  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {
     events.push(e);
   }
 
@@ -142,12 +143,13 @@ test("runAgent returns the missing-key reason and empty sources when no API key 
   delete process.env.DEEPSEEK_API_KEY;
 
   const events: AgentEvent[] = [];
-  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {
     events.push(e);
   }
 
   const answer = events.filter((e) => e.type === "answer-delta").map((e) => e.text).join("");
-  expect(answer).toContain("DEEPSEEK_API_KEY");
+  // キー未設定時はプロンプトのモデル利用不可フォールバックが返る。
+  expect(answer).toBe(getAgentPrompts("ja").fallback.modelUnavailable);
 
   const done = events.find((e) => e.type === "done");
   if (!done || done.type !== "done") throw new Error("done event missing");
@@ -158,7 +160,7 @@ test("runAgent returns the missing-key reason and empty sources when no API key 
 
 test("runAgent emits rewrite_query sibling and nested retrieve sub-steps", async () => {
   const events: AgentEvent[] = [];
-  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1" })) {
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {
     events.push(e);
   }
   const steps = events.filter((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step");
@@ -187,8 +189,8 @@ test("runAgent emits rewrite_query sibling and nested retrieve sub-steps", async
   expect(vsI).toBeLessThan(rDoneI);
 });
 
-test("buildUserContent instructs retrieve and names attachments when docIds present", () => {
-  const out = buildUserContent("これ何？", ["a.json", "b.pdf"], ["docA", "docB"]);
+test("buildUserContent (ja) instructs retrieve and names attachments when docIds present", () => {
+  const out = getAgentPrompts("ja").buildUserContent("これ何？", ["a.json", "b.pdf"], ["docA", "docB"]);
   expect(out).toContain("a.json、b.pdf");
   expect(out).toContain("retrieve");
   expect(out).toContain("これ何？");
@@ -196,7 +198,26 @@ test("buildUserContent instructs retrieve and names attachments when docIds pres
   expect(out).toContain("直接読めない");
 });
 
-test("buildUserContent returns plain query when no attachment docIds", () => {
-  expect(buildUserContent("通常の質問", [], [])).toBe("通常の質問");
-  expect(buildUserContent("通常の質問", ["a.json"], [])).toBe("通常の質問");
+test("buildUserContent (ja) returns plain query when no attachment docIds", () => {
+  expect(getAgentPrompts("ja").buildUserContent("通常の質問", [], [])).toBe("通常の質問");
+  expect(getAgentPrompts("ja").buildUserContent("通常の質問", ["a.json"], [])).toBe("通常の質問");
+});
+
+test("runAgent with locale zh uses Chinese no-sources fallback", async () => {
+  // streamText をテキストデルタなし・ツール呼び出しなしの筋書きへ差し替え→ no-sources フォールバックが発動。
+  vi.mocked(streamText).mockReturnValueOnce({
+    fullStream: (async function* () {
+      yield { type: "finish", finishReason: "stop", totalUsage: { totalTokens: 0 } };
+    })(),
+  } as never);
+
+  const events: AgentEvent[] = [];
+  for await (const e of runAgent({ query: "测试问题", ownerUserId: "u1", threadId: "t1", locale: "zh" })) {
+    events.push(e);
+  }
+
+  const answer = events.filter((e) => e.type === "answer-delta").map((e) => e.text).join("");
+  expect(answer).toBe(getAgentPrompts("zh").fallback.noSources);
+  // 中文フォールバックには日本語文字が含まれていないことを確認する。
+  expect(answer).not.toContain("該当");
 });

@@ -10,8 +10,8 @@ import { buildTools, type ToolCallMeta } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
 import { StepBus } from "@/lib/agent/step-bus";
 import type { AgentEvent, ToolCall, ToolName } from "@/lib/types";
-// TODO(Task 9): locale をシグネチャから受け取り、getAgentPrompts(locale) へ切り替える。
-import { getAgentPrompts } from "@/lib/agent/prompts";
+import { getAgentPrompts, type AgentPrompts } from "@/lib/agent/prompts";
+import { DEFAULT_LOCALE, type Locale } from "@/i18n/config";
 
 export interface RunInput {
   query: string;
@@ -21,28 +21,8 @@ export interface RunInput {
   attachments?: string[];
   attachmentDocIds?: string[];
   modelId?: string;
+  locale?: Locale;
 }
-
-/** 添付ありターンでは、添付ファイルが知識ベースへ取り込み済みで retrieve で検索できる旨を
- *  明示し、必ず retrieve を使うよう指示する。これがないとモデルは「ファイルを直接読めない」と
- *  誤解して retrieve を呼ばずに拒否する。 */
-export function buildUserContent(query: string, attachments: string[], attachmentDocIds: string[]): string {
-  if (attachmentDocIds.length && attachments.length) {
-    return (
-      `ユーザーは次のファイルを添付しました（既に知識ベースへ取り込み済み）: ${attachments.join("、")}。\n` +
-      `これらのファイルの内容は retrieve ツールで検索できます。必ず retrieve を使ってファイルの内容を調べてから回答してください。` +
-      `「ファイルを直接読めない」などと答えてはいけません。\n\n` +
-      `質問: ${query}`
-    );
-  }
-  return query;
-}
-
-const SYSTEM =
-  "あなたは社内ナレッジ検索アシスタントです。必要に応じて retrieve / fetch_document ツールを使い、" +
-  "会話の文脈を踏まえて自己完結した検索クエリを組み立ててください。" +
-  "回答は提供された一次資料のみに基づき日本語で簡潔に行い、重要な事実には必ずツール結果に付いた [1] [2] の出典番号を付け、" +
-  "Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。資料に無いことは推測しないでください。";
 
 const MAX_STEPS = 6;
 
@@ -54,7 +34,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
 }
 
 async function pump(
-  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds }: RunInput,
+  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds, locale }: RunInput,
   bus: StepBus,
 ): Promise<void> {
   // pump の本体は何が throw しても必ず bus.close() する。これを欠くと runAgent の
@@ -63,11 +43,12 @@ async function pump(
     const started = Date.now();
     const modelLabel = modelId ?? DEFAULT_MODEL_ID;
     const resolution = resolveModels(modelId);
+    const prompts = getAgentPrompts(locale ?? DEFAULT_LOCALE);
 
     // キー未設定: 検索も生成もできないため理由を返して終了（finally で close）。
     if (!resolution.ok) {
       bus.push({ type: "answer-start" });
-      bus.push({ type: "answer-delta", text: resolution.reason });
+      bus.push({ type: "answer-delta", text: prompts.fallback.modelUnavailable });
       bus.push({ type: "done", tokens: 0, durationMs: Date.now() - started,
                 citationMap: {}, sourceIds: [], sources: [], threadId });
       return;
@@ -75,15 +56,14 @@ async function pump(
 
     const registry = new CitationRegistry();
     const meta = new Map<string, ToolCallMeta>();
-    // TODO(Task 9): locale を受け取り getAgentPrompts(locale) へ差し替える。
-    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts: getAgentPrompts("ja") });
+    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts });
 
-    const userContent = buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);
+    const userContent = prompts.buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);
     const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: userContent }];
 
     const result = streamText({
       model: resolution.models.chat,
-      system: SYSTEM,
+      system: prompts.system,
       messages,
       tools,
       stopWhen: stepCountIs(MAX_STEPS),
@@ -100,7 +80,7 @@ async function pump(
     const emitAnswerStep = (status: "running" | "done", t: number, usage?: LanguageModelUsage): AgentEvent => ({
       type: "step",
       step: {
-        id: "answer", name: "answer" as ToolName, label: "回答生成", status,
+        id: "answer", name: "answer" as ToolName, label: prompts.answerStep.label, status,
         durationMs: status === "done" ? Date.now() - t : 0,
         input: { model: modelLabel },
         output: status === "done"
@@ -111,7 +91,7 @@ async function pump(
               cachedInputTokens: usage?.inputTokenDetails?.cacheReadTokens ?? null,
             }
           : null,
-        summary: status === "done" ? "回答を生成" : "回答を生成中…",
+        summary: status === "done" ? prompts.answerStep.done : prompts.answerStep.running,
       },
     });
 
@@ -122,18 +102,18 @@ async function pump(
           if (part.toolName === "retrieve") {
             const rewritten = (part.input as { query?: string } | undefined)?.query ?? query;
             bus.push({ type: "step", step: {
-              id: `${part.toolCallId}:rewrite`, name: "rewrite_query", label: "クエリ正規化",
+              id: `${part.toolCallId}:rewrite`, name: "rewrite_query", label: prompts.rewriteLabel,
               status: "done", durationMs: 0,
               input: { original: query, rewritten },
-              output: null, summary: `「${rewritten}」に書き換え`,
+              output: null, summary: prompts.rewriteSummary(rewritten),
             } });
           }
           stepStart.set(part.toolCallId, Date.now());
           const step: ToolCall = {
-            id: part.toolCallId, name: part.toolName as ToolName, label: toolLabel(part.toolName),
+            id: part.toolCallId, name: part.toolName as ToolName, label: toolLabelOf(prompts, part.toolName),
             status: "running", durationMs: 0,
             input: (part.input ?? {}) as Record<string, unknown>, output: null,
-            summary: runningSummary(part.toolName),
+            summary: runningSummaryOf(prompts, part.toolName),
           };
           stepById.set(part.toolCallId, step);
           bus.push({ type: "step", step });
@@ -142,11 +122,11 @@ async function pump(
           const m = meta.get(part.toolCallId);
           const prev = stepById.get(part.toolCallId);
           const step: ToolCall = {
-            id: part.toolCallId, name: part.toolName as ToolName, label: toolLabel(part.toolName),
+            id: part.toolCallId, name: part.toolName as ToolName, label: toolLabelOf(prompts, part.toolName),
             status: "done", durationMs: Date.now() - t0,
             input: prev?.input ?? (m?.input ?? {}),
             output: { result: String(part.output).slice(0, 2000) },
-            summary: m?.summary ?? "完了",
+            summary: m?.summary ?? prompts.stageDone.default,
           };
           bus.push({ type: "step", step });
         } else if (part.type === "tool-error") {
@@ -154,10 +134,10 @@ async function pump(
           bus.push({
             type: "step",
             step: {
-              id: part.toolCallId, name: part.toolName as ToolName, label: toolLabel(part.toolName),
+              id: part.toolCallId, name: part.toolName as ToolName, label: toolLabelOf(prompts, part.toolName),
               status: "error", durationMs: Date.now() - t0,
               input: (part.input ?? {}) as Record<string, unknown>,
-              output: { error: String(part.error).slice(0, 500) }, summary: "ツール実行に失敗",
+              output: { error: String(part.error).slice(0, 500) }, summary: prompts.toolErrorSummary,
             },
           });
         } else if (part.type === "text-delta") {
@@ -177,16 +157,14 @@ async function pump(
     } catch {
       if (!answer) {
         if (!answerStarted) bus.push({ type: "answer-start" });
-        answer = "回答の生成に失敗しました。時間をおいて再度お試しください。";
+        answer = prompts.fallback.genFailed;
         bus.push({ type: "answer-delta", text: answer });
       }
     }
 
     if (!answer) {
       if (!answerStarted) bus.push({ type: "answer-start" });
-      answer = registry.size === 0
-        ? "該当する資料が見つかりませんでした。別の言い回しで質問するか、関連ファイルをアップロードしてください。"
-        : "回答を生成できませんでした。時間をおいて再度お試しください。";
+      answer = registry.size === 0 ? prompts.fallback.noSources : prompts.fallback.genUnavailable;
       bus.push({ type: "answer-delta", text: answer });
     }
 
@@ -213,16 +191,16 @@ async function pump(
   }
 }
 
-function toolLabel(name: string): string {
-  if (name === "retrieve") return "知識ベース検索";
-  if (name === "fetch_document") return "文書取得";
+function toolLabelOf(prompts: AgentPrompts, name: string): string {
+  if (name === "retrieve") return prompts.toolLabels.retrieve;
+  if (name === "fetch_document") return prompts.toolLabels.fetch_document;
   return name;
 }
 
-function runningSummary(name: string): string {
-  if (name === "retrieve") return "知識ベースを検索中…";
-  if (name === "fetch_document") return "文書を取得中…";
-  return "実行中…";
+function runningSummaryOf(prompts: AgentPrompts, name: string): string {
+  if (name === "retrieve") return prompts.runningSummaries.retrieve;
+  if (name === "fetch_document") return prompts.runningSummaries.fetch_document;
+  return prompts.runningSummaries.default;
 }
 
 export { DEFAULT_MODEL_ID };
