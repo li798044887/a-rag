@@ -177,6 +177,21 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
     onChanged?.();
   };
 
+  const onBulkDelete = async () => {
+    const ids = [...docs.selectedIds];
+    if (!ids.length) return;
+    const ok = await confirm({
+      title: `選択した ${ids.length}件の文書を削除しますか？`,
+      description: `選択した ${ids.length}件の文書と抽出データ・索引を完全に削除します。元に戻せません。`,
+      confirmLabel: "削除する",
+      tone: "danger",
+    });
+    if (!ok) return;
+    if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+    await docs.removeMany(ids);
+    onChanged?.();
+  };
+
   return (
     <div className="fixed inset-0 z-[200] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.55)] p-4 backdrop-blur-[3px] motion-reduce:animate-none max-md:p-0" onClick={onClose}>
       <div
@@ -289,18 +304,50 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   className="h-[30px] w-full rounded-lg border-[0.5px] border-divider-strong bg-bg-2 pl-[30px] pr-2.5 text-[12.5px] text-fg outline-none placeholder:text-muted-2 focus:bg-surface"
                 />
               </div>
-              <div className="flex flex-wrap gap-1">
-                {[["", "すべて"], ["ready", "索引済み"], ["error", "エラー"], ["processing", "処理中"]].map(([v, label]) => (
+              {docs.selectionMode ? (
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-[11.5px] font-medium text-fg">
+                    <input
+                      type="checkbox"
+                      checked={docs.allVisibleSelected}
+                      onChange={(e) => (e.target.checked ? docs.selectAllVisible() : docs.clearSelection())}
+                      className="accent-accent"
+                    />
+                    {docs.selectedIds.size}件選択中
+                  </label>
+                  <div className="ml-auto flex items-center gap-1">
+                    <button
+                      onClick={onBulkDelete}
+                      disabled={docs.selectedIds.size === 0}
+                      className="rounded-md px-2 py-1 text-[12px] font-semibold text-[#B83A1F] hover:bg-[rgba(184,58,31,0.12)] disabled:opacity-40 disabled:hover:bg-transparent"
+                    >削除</button>
+                    <button
+                      onClick={docs.exitSelection}
+                      className="rounded-md px-2 py-1 text-[12px] font-medium text-muted hover:bg-divider hover:text-fg"
+                    >キャンセル</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap gap-1">
+                    {[["", "すべて"], ["ready", "索引済み"], ["error", "エラー"], ["processing", "処理中"]].map(([v, label]) => (
+                      <button
+                        key={v}
+                        onClick={() => docs.setStatusFilter(v || null)}
+                        className={cn(
+                          "rounded-full border-[0.5px] px-2 py-0.5 text-[11px] font-medium transition-colors",
+                          (docs.statusFilter ?? "") === v ? "border-accent bg-accent-soft text-accent" : "border-divider-strong bg-transparent text-muted hover:text-fg",
+                        )}
+                      >{label}</button>
+                    ))}
+                  </div>
                   <button
-                    key={v}
-                    onClick={() => docs.setStatusFilter(v || null)}
-                    className={cn(
-                      "rounded-full border-[0.5px] px-2 py-0.5 text-[11px] font-medium transition-colors",
-                      (docs.statusFilter ?? "") === v ? "border-accent bg-accent-soft text-accent" : "border-divider-strong bg-transparent text-muted hover:text-fg",
-                    )}
-                  >{label}</button>
-                ))}
-              </div>
+                    onClick={docs.enterSelection}
+                    disabled={!docs.items.length}
+                    className="ml-auto rounded-md px-2 py-0.5 text-[11px] font-medium text-muted hover:bg-divider hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent"
+                  >選択</button>
+                </div>
+              )}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
               {docs.items.map((d) => {
@@ -308,12 +355,20 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                 return (
                   <button
                     key={d.id}
-                    onClick={() => selectDoc(d)}
+                    onClick={() => (docs.selectionMode ? docs.toggleSelect(d.id) : selectDoc(d))}
                     className={cn(
                       "group/dr my-px flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors",
-                      selectedId === d.id ? "bg-surface-2 shadow-e1" : "hover:bg-divider",
+                      selectedId === d.id || (docs.selectionMode && docs.selectedIds.has(d.id)) ? "bg-surface-2 shadow-e1" : "hover:bg-divider",
                     )}
                   >
+                    {docs.selectionMode && (
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={docs.selectedIds.has(d.id)}
+                        className="shrink-0 accent-accent"
+                      />
+                    )}
                     <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px]" style={{ background: meta.color + "20", color: meta.color }}>
                       <Icon name={meta.iconName} size={14} />
                     </span>
