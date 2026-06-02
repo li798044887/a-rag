@@ -1,9 +1,11 @@
+import hashlib
 import uuid
 from pathlib import Path
 
 from arq import create_pool
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.db import SessionLocal
@@ -94,14 +96,27 @@ async def create_document(file: UploadFile = File(...), owner_user_id: str = For
     upload_dir.mkdir(parents=True, exist_ok=True)
     safe_name = Path(file.filename or "file").name
     raw_path = upload_dir / f"{uuid.uuid4().hex}_{safe_name}"
-    raw_path.write_bytes(await file.read())
+    data = await file.read()
+    content_hash = hashlib.sha256(data).hexdigest()
+    raw_path.write_bytes(data)
 
     try:
         session = SessionLocal()
         try:
+            # 同一ユーザー・同一内容で error 以外が既にあれば重複として弾く。
+            existing = (
+                session.query(Document)
+                .filter(Document.owner_user_id == owner_user_id,
+                        Document.content_hash == content_hash,
+                        Document.status != "error")
+                .first()
+            )
+            if existing:
+                raise HTTPException(status_code=409, detail="duplicate document")
             doc = Document(owner_user_id=owner_user_id, filename=file.filename or "file",
                            mime=file.content_type or "application/octet-stream",
-                           size=raw_path.stat().st_size, raw_path=str(raw_path), status="queued")
+                           size=raw_path.stat().st_size, raw_path=str(raw_path),
+                           content_hash=content_hash, status="queued")
             session.add(doc)
             session.flush()
             job = IngestJob(document_id=doc.id, owner_user_id=owner_user_id, status="queued")
@@ -110,6 +125,13 @@ async def create_document(file: UploadFile = File(...), owner_user_id: str = For
             result = IngestStarted(document_id=doc.id, job_id=job.id)
         finally:
             session.close()
+    except HTTPException:
+        raw_path.unlink(missing_ok=True)
+        raise
+    except IntegrityError:
+        # 同時二重アップロードの競合: 部分ユニークindex違反を 409 に正規化。
+        raw_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail="duplicate document")
     except Exception:
         raw_path.unlink(missing_ok=True)
         raise

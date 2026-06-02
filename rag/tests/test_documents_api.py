@@ -1,4 +1,5 @@
 import io
+import uuid
 
 from app.config import settings
 from app.routers import documents as documents_router
@@ -26,8 +27,8 @@ def test_upload_creates_doc_and_enqueues(client, monkeypatch):
     res = client.post(
         "/documents",
         headers={"x-internal-token": settings.rag_internal_token},
-        files={"file": ("a.pdf", io.BytesIO(b"hello"), "application/pdf")},
-        data={"owner_user_id": "u1"},
+        files={"file": ("a.pdf", io.BytesIO(uuid.uuid4().bytes), "application/pdf")},
+        data={"owner_user_id": f"u1-{uuid.uuid4().hex}"},
     )
     assert res.status_code == 200
     body = res.json()
@@ -87,3 +88,43 @@ def test_raw_404_when_not_owner(client, monkeypatch):
     res = client.get("/documents/d1/raw?owner_user_id=intruder-B",
                      headers={"x-internal-token": settings.rag_internal_token})
     assert res.status_code == 404
+
+
+def _upload(client, owner, content, monkeypatch):
+    async def fake_enqueue(document_id, job_id):
+        pass
+    monkeypatch.setattr("app.routers.documents.enqueue_ingest", fake_enqueue)
+    return client.post(
+        "/documents",
+        headers={"x-internal-token": settings.rag_internal_token},
+        files={"file": ("a.pdf", io.BytesIO(content), "application/pdf")},
+        data={"owner_user_id": owner},
+    )
+
+
+def test_duplicate_same_owner_rejected(client, monkeypatch):
+    owner = f"dup-{uuid.uuid4().hex}"
+    content = uuid.uuid4().bytes  # テストごとに一意な内容
+    first = _upload(client, owner, content, monkeypatch)
+    assert first.status_code == 200
+    second = _upload(client, owner, content, monkeypatch)
+    assert second.status_code == 409
+
+
+def test_duplicate_different_owner_allowed(client, monkeypatch):
+    content = uuid.uuid4().bytes
+    a = _upload(client, f"a-{uuid.uuid4().hex}", content, monkeypatch)
+    b = _upload(client, f"b-{uuid.uuid4().hex}", content, monkeypatch)
+    assert a.status_code == 200 and b.status_code == 200
+
+
+def test_duplicate_does_not_leave_orphan_file(client, monkeypatch):
+    import os
+    owner = f"dup-{uuid.uuid4().hex}"
+    content = uuid.uuid4().bytes
+    _upload(client, owner, content, monkeypatch)
+    before = set(os.listdir(settings.upload_dir))
+    second = _upload(client, owner, content, monkeypatch)
+    assert second.status_code == 409
+    after = set(os.listdir(settings.upload_dir))
+    assert after == before  # 409 時に新しい生ファイルを残さない
