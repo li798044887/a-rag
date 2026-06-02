@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { JsonView, JsonlView } from "@/components/documents/json-view";
 
