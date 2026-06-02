@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
-import { MODELS } from "@/lib/data";
+import { getModels } from "@/lib/data";
 import { ACCENT_PRESETS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { SessionClaims } from "@/hooks/use-auth";
@@ -145,6 +145,7 @@ export function SettingsModal({
 
   // 言語切替：現在ロケールと翻訳辞書、確認ダイアログ。
   const { locale, t } = useT();
+  const models = getModels(locale);
   const { confirm, dialog } = useConfirm();
 
   // NAV と TITLES を辞書から生成（t が必要なので関数スコープ内に置く）。
@@ -294,7 +295,7 @@ export function SettingsModal({
           <div className="overflow-y-auto px-6 pb-6 pt-[18px] max-md:px-4">
             {section === "model" && (
               <div className="flex flex-col gap-1.5">
-                {MODELS.map((m) => (
+                {models.map((m) => (
                   <button
                     key={m.id}
                     onClick={() => onModelChange(m)}

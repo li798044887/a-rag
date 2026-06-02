@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
-import { ALL_CONNECTORS, SCOPE_PRESETS } from "@/lib/data";
+import { ALL_CONNECTORS, getScopePresets } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import type { ScopeValue } from "@/lib/types";
 import { useT } from "@/i18n/context";
@@ -21,7 +21,8 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
   const [pos, setPos] = useState({ left: 0, bottom: 0 });
   const [customSources, setCustomSources] = useState<string[]>(value.sources || ["confluence", "notion", "drive", "slack"]);
   const [mode, setMode] = useState<"preset" | "custom">(value.id === "custom" ? "custom" : "preset");
-  const { t } = useT();
+  const { t, locale } = useT();
+  const scopePresets = getScopePresets(locale);
 
   useEffect(() => {
     if (!open || !anchorRef.current) return;
@@ -68,7 +69,7 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
       </div>
       <div className="overflow-y-auto p-1.5">
         <div className="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-2">{t.chat.scopePresets}</div>
-        {SCOPE_PRESETS.map((p) => {
+        {scopePresets.map((p) => {
           const isFiles = p.id === "files";
           const disabled = isFiles && !attachmentCount;
           const active = value.id === p.id;

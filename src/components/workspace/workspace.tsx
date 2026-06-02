@@ -14,7 +14,7 @@ import { RightPanel, type RightPanelAction } from "@/components/sources/right-pa
 import { usePanelWidth } from "@/components/workspace/use-panel-width";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { DropOverlay } from "@/components/uploads/uploads";
-import { MODELS, SCOPE_PRESETS } from "@/lib/data";
+import { getModels, getScopePresets } from "@/lib/data";
 import { LIVE_KEY, isPendingThreadId, useAgent } from "@/hooks/use-agent";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -57,11 +57,14 @@ export function Workspace() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
-  // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。
+  const models = getModels(locale);
+  const scopePresets = getScopePresets(locale);
+  // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。id は不変なので
+  // ロケール非依存。表示用の label/desc/tag は下の useEffect で現在ロケールへ再解決する。
   const [model, setModel] = useState<ModelOption>(() => {
-    if (typeof window === "undefined") return MODELS[0];
+    if (typeof window === "undefined") return models[0];
     const saved = localStorage.getItem(MODEL_STORAGE_KEY);
-    return MODELS.find((m) => m.id === saved) ?? MODELS[0];
+    return models.find((m) => m.id === saved) ?? models[0];
   });
 
   // 設定モーダルを指定セクションで開く（section 省略時は既定セクション）。
@@ -84,7 +87,7 @@ export function Workspace() {
   // 導入する場合は安定 ID キーへ移行すること。
   const [feedback, setFeedback] = useState<Record<number, "up" | "down">>({});
   const [userAttachments, setUserAttachments] = useState<typeof uploads.files>([]);
-  const [scope, setScope] = useState<ScopeValue>(SCOPE_PRESETS[0]);
+  const [scope, setScope] = useState<ScopeValue>(scopePresets[0]);
   const [shareTarget, setShareTarget] = useState<{ item: Source | null } | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
 

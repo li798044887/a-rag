@@ -215,7 +215,8 @@ export function getSuggestedPrompts(locale: Locale): SuggestedPrompt[] {
   return locale === "zh" ? SUGGESTED_PROMPTS_ZH : SUGGESTED_PROMPTS_JA;
 }
 
-export const MODELS: ModelOption[] = [
+// モデルの label は製品名のため翻訳しない。tag / desc のみロケール化する。
+const MODELS_JA: ModelOption[] = [
   { id: "deepseek-flash", label: "DeepSeek Flash", tag: "推奨", desc: "高速・低コスト" },
   { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", tag: "高精度", desc: "高性能推論モデル" },
   { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "", desc: "汎用・最も賢い" },
@@ -223,7 +224,23 @@ export const MODELS: ModelOption[] = [
   { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 標準" },
 ];
 
-export const SCOPE_PRESETS: ScopePreset[] = [
+const MODELS_ZH: ModelOption[] = [
+  { id: "deepseek-flash", label: "DeepSeek Flash", tag: "推荐", desc: "高速·低成本" },
+  { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", tag: "高精度", desc: "高性能推理模型" },
+  { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "", desc: "通用·最强" },
+  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", tag: "高速", desc: "高速·低成本" },
+  { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 标准" },
+];
+
+/** 後方互換のため ja をデフォルトとして維持する。新規コードは getModels を使うこと。 */
+export const MODELS: ModelOption[] = MODELS_JA;
+
+/** ロケールに応じたモデル一覧を返す。id / label（製品名）は不変。 */
+export function getModels(locale: Locale): ModelOption[] {
+  return locale === "zh" ? MODELS_ZH : MODELS_JA;
+}
+
+const SCOPE_PRESETS_JA: ScopePreset[] = [
   { id: "all", label: "全社", iconName: "globe", desc: "接続済みの全データソース", sources: ["confluence", "notion", "drive", "slack", "github", "postgres"] },
   { id: "docs", label: "ドキュメント", iconName: "book", desc: "Wiki・ドキュメントのみ", sources: ["confluence", "notion", "drive"] },
   { id: "chat", label: "チャット", iconName: "chat", desc: "Slack・スレッドのみ", sources: ["slack"] },
@@ -231,6 +248,23 @@ export const SCOPE_PRESETS: ScopePreset[] = [
   { id: "data", label: "データ", iconName: "database", desc: "PostgreSQL・データウェアハウス", sources: ["postgres"] },
   { id: "files", label: "添付ファイルのみ", iconName: "paperclip", desc: "このスレッドにアップロードしたファイルだけ", sources: ["uploads"] },
 ];
+
+const SCOPE_PRESETS_ZH: ScopePreset[] = [
+  { id: "all", label: "全公司", iconName: "globe", desc: "已连接的全部数据源", sources: ["confluence", "notion", "drive", "slack", "github", "postgres"] },
+  { id: "docs", label: "文档", iconName: "book", desc: "仅 Wiki·文档", sources: ["confluence", "notion", "drive"] },
+  { id: "chat", label: "聊天", iconName: "chat", desc: "仅 Slack·会话", sources: ["slack"] },
+  { id: "code", label: "代码", iconName: "code", desc: "GitHub·代码库", sources: ["github"] },
+  { id: "data", label: "数据", iconName: "database", desc: "PostgreSQL·数据仓库", sources: ["postgres"] },
+  { id: "files", label: "仅附件", iconName: "paperclip", desc: "仅本会话上传的文件", sources: ["uploads"] },
+];
+
+/** 後方互換のため ja をデフォルトとして維持する。新規コードは getScopePresets を使うこと。 */
+export const SCOPE_PRESETS: ScopePreset[] = SCOPE_PRESETS_JA;
+
+/** ロケールに応じたスコープ・プリセット一覧を返す。id / iconName / sources は不変。 */
+export function getScopePresets(locale: Locale): ScopePreset[] {
+  return locale === "zh" ? SCOPE_PRESETS_ZH : SCOPE_PRESETS_JA;
+}
 
 export const ALL_CONNECTORS: SourceConnector[] = [
   { id: "confluence", label: "Confluence", iconName: "book", count: "15,234", color: "#2B579A", darkColor: "#6EA8FF" },
