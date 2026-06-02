@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrandMark, Icon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { AppUser, ThreadSummary } from "@/lib/types";
+import { useT } from "@/i18n/context";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -40,6 +41,7 @@ export function Sidebar(props: SidebarProps) {
     onRenameThread, onDeleteThread, onToggleStar, onAddToProject,
     onOpenDataSources, dataSourceCount,
   } = props;
+  const { t } = useT();
   const [filter, setFilter] = useState("");
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
@@ -54,15 +56,15 @@ export function Sidebar(props: SidebarProps) {
         <button
           className="grid h-8 w-8 place-items-center rounded-lg border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
           onClick={onToggle}
-          aria-label="サイドバーを開く"
+          aria-label={t.sidebar.openSidebar}
         >
           <Icon name="chevronRight" size={14} />
         </button>
         <button
           className="grid h-8 w-8 place-items-center rounded-lg border-0 bg-transparent text-fg hover:bg-divider"
           onClick={onNewChat}
-          aria-label="新規スレッド"
-          title="新規スレッド"
+          aria-label={t.sidebar.newThread}
+          title={t.sidebar.newThread}
         >
           <Icon name="plus" size={14} />
         </button>
@@ -78,10 +80,10 @@ export function Sidebar(props: SidebarProps) {
   const pinned = filtered.filter((t) => t.pinned);
   const rest = filtered.filter((t) => !t.pinned);
   const groups = [
-    { label: "ピン留め", items: pinned },
-    { label: "今日", items: rest.filter((t) => isToday(t.updated)) },
-    { label: "今週", items: rest.filter((t) => !isToday(t.updated) && isWeek(t.updated)) },
-    { label: "以前", items: rest.filter((t) => !isToday(t.updated) && !isWeek(t.updated)) },
+    { label: t.sidebar.groupPinned, items: pinned },
+    { label: t.sidebar.groupToday, items: rest.filter((t) => isToday(t.updated)) },
+    { label: t.sidebar.groupThisWeek, items: rest.filter((t) => !isToday(t.updated) && isWeek(t.updated)) },
+    { label: t.sidebar.groupEarlier, items: rest.filter((t) => !isToday(t.updated) && !isWeek(t.updated)) },
   ].filter((g) => g.items.length > 0);
 
   const beginRename = (t: ThreadSummary) => {
@@ -125,8 +127,8 @@ export function Sidebar(props: SidebarProps) {
         <button
           className="grid h-[26px] w-[26px] place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
           onClick={onToggle}
-          aria-label="サイドバーを閉じる"
-          title="サイドバーを閉じる"
+          aria-label={t.sidebar.closeSidebar}
+          title={t.sidebar.closeSidebar}
         >
           <Icon name="chevronLeft" size={13} />
         </button>
@@ -138,7 +140,7 @@ export function Sidebar(props: SidebarProps) {
         onClick={onNewChat}
       >
         <Icon name="plus" size={13} />
-        <span className="flex-1 text-left">新規スレッド</span>
+        <span className="flex-1 text-left">{t.sidebar.newThread}</span>
         <kbd>⌘N</kbd>
       </button>
 
@@ -150,7 +152,7 @@ export function Sidebar(props: SidebarProps) {
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="スレッドを検索…"
+          placeholder={t.sidebar.searchPlaceholder}
           className="h-[30px] w-full rounded-lg border-0 bg-transparent pl-[30px] pr-2.5 text-[12.5px] text-fg outline-none placeholder:text-muted-2 focus:bg-surface focus:shadow-[0_0_0_1px_var(--divider-strong)]"
         />
       </div>
@@ -183,11 +185,11 @@ export function Sidebar(props: SidebarProps) {
         <div className="mx-2 my-3 h-px bg-divider" />
         <div className="mb-2">
           <div className="px-2 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-2">
-            コレクション
+            {t.sidebar.collectionsHeading}
           </div>
-          <CollectionItem icon="star" label="スター付き" count={String(pinned.length)} />
-          <CollectionItem icon="folder" label="プロジェクト" count="4" />
-          <CollectionItem icon="database" label="アップロード文書" count={String(dataSourceCount)} onClick={onOpenDataSources} />
+          <CollectionItem icon="star" label={t.sidebar.collectionStarred} count={String(pinned.length)} />
+          <CollectionItem icon="folder" label={t.sidebar.collectionProjects} count="4" />
+          <CollectionItem icon="database" label={t.sidebar.collectionUploads} count={String(dataSourceCount)} onClick={onOpenDataSources} />
         </div>
       </div>
 
@@ -238,6 +240,7 @@ function ThreadRow({
   onRenameChange, onRenameCommit, onRenameCancel,
   onSelect, onOpenMenu,
 }: ThreadRowProps) {
+  const { t } = useT();
   if (renaming) {
     return (
       <div className="my-px flex w-full items-center gap-2 rounded-md bg-surface px-2 py-1 shadow-e1">
@@ -300,7 +303,7 @@ function ThreadRow({
       )}
       <button
         type="button"
-        aria-label="スレッド操作メニュー"
+        aria-label={t.sidebar.threadMenuLabel}
         onClick={(e) => {
           e.stopPropagation();
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -328,6 +331,7 @@ interface ThreadMenuProps {
 }
 
 function ThreadMenu({ thread, anchor, onClose, onStar, onRename, onAddProject, onDelete }: ThreadMenuProps) {
+  const { t } = useT();
   const menuRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<React.CSSProperties>(() => ({
     left: anchor.right + 4,
@@ -379,19 +383,19 @@ function ThreadMenu({ thread, anchor, onClose, onStar, onRename, onAddProject, o
         <span className={iconCls}>
           <Icon name={thread.pinned ? "starFilled" : "star"} size={14} />
         </span>
-        <span className="min-w-0 flex-1">{thread.pinned ? "スターを外す" : "スター"}</span>
+        <span className="min-w-0 flex-1">{thread.pinned ? t.sidebar.unstar : t.sidebar.star}</span>
       </button>
       <button className={itemCls} role="menuitem" onClick={onRename}>
         <span className={iconCls}>
           <Icon name="pencil" size={14} />
         </span>
-        <span className="min-w-0 flex-1">名前を変更</span>
+        <span className="min-w-0 flex-1">{t.sidebar.rename}</span>
       </button>
       <button className={itemCls} role="menuitem" onClick={onAddProject}>
         <span className={iconCls}>
           <Icon name="inbox" size={14} />
         </span>
-        <span className="min-w-0 flex-1">プロジェクトに追加</span>
+        <span className="min-w-0 flex-1">{t.sidebar.addToProject}</span>
       </button>
       <div className="mx-1.5 my-1 h-px bg-divider" />
       <button
@@ -402,7 +406,7 @@ function ThreadMenu({ thread, anchor, onClose, onStar, onRename, onAddProject, o
         <span className="inline-flex w-[18px] shrink-0 items-center justify-center text-[#B83A1F]">
           <Icon name="trash" size={14} />
         </span>
-        <span className="min-w-0 flex-1">削除</span>
+        <span className="min-w-0 flex-1">{t.sidebar.delete}</span>
       </button>
     </div>
   );
@@ -473,6 +477,7 @@ interface UserMenuProps {
 }
 
 function UserMenu({ open, anchorRef, onClose, user, dark, onOpenSettings, onOpenHelp, onToggleTheme, onSignOut }: UserMenuProps) {
+  const { t } = useT();
   const menuRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<React.CSSProperties>({});
 
@@ -523,7 +528,7 @@ function UserMenu({ open, anchorRef, onClose, user, dark, onOpenSettings, onOpen
         <span className={iconCls}>
           <Icon name="cog" size={14} />
         </span>
-        <span className="min-w-0 flex-1">設定</span>
+        <span className="min-w-0 flex-1">{t.sidebar.settings}</span>
         <span className="text-[11px] text-muted-2">
           <kbd className="border-0 bg-transparent p-0 text-muted-2">⌘K</kbd>
         </span>
@@ -532,7 +537,7 @@ function UserMenu({ open, anchorRef, onClose, user, dark, onOpenSettings, onOpen
         <span className={iconCls}>
           <Icon name={dark ? "sun" : "moon"} size={14} />
         </span>
-        <span className="min-w-0 flex-1">{dark ? "ライトモード" : "ダークモード"}</span>
+        <span className="min-w-0 flex-1">{dark ? t.sidebar.lightMode : t.sidebar.darkMode}</span>
       </button>
       <button className={itemCls} role="menuitem" onClick={onOpenHelp}>
         <span className={iconCls}>
@@ -541,7 +546,7 @@ function UserMenu({ open, anchorRef, onClose, user, dark, onOpenSettings, onOpen
             <path d="M6 6.5a2 2 0 014 0c0 .8-.5 1.2-1 1.5s-1 .5-1 1.2M8 11.4v.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
           </svg>
         </span>
-        <span className="min-w-0 flex-1">ヘルプを表示</span>
+        <span className="min-w-0 flex-1">{t.sidebar.showHelp}</span>
         <span className="text-[11px] text-muted-2">
           <kbd className="border-0 bg-transparent p-0 text-muted-2">?</kbd>
         </span>
@@ -551,7 +556,7 @@ function UserMenu({ open, anchorRef, onClose, user, dark, onOpenSettings, onOpen
         <span className={iconCls}>
           <Icon name="signout" size={14} />
         </span>
-        <span className="min-w-0 flex-1">ログアウト</span>
+        <span className="min-w-0 flex-1">{t.sidebar.signOut}</span>
       </button>
     </div>
   );
