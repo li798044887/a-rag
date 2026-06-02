@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ToolSteps } from "@/components/chat/tool-steps";
 import { cn, formatMs } from "@/lib/utils";
 import type { ToolCall, ToolView } from "@/lib/types";
+import { useT } from "@/i18n/context";
 
 /** ターンのツール活動。実行中は展開、完了後は1行サマリへ畳む。 */
 export function AgentActivity({
@@ -18,6 +19,7 @@ export function AgentActivity({
   // 実行中は既定で開く。完了したら畳む（ユーザーが開閉した値を優先）。
   const [open, setOpen] = useState<boolean | null>(null);
   const isOpen = open ?? running;
+  const { t } = useT();
 
   if (steps.length === 0) return null;
 
@@ -40,10 +42,10 @@ export function AgentActivity({
           ) : (
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
           )}
-          {running ? (current?.summary ?? "エージェント実行中…") : "エージェント実行"}
+          {running ? (current?.summary ?? t.chat.agentRunning) : t.chat.agentDone}
         </span>
         <span className="inline-flex items-center gap-2 font-mono text-[11px] text-muted">
-          {topLevel.length} ステップ · {formatMs(totalMs)}
+          {topLevel.length}{t.chat.stepUnit} · {formatMs(totalMs)}
           <span className={cn("transition-transform", isOpen && "rotate-180")}>
             <svg viewBox="0 0 16 16" width="11" height="11">
               <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
