@@ -119,21 +119,25 @@ export function useUploads(onToast?: PushToast) {
   const applyFrame = useCallback((j: ProgressFrame) => {
     const target = filesRef.current.find((f) => f.jobId === j.jobId);
     setFiles((prev) =>
-      prev.map((f) =>
-        f.jobId === j.jobId
-          ? {
-              ...f,
-              status: toUploadStatus(j.status),
-              progress: j.progress,
-              stage: asStage(j.status),
-              stageDetail: j.stage_detail || undefined,
-              chunks: j.chunks ?? f.chunks,
-              pages: j.page_count ?? f.pages,
-              error: j.error ?? undefined,
-              durationMs: j.status === "ready" && f.startedAt ? Date.now() - f.startedAt : f.durationMs,
-            }
-          : f,
-      ),
+      prev.map((f) => {
+        if (f.jobId !== j.jobId) return f;
+        const status = toUploadStatus(j.status);
+        // queued→processing の遷移で計測を開始し、直列処理のキュー待機時間を所要時間に含めない
+        // （各ファイル自身の索引化所要時間を表示する）。
+        const startedAt = status === "processing" && f.status === "queued" ? Date.now() : f.startedAt;
+        return {
+          ...f,
+          status,
+          progress: j.progress,
+          stage: asStage(j.status),
+          stageDetail: j.stage_detail || undefined,
+          chunks: j.chunks ?? f.chunks,
+          pages: j.page_count ?? f.pages,
+          error: j.error ?? undefined,
+          startedAt,
+          durationMs: j.status === "ready" && startedAt ? Date.now() - startedAt : f.durationMs,
+        };
+      }),
     );
     if (j.status === "ready") onToastRef.current?.(`「${target?.name ?? ""}」を索引化しました`, "success");
     if (j.status === "error") onToastRef.current?.(j.error || "索引化に失敗しました", "error");
