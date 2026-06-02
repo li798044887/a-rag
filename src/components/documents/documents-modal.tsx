@@ -515,7 +515,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       {textKind === "markdown" && <MarkdownView text={raw.text} />}
                       {textKind === "json" && <JsonView text={raw.text} />}
                       {textKind === "jsonl" && <JsonlView text={raw.text} />}
-                      {(textKind === "text" || !textKind) && <PlainTextView text={raw.text} />}
+                      {textKind === "text" && <PlainTextView text={raw.text} />}
                     </RawTextContent>
                   )}
                   {tab === "text" && (

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-// 整形プレビューで読み込む原本テキストの上限。超過分は truncate して全文 DL を案内する。
-const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
+// 整形プレビューで保持する原本テキストの上限（文字数; UTF-16 コード単位）。
+// 超過分は truncate して全文 DL を案内する。メモリ上限のゆるい目安。
+const MAX_TEXT_PREVIEW_CHARS = 2 * 1024 * 1024;
 
 export interface RawTextState {
   status: "idle" | "loading" | "ready" | "error";
@@ -29,10 +30,10 @@ export function useRawText(docId: string | null): RawTextState {
         if (!res.ok) throw new Error(String(res.status));
         const full = await res.text();
         if (cancelled) return;
-        const truncated = full.length > MAX_TEXT_PREVIEW_BYTES;
+        const truncated = full.length > MAX_TEXT_PREVIEW_CHARS;
         setState({
           status: "ready",
-          text: truncated ? full.slice(0, MAX_TEXT_PREVIEW_BYTES) : full,
+          text: truncated ? full.slice(0, MAX_TEXT_PREVIEW_CHARS) : full,
           truncated,
         });
       } catch {
