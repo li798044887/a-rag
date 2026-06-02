@@ -84,13 +84,17 @@ async function pickFromDataTransfer(dt: DataTransfer): Promise<PickedFile[]> {
 }
 
 /** Stages files, POSTs each to /api/upload, and tracks an upload→process→ready
- * pipeline. The processing phase is driven by an SSE stream (per-stage detail). */
+ * pipeline. The processing phase is driven by a single multiplexed SSE stream. */
 export function useUploads(onToast?: PushToast) {
   const [files, setFiles] = useState<StagedFile[]>([]);
-  // アップロード進捗アニメ用の interval と、SSE 用の AbortController を id ごとに保持。
+  // アップロード進捗アニメ用の interval、送信中POSTのAbortController を id ごとに保持。
   const timers = useRef<Record<string, ReturnType<typeof setInterval>>>({});
-  const streams = useRef<Record<string, AbortController>>({});
   const uploads = useRef<Record<string, AbortController>>({});
+  // 進捗は全ジョブを1本の多重化ストリームで購読する。
+  const progressStream = useRef<AbortController | null>(null);
+  const streamKey = useRef<string>("");
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncRef = useRef<() => void>(() => {});
 
   const filesRef = useRef(files);
   useEffect(() => { filesRef.current = files; }, [files]);
@@ -100,70 +104,116 @@ export function useUploads(onToast?: PushToast) {
   const clearTimer = useCallback((id: string) => {
     if (timers.current[id]) { clearInterval(timers.current[id]); delete timers.current[id]; }
   }, []);
-  const clearStream = useCallback((id: string) => {
-    streams.current[id]?.abort();
-    delete streams.current[id];
+
+  interface ProgressFrame {
+    jobId: string;
+    status: string;
+    progress: number;
+    stage_detail: string;
+    chunks?: number;
+    page_count?: number | null;
+    error?: string | null;
+  }
+
+  /** 1フレームを jobId で該当ファイルに反映し、ready/error はトースト通知する。 */
+  const applyFrame = useCallback((j: ProgressFrame) => {
+    const target = filesRef.current.find((f) => f.jobId === j.jobId);
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.jobId === j.jobId
+          ? {
+              ...f,
+              status: toUploadStatus(j.status),
+              progress: j.progress,
+              stage: asStage(j.status),
+              stageDetail: j.stage_detail || undefined,
+              chunks: j.chunks ?? f.chunks,
+              pages: j.page_count ?? f.pages,
+              error: j.error ?? undefined,
+              durationMs: j.status === "ready" && f.startedAt ? Date.now() - f.startedAt : f.durationMs,
+            }
+          : f,
+      ),
+    );
+    if (j.status === "ready") onToastRef.current?.(`「${target?.name ?? ""}」を索引化しました`, "success");
+    if (j.status === "error") onToastRef.current?.(j.error || "索引化に失敗しました", "error");
   }, []);
 
-  /** /api/uploads/:jobId/stream を購読し、段階ごとに StagedFile を更新する。 */
-  const startStreaming = useCallback(
-    (id: string, jobId: string, fileName: string) => {
-      clearStream(id);
-      const ctrl = new AbortController();
-      streams.current[id] = ctrl;
-
-      (async () => {
-        try {
-          const res = await fetch(`/api/uploads/${jobId}/stream`, { signal: ctrl.signal });
-          if (!res.ok || !res.body) throw new Error("stream failed");
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-
-          for (;;) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const frames = buffer.split("\n\n");
-            buffer = frames.pop() ?? "";
-            for (const frame of frames) {
-              const line = frame.split("\n").find((l) => l.startsWith("data:"));
-              if (!line) continue;
-              const j = JSON.parse(line.slice(5).trim()) as {
-                status: string; progress: number; stage_detail: string;
-                chunks?: number; page_count?: number | null; error?: string | null;
-              };
-              setFiles((prev) =>
-                prev.map((f) =>
-                  f.id === id
-                    ? {
-                        ...f,
-                        status: toUploadStatus(j.status),
-                        progress: j.progress,
-                        stage: asStage(j.status),
-                        stageDetail: j.stage_detail || undefined,
-                        chunks: j.chunks ?? f.chunks,
-                        pages: j.page_count ?? f.pages,
-                        error: j.error ?? undefined,
-                        // 完了時に所要時間を確定（開始時刻からの差分）。
-                        durationMs: j.status === "ready" && f.startedAt ? Date.now() - f.startedAt : f.durationMs,
-                      }
-                    : f,
-                ),
-              );
-              if (j.status === "ready") onToastRef.current?.(`「${fileName}」を索引化しました`, "success");
-              if (j.status === "error") onToastRef.current?.(j.error || "索引化に失敗しました", "error");
-            }
+  /** POST /api/uploads/stream を購読し、jobId 付きフレームを reduce する。 */
+  const readStream = useCallback(
+    async (ctrl: AbortController, key: string) => {
+      try {
+        const res = await fetch("/api/uploads/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobIds: key ? key.split(",") : [] }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok || !res.body) throw new Error("stream failed");
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
+          for (const frame of frames) {
+            const line = frame.split("\n").find((l) => l.startsWith("data:"));
+            if (!line) continue;
+            applyFrame(JSON.parse(line.slice(5).trim()) as ProgressFrame);
           }
-        } catch {
-          if (ctrl.signal.aborted) return;
-          setFiles((prev) => prev.map((f) => (f.id === id && f.status === "processing" ? { ...f, status: "error", error: "進捗の取得に失敗しました" } : f)));
-        } finally {
-          delete streams.current[id];
         }
-      })();
+        // 正常終了（サーバが全ジョブ完了で close）。取りこぼしがあれば再同期する。
+        if (progressStream.current === ctrl) {
+          progressStream.current = null;
+          streamKey.current = "";
+          if (activeJobIds(filesRef.current).length > 0) syncRef.current();
+        }
+      } catch {
+        if (ctrl.signal.aborted) return; // 切り替え/clear による中断は無視。
+        if (progressStream.current !== ctrl) return; // すでに別接続に置き換わっている。
+        // 予期せぬ切断: 未完了ジョブが残っていれば backoff 再接続（全件 error にはしない）。
+        progressStream.current = null;
+        streamKey.current = "";
+        if (activeJobIds(filesRef.current).length > 0) {
+          setTimeout(() => syncRef.current(), 1000);
+        }
+      }
     },
-    [clearStream],
+    [applyFrame],
+  );
+
+  /** アクティブ jobId 集合に合わせてストリームを1本に保つ。変化が無ければ no-op。 */
+  const syncProgressStream = useCallback(() => {
+    const key = reconnectKey(activeJobIds(filesRef.current));
+    if (key === streamKey.current && progressStream.current) return;
+    progressStream.current?.abort();
+    progressStream.current = null;
+    streamKey.current = key;
+    if (!key) return; // 監視対象なし。
+    const ctrl = new AbortController();
+    progressStream.current = ctrl;
+    void readStream(ctrl, key);
+  }, [readStream]);
+
+  useEffect(() => { syncRef.current = syncProgressStream; }, [syncProgressStream]);
+
+  /** バースト（連続アップロード）を1回の再接続にまとめる。 */
+  const scheduleSync = useCallback(() => {
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => { debounce.current = null; syncRef.current(); }, 300);
+  }, []);
+
+  // アンマウント時に接続・タイマーを片付ける。
+  useEffect(
+    () => () => {
+      progressStream.current?.abort();
+      if (debounce.current) clearTimeout(debounce.current);
+      Object.values(timers.current).forEach((t) => clearInterval(t));
+    },
+    [],
   );
 
   const removeFile = useCallback((id: string) => {
@@ -177,7 +227,7 @@ export function useUploads(onToast?: PushToast) {
     if (action === "abort") {
       uploads.current[id]?.abort();
       delete uploads.current[id];
-      // この後、共通のローカル除去（filter + clearTimer + clearStream）へフォールスルーする。
+      // この後、共通のローカル除去へフォールスルーする。
     }
 
     // queued: サーバ側キャンセルAPIを呼ぶ。成功で除去、409 は処理中として残す。
@@ -195,8 +245,8 @@ export function useUploads(onToast?: PushToast) {
             return;
           }
           clearTimer(id);
-          clearStream(id);
           setFiles((prev) => prev.filter((f) => f.id !== id));
+          scheduleSync();
         })
         .catch(() => onToastRef.current?.("取り消しに失敗しました", "error"));
       return;
@@ -205,8 +255,8 @@ export function useUploads(onToast?: PushToast) {
     // abort / remove: ローカル除去。
     setFiles((prev) => prev.filter((f) => f.id !== id));
     clearTimer(id);
-    clearStream(id);
-  }, [clearTimer, clearStream]);
+    scheduleSync();
+  }, [clearTimer, scheduleSync]);
 
   /** 受理済みファイル群をステージし、各々を /api/upload に送る内部処理。 */
   const enqueue = useCallback(
@@ -247,7 +297,7 @@ export function useUploads(onToast?: PushToast) {
         uploads.current[id] = uploadCtrl;
         fetch("/api/upload", { method: "POST", body: form, signal: uploadCtrl.signal })
           .then(async (res) => {
-            // ✕ で中断済みなら何もしない（SSE 開始や削除済みファイルへの更新を避ける）。
+            // ✕ で中断済みなら何もしない（ストリーム開始や削除済みファイルへの更新を避ける）。
             if (uploadCtrl.signal.aborted) return;
             clearTimer(id);
             delete uploads.current[id];
@@ -258,7 +308,7 @@ export function useUploads(onToast?: PushToast) {
             }
             const { documentId, jobId } = (await res.json()) as { documentId: string; jobId: string };
             setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "queued", progress: 0, jobId, documentId } : f)));
-            startStreaming(id, jobId, file.name);
+            scheduleSync();
           })
           .catch(() => {
             clearTimer(id);
@@ -268,7 +318,7 @@ export function useUploads(onToast?: PushToast) {
           });
       });
     },
-    [clearTimer, startStreaming],
+    [clearTimer, scheduleSync],
   );
 
   // 既存 API 互換：FileList / File[] を受ける（フォルダ input の webkitRelativePath も拾う）。
@@ -292,9 +342,8 @@ export function useUploads(onToast?: PushToast) {
     (id: string) => {
       const file = filesRef.current.find((f) => f.id === id);
       if (!file?.jobId) return;
-      const { jobId, name } = file;
+      const { jobId } = file;
 
-      clearStream(id);
       setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing", progress: 0, stage: undefined, stageDetail: undefined, error: undefined, startedAt: Date.now(), durationMs: undefined } : f)));
 
       fetch(`/api/uploads/${jobId}/retry`, { method: "POST" })
@@ -304,22 +353,25 @@ export function useUploads(onToast?: PushToast) {
             setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error } : f)));
             return;
           }
-          startStreaming(id, jobId, name);
+          scheduleSync();
         })
         .catch(() => {
           setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: "ネットワークエラー" } : f)));
         });
     },
-    [clearStream, startStreaming],
+    [scheduleSync],
   );
 
   const clear = useCallback(() => {
     Object.keys(timers.current).forEach(clearTimer);
-    Object.keys(streams.current).forEach(clearStream);
+    if (debounce.current) { clearTimeout(debounce.current); debounce.current = null; }
+    progressStream.current?.abort();
+    progressStream.current = null;
+    streamKey.current = "";
     Object.values(uploads.current).forEach((c) => c.abort());
     uploads.current = {};
     setFiles([]);
-  }, [clearTimer, clearStream]);
+  }, [clearTimer]);
 
   return { files, addFiles, addFromDataTransfer, removeFile, retry, clear };
 }
