@@ -7,6 +7,10 @@ import { ACCENT_PRESETS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { SessionClaims } from "@/hooks/use-auth";
 import type { AppUser, ModelOption, Tweaks } from "@/lib/types";
+import { useT } from "@/i18n/context";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
+import { performLocaleSwitch, browserLocaleEffects } from "@/i18n/use-locale-switch";
+import { useConfirm } from "@/hooks/use-confirm";
 
 interface Props {
   open: boolean;
@@ -179,6 +183,21 @@ export function SettingsModal({
   // nowTick を参照することで eslint と再描画を成立させる（値自体は使わない）。
   void nowTick;
 
+  // 言語切替：現在ロケールと翻訳辞書、確認ダイアログ。
+  const { locale, t } = useT();
+  const { confirm, dialog } = useConfirm();
+
+  const onLocaleSelect = async (next: Locale) => {
+    if (next === locale) return;
+    const ok = await confirm({
+      title: t.modals.languageSwitchTitle,
+      description: t.modals.languageSwitchDesc,
+      confirmLabel: t.common.confirm,
+      cancelLabel: t.common.cancel,
+    });
+    if (ok) performLocaleSwitch(next, browserLocaleEffects);
+  };
+
   const claimsJson = renderClaims(claims);
 
   const copyJwt = async () => {
@@ -217,6 +236,7 @@ export function SettingsModal({
   const selectInput = "h-[30px] w-[180px] rounded-[7px] border border-divider-strong bg-surface px-2 text-[12.5px] text-fg outline-none max-md:w-full";
 
   return (
+    <>
     <div className="fixed inset-0 z-[100] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.45)] p-6 backdrop-blur-[4px] motion-reduce:animate-none max-md:p-0" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
@@ -389,6 +409,19 @@ export function SettingsModal({
                   </select>
                 </Field>
 
+                {/* 言語切替セレクト */}
+                <Field label={t.modals.languageLabel} hint={t.modals.languageHint}>
+                  <select
+                    value={locale}
+                    onChange={(e) => onLocaleSelect(e.target.value as Locale)}
+                    className={selectInput}
+                  >
+                    {LOCALES.map((l) => (
+                      <option key={l} value={l}>{LOCALE_LABELS[l]}</option>
+                    ))}
+                  </select>
+                </Field>
+
                 <Field label="情報密度">
                   <Segmented
                     value={tweaks.density}
@@ -480,6 +513,9 @@ export function SettingsModal({
         </div>
       </div>
     </div>
+    {/* 言語切替確認ダイアログ */}
+    {dialog}
+    </>
   );
 }
 
