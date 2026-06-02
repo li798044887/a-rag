@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/context";
 
 export interface ConfirmModalProps {
   open: boolean;
@@ -18,12 +19,17 @@ export function ConfirmModal({
   open,
   title,
   description,
-  confirmLabel = "OK",
-  cancelLabel = "キャンセル",
+  confirmLabel,
+  cancelLabel,
   tone = "default",
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const { t } = useT();
+  // デフォルトラベルを辞書から取得（呼び出し元が明示的に渡した場合はそちらを優先）。
+  const resolvedConfirmLabel = confirmLabel ?? t.modals.confirmDefaultLabel;
+  const resolvedCancelLabel = cancelLabel ?? t.modals.cancelDefaultLabel;
+
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -83,7 +89,7 @@ export function ConfirmModal({
             className="h-9 rounded-[9px] border border-divider-strong bg-transparent px-3.5 text-[13px] font-medium text-fg hover:bg-surface-2"
             onClick={onCancel}
           >
-            {cancelLabel}
+            {resolvedCancelLabel}
           </button>
           <button
             ref={confirmRef}
@@ -96,7 +102,7 @@ export function ConfirmModal({
             )}
             onClick={onConfirm}
           >
-            {confirmLabel}
+            {resolvedConfirmLabel}
           </button>
         </div>
       </div>

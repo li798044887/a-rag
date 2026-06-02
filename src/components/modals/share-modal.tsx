@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { Source } from "@/lib/types";
+import { useT } from "@/i18n/context";
 
 interface Props {
   open: boolean;
@@ -12,16 +13,17 @@ interface Props {
   onCopyLink: (error?: boolean) => void;
 }
 
-const PERMISSIONS: { id: string; iconName: IconName; label: string; desc: string }[] = [
-  { id: "private", iconName: "lock", label: "自分のみ", desc: "リンクを知っていてもアクセスできません" },
-  { id: "team", iconName: "group", label: "チーム内 (ARag, Inc.)", desc: "ログインしている社員のみ" },
-  { id: "link", iconName: "link", label: "リンクを知っている人", desc: "社外でも閲覧可能" },
-];
-
 export function ShareModal({ open, item, onClose, onCopyLink }: Props) {
+  const { t } = useT();
   const [permission, setPermission] = useState("team");
   const [copied, setCopied] = useState(false);
   if (!open) return null;
+
+  const PERMISSIONS: { id: string; iconName: IconName; label: string; desc: string }[] = [
+    { id: "private", iconName: "lock", label: t.modals.sharePermPrivateLabel, desc: t.modals.sharePermPrivateDesc },
+    { id: "team", iconName: "group", label: t.modals.sharePermTeamLabel, desc: t.modals.sharePermTeamDesc },
+    { id: "link", iconName: "link", label: t.modals.sharePermLinkLabel, desc: t.modals.sharePermLinkDesc },
+  ];
 
   const link = item ? `https://arag.dev/s/${item.id}` : "https://arag.dev/s/thread";
   const copy = async () => {
@@ -42,8 +44,8 @@ export function ShareModal({ open, item, onClose, onCopyLink }: Props) {
         className="flex w-[460px] max-w-full animate-pop-in flex-col gap-4 rounded-[16px] border-[0.5px] border-divider-strong bg-surface p-[22px_22px_16px] shadow-e3 motion-reduce:animate-none max-md:w-full max-md:rounded-[18px_18px_0_0] max-md:p-[18px_18px_max(18px,env(safe-area-inset-bottom))]"
       >
         <div className="flex items-center justify-between">
-          <h3 className="m-0 text-[16px] font-bold tracking-[-0.01em]">{item ? "資料を共有" : "スレッドを共有"}</h3>
-          <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
+          <h3 className="m-0 text-[16px] font-bold tracking-[-0.01em]">{item ? t.modals.shareItemTitle : t.modals.shareThreadTitle}</h3>
+          <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label={t.common.close}>
             <svg viewBox="0 0 16 16" width="13" height="13">
               <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
             </svg>
@@ -71,12 +73,12 @@ export function ShareModal({ open, item, onClose, onCopyLink }: Props) {
             onClick={copy}
             className={cn("h-[30px] rounded-[7px] border-0 px-3.5 text-[12px] font-semibold", copied ? "bg-accent text-white" : "bg-fg text-bg")}
           >
-            {copied ? "コピー済" : "コピー"}
+            {copied ? t.modals.shareCopiedBtn : t.modals.shareCopyBtn}
           </button>
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-2">アクセス権限</div>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-2">{t.modals.shareAccessLabel}</div>
           {PERMISSIONS.map((p) => (
             <button
               key={p.id}
@@ -102,7 +104,7 @@ export function ShareModal({ open, item, onClose, onCopyLink }: Props) {
 
         <div className="mt-1 flex justify-end gap-2 max-md:[&>*]:flex-1">
           <button className="h-9 rounded-[9px] border border-divider-strong bg-transparent px-3.5 text-[13px] font-medium text-fg hover:bg-surface-2" onClick={onClose}>
-            キャンセル
+            {t.modals.shareCancelBtn}
           </button>
           <button
             className="h-9 rounded-[9px] border-0 bg-accent px-4 text-[13px] font-semibold text-white shadow-[0_1px_3px_var(--accent-glow)] hover:brightness-105"
@@ -111,7 +113,7 @@ export function ShareModal({ open, item, onClose, onCopyLink }: Props) {
               onClose();
             }}
           >
-            リンクをコピーして閉じる
+            {t.modals.shareCopyAndCloseBtn}
           </button>
         </div>
       </div>
