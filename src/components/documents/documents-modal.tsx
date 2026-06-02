@@ -310,20 +310,25 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                     <input
                       type="checkbox"
                       checked={docs.allVisibleSelected}
+                      disabled={docs.deleting}
                       onChange={(e) => (e.target.checked ? docs.selectAllVisible() : docs.clearSelection())}
-                      className="accent-accent"
+                      className="accent-accent disabled:opacity-40"
                     />
                     {docs.selectedIds.size}件選択中
                   </label>
                   <div className="ml-auto flex items-center gap-1">
                     <button
                       onClick={onBulkDelete}
-                      disabled={docs.selectedIds.size === 0}
-                      className="rounded-md px-2 py-1 text-[12px] font-semibold text-[#B83A1F] hover:bg-[rgba(184,58,31,0.12)] disabled:opacity-40 disabled:hover:bg-transparent"
-                    >削除</button>
+                      disabled={docs.selectedIds.size === 0 || docs.deleting}
+                      className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-[#B83A1F] hover:bg-[rgba(184,58,31,0.12)] disabled:opacity-40 disabled:hover:bg-transparent"
+                    >
+                      {docs.deleting && <span className="h-3 w-3 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />}
+                      {docs.deleting ? "削除中…" : "削除"}
+                    </button>
                     <button
                       onClick={docs.exitSelection}
-                      className="rounded-md px-2 py-1 text-[12px] font-medium text-muted hover:bg-divider hover:text-fg"
+                      disabled={docs.deleting}
+                      className="rounded-md px-2 py-1 text-[12px] font-medium text-muted hover:bg-divider hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent"
                     >キャンセル</button>
                   </div>
                 </div>

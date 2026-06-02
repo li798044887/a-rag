@@ -29,6 +29,7 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const onToastRef = useRef(onToast);
   useEffect(() => { onToastRef.current = onToast; }, [onToast]);
@@ -104,20 +105,25 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
     const { items: next, removed } = removeByIds(items, ids);
     setItems(next);
     setTotal((t) => Math.max(0, t - removed));
-    const r = await fetch("/api/documents/bulk-delete", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ document_ids: ids }),
-    }).catch(() => null);
-    if (!r || !r.ok) {
-      setItems(prev);
-      setTotal(prevTotal);
-      onToastRef.current?.("削除に失敗しました", "error");
-      return;
+    setDeleting(true);
+    try {
+      const r = await fetch("/api/documents/bulk-delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ document_ids: ids }),
+      }).catch(() => null);
+      if (!r || !r.ok) {
+        setItems(prev);
+        setTotal(prevTotal);
+        onToastRef.current?.("削除に失敗しました", "error");
+        return;
+      }
+      onToastRef.current?.(`${removed}件の文書を削除しました`, "success");
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+    } finally {
+      setDeleting(false);
     }
-    onToastRef.current?.(`${removed}件の文書を削除しました`, "success");
-    setSelectionMode(false);
-    setSelectedIds(new Set());
   }, [items, total]);
 
   const retry = useCallback(async (jobId: string, id: string) => {
@@ -150,7 +156,7 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
   return {
     items, total, nextCursor, loading, query, statusFilter,
     setQuery, setStatusFilter, load, loadMore, remove, retry,
-    selectionMode, selectedIds, allVisibleSelected,
+    selectionMode, selectedIds, allVisibleSelected, deleting,
     enterSelection, exitSelection, toggleSelect, clearSelection, selectAllVisible, removeMany,
   };
 }
