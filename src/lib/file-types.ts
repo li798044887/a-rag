@@ -54,3 +54,21 @@ export function isSpreadsheet(name: string): boolean {
   const ext = (name.split(".").pop() || "").toLowerCase();
   return name.includes(".") && SPREADSHEET_EXTS.has(ext);
 }
+
+export type TextPreviewKind = "markdown" | "json" | "jsonl" | "text";
+
+// 整形プレビュー対象のテキスト系拡張子 → 種別。表計算(xlsx/xls/ods)は isSpreadsheet が優先するため除外。
+const TEXT_PREVIEW_KINDS: Record<string, TextPreviewKind> = {
+  md: "markdown", markdown: "markdown",
+  json: "json",
+  jsonl: "jsonl", ndjson: "jsonl",
+  txt: "text", log: "text", csv: "text", tsv: "text",
+  yaml: "text", yml: "text", xml: "text",
+};
+
+// 文書をブラウザ上で整形表示できるテキスト系種別を拡張子で判定する。非対象は null。
+export function getTextPreviewKind(name: string): TextPreviewKind | null {
+  if (!name.includes(".")) return null;
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  return TEXT_PREVIEW_KINDS[ext] ?? null;
+}

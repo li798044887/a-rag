@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { RenderedSectionBody } from "@/components/sources/rendered-section-body";
 import { DocumentsUploadQueue } from "@/components/uploads/uploads";
 import { SpreadsheetPreview } from "@/components/documents/spreadsheet-preview";
+import { MarkdownView } from "@/components/documents/markdown-view";
+import { JsonView, JsonlView } from "@/components/documents/json-view";
+import { PlainTextView } from "@/components/documents/plain-text-view";
+import { useRawText, type RawTextState } from "@/hooks/use-raw-text";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
 import { useUploads } from "@/hooks/use-uploads";
 import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
-import { getFileMeta, isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
+import { getFileMeta, getTextPreviewKind, isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
 import type { DocumentPreview, DocumentPreviewChunk, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
@@ -17,7 +21,7 @@ import type { PushToast } from "@/hooks/use-toasts";
 // 純正 PDF ビューアの黒いクロムを隠し、紙系の世界観に馴染ませる。
 const PDF_VIEW_PARAMS = "#toolbar=0&navpanes=0&statusbar=0&view=FitH";
 
-type Tab = "pdf" | "layout" | "span" | "text" | "html" | "images";
+type Tab = "pdf" | "layout" | "span" | "text" | "html" | "rich" | "images";
 const IMG_RE = /!\[[^\]]*\]\((\/api\/documents\/[^)\s]+)\)/g;
 
 const STATUS_LABEL: Record<string, string> = {
@@ -87,6 +91,26 @@ function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
   );
 }
 
+/** 原本テキストの読み込み状態をラップする。ready のとき children（整形ビュー）を表示し、
+ *  children 無し（原本タブ）のときは生テキストを PlainTextView で表示する。
+ *  loading/error と truncate 注記もここで一元的に出す。 */
+function RawTextContent({ raw, docId, children }: { raw: RawTextState; docId: string; children?: ReactNode }) {
+  if (raw.status === "loading" || raw.status === "idle") {
+    return <div className="grid h-full place-items-center text-[12px] text-muted">読み込み中…</div>;
+  }
+  if (raw.status === "error") return <UnsupportedPreview docId={docId} />;
+  return (
+    <div>
+      {raw.truncated && (
+        <div className="border-b-[0.5px] border-divider bg-accent-soft px-5 py-2 text-[11.5px] text-fg-2">
+          ファイルが大きいため冒頭のみ表示しています。全文は「原本ダウンロード」から取得してください。
+        </div>
+      )}
+      {children ?? <PlainTextView text={raw.text} />}
+    </div>
+  );
+}
+
 export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   open: boolean;
   onClose: () => void;
@@ -123,11 +147,15 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   const isConvertible = selected ? isConvertibleToPdf(selected.filename) : false;
   // 表計算は PDF 化せず Excel 風グリッドでネイティブ描画する（PDF/画像/Office PDF 変換より優先）。
   const isSheet = selected ? isSpreadsheet(selected.filename) : false;
+  // テキスト系（md/json/jsonl/txt 等）は 原本/解析テキスト/整形表示 の3タブに切替える。
+  const textKind = selected ? getTextPreviewKind(selected.filename) : null;
+  const raw = useRawText(textKind ? selectedId : null);
   // MinerU 注釈 PDF は PDF 入力時のみ生成する。
 
   // 文書選択時、原本プレビュー可能（PDF/画像/Office）なら原本タブ、それ以外は解析テキストを初期表示にする。
   const selectDoc = (d: DocumentSummary) => {
     setSelectedId(d.id);
+    if (getTextPreviewKind(d.filename)) { setTab("rich"); return; }
     const previewable = d.mime === "application/pdf" || d.mime.startsWith("image/") || isSpreadsheet(d.filename) || isConvertibleToPdf(d.filename);
     setTab(previewable ? "pdf" : "text");
   };
@@ -419,7 +447,10 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                     <Icon name="chevronLeft" size={15} />
                   </button>
                   <div className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
-                    {([["pdf", isSheet ? "スプレッドシート" : isConvertible ? "PDF変換原本" : "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][]).map(([t, label]) => (
+                    {(textKind
+                      ? ([["pdf", "原本"], ["text", "解析テキスト"], ["rich", "整形表示"]] as [Tab, string][])
+                      : ([["pdf", isSheet ? "スプレッドシート" : isConvertible ? "PDF変換原本" : "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][])
+                    ).map(([t, label]) => (
                       <button key={t} onClick={() => setTab(t)} className={cn(
                         "shrink-0 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
                         tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
@@ -460,7 +491,10 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       </div>
                     </div>
                   )}
-                  {tab === "pdf" && !isPdf && !isImage && !isSheet && !isConvertible && (
+                  {tab === "pdf" && !isPdf && !isImage && !isSheet && !isConvertible && textKind && (
+                    <RawTextContent raw={raw} docId={selected.id} />
+                  )}
+                  {tab === "pdf" && !isPdf && !isImage && !isSheet && !isConvertible && !textKind && (
                     <UnsupportedPreview docId={selected.id} />
                   )}
                   {tab === "layout" && isPdf && (
@@ -475,6 +509,14 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       {preview?.chunks.map((c) => <RenderedChunk key={c.chunk_id} chunk={c} />)}
                       {!previewLoading && !preview?.chunks.length && <div className="text-[12px] text-muted">表示できる内容がありません</div>}
                     </div>
+                  )}
+                  {tab === "rich" && (
+                    <RawTextContent raw={raw} docId={selected.id}>
+                      {textKind === "markdown" && <MarkdownView text={raw.text} />}
+                      {textKind === "json" && <JsonView text={raw.text} />}
+                      {textKind === "jsonl" && <JsonlView text={raw.text} />}
+                      {textKind === "text" && <PlainTextView text={raw.text} />}
+                    </RawTextContent>
                   )}
                   {tab === "text" && (
                     <div className="mx-auto max-w-[760px] p-5">
