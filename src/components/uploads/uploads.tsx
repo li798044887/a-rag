@@ -275,7 +275,7 @@ export function DocumentsUploadQueue({ files, onRemove, onRetry, onClear }: {
   const allDone = done + skipped === files.length;
 
   return (
-    <div className="flex max-h-[40%] shrink-0 flex-col border-b-[0.5px] border-divider bg-surface-2">
+    <div className="flex min-h-0 max-h-[50vh] flex-col border-b-[0.5px] border-divider bg-surface-2 max-md:max-h-[55vh]">
       <div className="flex items-center gap-2 px-3 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">アップロード</span>
         <span className="font-mono text-[10.5px] text-muted">{done}/{target}{skipped ? ` · ${skipped}スキップ` : ""}</span>
@@ -288,10 +288,12 @@ export function DocumentsUploadQueue({ files, onRemove, onRetry, onClear }: {
           </button>
         )}
       </div>
-      <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto px-2 pb-2.5">
-        {groups.map((g) => (
-          <QueueGroup key={g.folder ?? "__loose__"} folder={g.folder} files={g.files} onRemove={onRemove} onRetry={onRetry} />
-        ))}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2.5">
+        <div className="flex flex-col gap-1.5">
+          {groups.map((g) => (
+            <QueueGroup key={g.folder ?? "__loose__"} folder={g.folder} files={g.files} onRemove={onRemove} onRetry={onRetry} />
+          ))}
+        </div>
       </div>
     </div>
   );
