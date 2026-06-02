@@ -22,11 +22,13 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "ARag — Agentic RAG",
-  description:
-    "社内ナレッジ（議事録・Wiki・Slack・DB）を横断するエージェント型 RAG アシスタント。",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = getDictionary(await getLocale());
+  return {
+    title: t.api.metaTitle,
+    description: t.api.metaDescription,
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { signAccessToken, setSessionCookie } from "@/lib/auth";
 import { createUser, findUserByEmail, toAppUser } from "@/lib/users";
 import type { UserRow } from "@/lib/db/schema";
+import { getLocale } from "@/i18n/server";
+import { getDictionary } from "@/i18n/dictionary";
 
 /** Postgres unique violation（重複登録）かどうか。 */
 function isUniqueViolation(e: unknown) {
@@ -15,14 +17,16 @@ export async function POST(req: Request) {
     name?: string;
   };
 
+  const t = getDictionary(await getLocale());
+
   if (!email || !password || password.length < 8) {
     return NextResponse.json(
-      { error: "メールアドレスと 8 文字以上のパスワードが必要です" },
+      { error: t.api.emailPasswordMinLength },
       { status: 400 },
     );
   }
   if (await findUserByEmail(email)) {
-    return NextResponse.json({ error: "このメールアドレスは登録済みです" }, { status: 409 });
+    return NextResponse.json({ error: t.api.emailAlreadyRegistered }, { status: 409 });
   }
 
   let row: UserRow;
@@ -31,7 +35,7 @@ export async function POST(req: Request) {
   } catch (e) {
     // 事前チェックをすり抜けた競合（同時登録）でも 409 を返す。
     if (isUniqueViolation(e)) {
-      return NextResponse.json({ error: "このメールアドレスは登録済みです" }, { status: 409 });
+      return NextResponse.json({ error: t.api.emailAlreadyRegistered }, { status: 409 });
     }
     throw e;
   }

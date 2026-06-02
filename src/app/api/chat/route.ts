@@ -5,6 +5,7 @@ import { runAgent } from "@/lib/agent/run";
 import { createThread, saveCompletedMessage, getThreadMessages, deleteMessagesFrom } from "@/lib/threads";
 import { toModelHistory } from "@/lib/agent/history";
 import { getLocale } from "@/i18n/server";
+import { getDictionary } from "@/i18n/dictionary";
 import type { AgentEvent, ToolCall } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -23,9 +24,10 @@ export async function POST(req: Request) {
 
   // リクエストの Cookie から言語を解決し、システムプロンプト/フォールバックを言語別に切り替える。
   const locale = await getLocale();
+  const dict = getDictionary(locale);
 
   // スレッドを確定（無ければ作成、タイトルは query から）
-  const tid = threadId || (await createThread(claims.sub, q || "新しいスレッド")).id;
+  const tid = threadId || (await createThread(claims.sub, q || dict.api.newThread)).id;
 
   // 既存スレッドへの追記なら過去ターンを履歴として読み込む（直近8ターン窓）。
   // 再生成（regenerateFrom 指定）時は、履歴読込の前に当該index以降を削除し DB を整合させる。
