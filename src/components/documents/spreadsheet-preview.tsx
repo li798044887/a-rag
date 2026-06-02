@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { SpreadsheetGrid } from "@/components/documents/spreadsheet-grid";
 import { clampGrid, sheetToGrid, type GridModel } from "@/components/documents/spreadsheet-model";
+import { useT } from "@/i18n/context";
 
 const ROW_CLAMP = 2000;
 
@@ -13,12 +14,13 @@ interface Parsed {
 
 /** プレビュー不可フォールバック（原本ダウンロード導線）。documents-modal と同等。 */
 function Fallback({ docId }: { docId: string }) {
+  const { t } = useT();
   return (
     <div className="grid h-full place-items-center p-8 text-center">
       <div className="max-w-[380px]">
-        <div className="mb-1.5 text-[13px] font-semibold text-fg">この表計算ファイルを表示できませんでした</div>
-        <div className="mb-4 text-[12px] leading-[1.6] text-muted">「解析テキスト」タブで抽出済みの内容を確認するか、原本をダウンロードしてください。</div>
-        <a href={`/api/documents/${encodeURIComponent(docId)}/raw?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2">原本をダウンロード</a>
+        <div className="mb-1.5 text-[13px] font-semibold text-fg">{t.documents.spreadsheetErrorTitle}</div>
+        <div className="mb-4 text-[12px] leading-[1.6] text-muted">{t.documents.spreadsheetErrorDescription}</div>
+        <a href={`/api/documents/${encodeURIComponent(docId)}/raw?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2">{t.documents.spreadsheetDownload}</a>
       </div>
     </div>
   );
@@ -51,9 +53,10 @@ export function SpreadsheetPreview({ docId, filename }: { docId: string; filenam
     return () => { cancelled = true; };
   }, [docId]);
 
+  const { t } = useT();
   if (state === "error") return <Fallback docId={docId} />;
   if (state === "loading" || !parsed) {
-    return <div className="grid h-full place-items-center text-[12px] text-muted" title={filename}>読み込み中…</div>;
+    return <div className="grid h-full place-items-center text-[12px] text-muted" title={filename}>{t.documents.spreadsheetLoading}</div>;
   }
 
   const raw = parsed.grids[active];

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DocumentListResponse, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 
 /** ページ追記時に id 重複を除いてマージする純粋関数。 */
 export function mergeNextPage(prev: DocumentSummary[], next: DocumentSummary[]): DocumentSummary[] {
@@ -21,6 +23,7 @@ const PENDING = new Set(["queued", "processing", "parsing", "chunking", "embeddi
 
 /** 文書一覧の取得・検索・ページング・削除・再索引・状態ポーリングを担うデータ層。 */
 export function useDocuments(open: boolean, onToast?: PushToast) {
+  const { t } = useT();
   const [items, setItems] = useState<DocumentSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -33,6 +36,8 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
 
   const onToastRef = useRef(onToast);
   useEffect(() => { onToastRef.current = onToast; }, [onToast]);
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
 
   const buildQs = useCallback((cursor?: string | null) => {
     const qs = new URLSearchParams({ limit: "30" });
@@ -79,10 +84,10 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
     if (!r || !r.ok) {
       setItems(prev);
       setTotal(prevTotal);
-      onToastRef.current?.("削除に失敗しました", "error");
+      onToastRef.current?.(tRef.current.documents.toastDeleteFailed, "error");
       return;
     }
-    onToastRef.current?.("文書を削除しました", "success");
+    onToastRef.current?.(tRef.current.documents.toastDeleted, "success");
   }, [items, total]);
 
   const toggleSelect = useCallback((id: string) => {
@@ -115,10 +120,10 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
       if (!r || !r.ok) {
         setItems(prev);
         setTotal(prevTotal);
-        onToastRef.current?.("削除に失敗しました", "error");
+        onToastRef.current?.(tRef.current.documents.toastBulkDeleteFailed, "error");
         return;
       }
-      onToastRef.current?.(`${removed}件の文書を削除しました`, "success");
+      onToastRef.current?.(interpolate(tRef.current.documents.toastBulkDeleted, { n: removed }), "success");
       setSelectionMode(false);
       setSelectedIds(new Set());
     } finally {
@@ -129,7 +134,7 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
   const retry = useCallback(async (jobId: string, id: string) => {
     setItems((cur) => cur.map((d) => (d.id === id ? { ...d, status: "processing", error: null } : d)));
     const r = await fetch(`/api/uploads/${encodeURIComponent(jobId)}/retry`, { method: "POST" }).catch(() => null);
-    if (!r || !r.ok) onToastRef.current?.("再索引に失敗しました", "error");
+    if (!r || !r.ok) onToastRef.current?.(tRef.current.documents.toastRetryFailed, "error");
   }, []);
 
   // 表示中かつ未完了の文書だけをポーリングして状態を更新する。
