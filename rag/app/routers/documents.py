@@ -6,6 +6,7 @@ from arq import create_pool
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import SessionLocal
@@ -206,7 +207,7 @@ def cancel_job(job_id: str, owner_user_id: str | None = None):
     return Response(status_code=204)
 
 
-def _delete_one(session, doc) -> tuple[str | None, str | None]:
+def _delete_one(session: Session, doc: Document) -> tuple[str | None, str | None]:
     """1文書の Qdrant ベクトル/chunks/job/行を削除し、cleanup 対象の生ファイルパスを返す。
     commit と cleanup_document_files は呼び出し側で行う。"""
     raw_path, parsed_md_path = doc.raw_path, doc.parsed_md_path
@@ -236,6 +237,7 @@ def delete_document(document_id: str, owner_user_id: str):
     return Response(status_code=204)
 
 
+# 静的パス /documents/bulk-delete は {document_id} 系ルートより前に登録する（誤マッチ回避）。
 @router.post("/documents/bulk-delete", response_model=BulkDeleteResponse,
              dependencies=[Depends(require_internal_token)])
 def bulk_delete_documents(req: BulkDeleteRequest):

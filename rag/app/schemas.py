@@ -101,7 +101,7 @@ class WorkspaceStats(BaseModel):
 
 class BulkDeleteRequest(BaseModel):
     owner_user_id: str
-    document_ids: list[str]
+    document_ids: list[str] = Field(max_length=1000)
 
 
 class BulkDeleteResponse(BaseModel):
