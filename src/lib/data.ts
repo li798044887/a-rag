@@ -4,6 +4,7 @@
  * retriever (lib/agent/retriever.ts) treats this module as its corpus so the
  * agent flow runs end-to-end without external infrastructure. */
 
+import type { Locale } from "@/i18n/config";
 import type {
   CitationMap,
   CompletedThread,
@@ -192,12 +193,27 @@ export const COMPLETED_THREADS: Record<string, CompletedThread> = {
   },
 };
 
-export const SUGGESTED_PROMPTS: SuggestedPrompt[] = [
+const SUGGESTED_PROMPTS_JA: SuggestedPrompt[] = [
   { icon: "meeting", label: "先月の議事録でアジャイル移行について何が決まったか教えて", tag: "議事録" },
   { icon: "book", label: "デザインシステム v2 のボタンコンポーネントの使い方は？", tag: "Wiki" },
   { icon: "hash", label: "Slackで話題になった採用フロー改善案をまとめて", tag: "Slack" },
   { icon: "table", label: "Q1のAARRR指標の前年比をSQLで集計して", tag: "BI" },
 ];
+
+const SUGGESTED_PROMPTS_ZH: SuggestedPrompt[] = [
+  { icon: "meeting", label: "上个月的会议纪要里，敏捷转型有哪些决定事项？", tag: "会议纪要" },
+  { icon: "book", label: "设计系统 v2 的按钮组件怎么用？", tag: "Wiki" },
+  { icon: "hash", label: "整理一下 Slack 里讨论的招聘流程改善方案", tag: "Slack" },
+  { icon: "table", label: "用 SQL 汇总 Q1 AARRR 指标与去年同期对比", tag: "BI" },
+];
+
+/** 後方互換のため ja をデフォルトとして維持する。新規コードは getSuggestedPrompts を使うこと。 */
+export const SUGGESTED_PROMPTS: SuggestedPrompt[] = SUGGESTED_PROMPTS_JA;
+
+/** ロケールに応じたサジェストプロンプト一覧を返す。 */
+export function getSuggestedPrompts(locale: Locale): SuggestedPrompt[] {
+  return locale === "zh" ? SUGGESTED_PROMPTS_ZH : SUGGESTED_PROMPTS_JA;
+}
 
 export const MODELS: ModelOption[] = [
   { id: "deepseek-flash", label: "DeepSeek Flash", tag: "推奨", desc: "高速・低コスト" },

@@ -38,7 +38,7 @@ const NO_TURNS: Turn[] = [];
 
 export function Workspace() {
   const { tweaks, setTweak } = useTweaks();
-  const { t } = useT();
+  const { t, locale } = useT();
   const { user, claims, status, signIn, register, signOut, setRemember, revokeAllSessions } = useAuth();
   const { toasts, push, dismiss } = useToasts();
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -173,7 +173,7 @@ export function Workspace() {
       const regenTurn = regen != null ? turns[regen] : undefined;
       const finalQuery = regen != null
         ? (regenTurn?.query ?? "")
-        : query || (ready.length ? "添付ファイルについて要点をまとめて" : "");
+        : query || (ready.length ? t.workspace.attachmentDefaultQuery : "");
       if (!finalQuery) return;
       const attachNames = regen != null ? (regenTurn?.attachments ?? []) : ready.map((f) => f.name);
       const attachDocIds = regen != null
@@ -333,10 +333,12 @@ export function Workspace() {
     async (id: string) => {
       const target = threads.find((t) => t.id === id);
       const ok = await confirm({
-        title: "スレッドを削除しますか？",
-        description: target ? `「${target.title}」は元に戻せません。` : "この操作は元に戻せません。",
-        confirmLabel: "削除",
-        cancelLabel: "キャンセル",
+        title: t.workspace.deleteThreadTitle,
+        description: target
+          ? interpolate(t.workspace.deleteThreadDescWithTitle, { title: target.title })
+          : t.workspace.deleteThreadDescGeneric,
+        confirmLabel: t.workspace.deleteThreadConfirm,
+        cancelLabel: t.workspace.deleteThreadCancel,
         tone: "danger",
       });
       if (!ok) return;
@@ -536,7 +538,7 @@ export function Workspace() {
   const liveConv = liveId ? agent.get(liveId) : undefined;
   const liveEntry: ThreadSummary | null =
     liveId && liveConv && !threads.some((t) => t.id === liveId)
-      ? { id: liveId, title: liveConv.turns[0]?.query || userQuery || "新しいスレッド", updated: "たった今" }
+      ? { id: liveId, title: liveConv.turns[0]?.query || userQuery || t.workspace.liveThreadTitle, updated: t.workspace.liveThreadUpdated }
       : null;
   const threadList = [
     ...(liveEntry ? [{ ...liveEntry, active: liveEntry.id === activeThreadId }] : []),
@@ -585,7 +587,7 @@ export function Workspace() {
           <button
             className="hidden h-[34px] w-[34px] shrink-0 -ml-1 place-items-center rounded-lg border-0 bg-transparent text-fg hover:bg-divider max-md:grid"
             onClick={() => setSidebarCollapsed(false)}
-            aria-label="メニューを開く"
+            aria-label={t.workspace.openMenuAriaLabel}
           >
             <svg viewBox="0 0 16 16" width="15" height="15">
               <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -593,19 +595,19 @@ export function Workspace() {
           </button>
           <div className="flex min-w-0 flex-1 items-center gap-2 text-[13.5px] font-semibold text-fg max-md:gap-1.5 max-md:text-[13px]">
             {phase === "empty" ? (
-              <span className="font-medium text-muted">新規スレッド</span>
+              <span className="font-medium text-muted">{t.workspace.headerNewThread}</span>
             ) : (
               <>
-                <span className="min-w-0 flex-1 truncate">{userQuery.slice(0, 56) || "スレッド"}</span>
+                <span className="min-w-0 flex-1 truncate">{userQuery.slice(0, 56) || t.workspace.headerThreadFallback}</span>
                 <span className="shrink-0 whitespace-nowrap font-normal text-[12px] text-muted max-md:hidden">·  {(citeTurn?.sources ?? []).length} sources</span>
                 {phase === "cancelled" && (
                   <span className="ml-1.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[#FDEFEA] px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[#B83A1F] dark:bg-[rgba(184,58,31,0.18)]">
-                    キャンセル済
+                    {t.workspace.badgeCancelled}
                   </span>
                 )}
                 {phase === "running" && (
                   <span className="ml-1.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-accent-soft px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-accent before:h-[5px] before:w-[5px] before:rounded-full before:bg-accent before:[animation:ar-pulse_1.2s_ease-in-out_infinite]">
-                    実行中
+                    {t.workspace.badgeRunning}
                   </span>
                 )}
               </>
@@ -614,16 +616,16 @@ export function Workspace() {
           <div className="flex items-center gap-1.5 max-md:gap-0.5">
             {phase !== "empty" && (
               <>
-                <HeaderBtn title="共有" onClick={() => setShareTarget({ item: null })} iconOnly>
+                <HeaderBtn title={t.workspace.btnShare} onClick={() => setShareTarget({ item: null })} iconOnly>
                   <svg viewBox="0 0 16 16" width="13" height="13">
                     <circle cx="4" cy="8" r="1.5" fill="currentColor" />
                     <circle cx="12" cy="4" r="1.5" fill="currentColor" />
                     <circle cx="12" cy="12" r="1.5" fill="currentColor" />
                     <path d="M5.3 7.3 10.7 4.7M5.3 8.7l5.4 2.6" stroke="currentColor" strokeWidth="1.4" />
                   </svg>
-                  共有
+                  {t.workspace.btnShare}
                 </HeaderBtn>
-                <HeaderBtn title="Markdownでエクスポート" onClick={exportThread} iconOnly>
+                <HeaderBtn title={t.workspace.btnExport} onClick={exportThread} iconOnly>
                   <svg viewBox="0 0 16 16" width="13" height="13">
                     <path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -637,7 +639,7 @@ export function Workspace() {
                       <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
                       <path d="M10 3v10" stroke="currentColor" strokeWidth="1.4" />
                     </svg>
-                    一次資料 ({(citeTurn?.sources ?? []).length})
+                    {interpolate(t.workspace.btnSources, { n: String((citeTurn?.sources ?? []).length) })}
                   </button>
                 )}
               </>
@@ -645,8 +647,8 @@ export function Workspace() {
             <button
               className="grid h-[30px] w-[30px] place-items-center rounded-lg border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
               onClick={() => setTweak("dark", !tweaks.dark)}
-              title={tweaks.dark ? "ライトモードへ" : "ダークモードへ"}
-              aria-label="テーマ切替"
+              title={tweaks.dark ? t.workspace.toLight : t.workspace.toDark}
+              aria-label={t.workspace.themeToggleAriaLabel}
             >
               {tweaks.dark ? (
                 <svg viewBox="0 0 16 16" width="14" height="14">
@@ -793,10 +795,10 @@ export function Workspace() {
         }}
         onRevokeAllSessions={async () => {
           const ok = await confirm({
-            title: "すべてのデバイスからサインアウトしますか？",
-            description: "現在のデバイスを含むすべてのセッションが失効します。",
-            confirmLabel: "サインアウト",
-            cancelLabel: "キャンセル",
+            title: t.workspace.revokeAllTitle,
+            description: t.workspace.revokeAllDesc,
+            confirmLabel: t.workspace.revokeAllConfirm,
+            cancelLabel: t.workspace.revokeAllCancel,
             tone: "danger",
           });
           if (!ok) return;

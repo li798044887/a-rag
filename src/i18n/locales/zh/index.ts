@@ -7,6 +7,7 @@ import { modals } from "./modals";
 import { sidebar } from "./sidebar";
 import { sources } from "./sources";
 import { uploads } from "./uploads";
+import { workspace } from "./workspace";
 
 /** zh は辞書の唯一の出所。型 Dictionary はここから導出する。 */
 export const zh = {
@@ -19,6 +20,7 @@ export const zh = {
   sidebar,
   sources,
   uploads,
+  workspace,
 };
 
 export type Dictionary = typeof zh;
