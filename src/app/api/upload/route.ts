@@ -24,6 +24,12 @@ export async function POST(req: Request) {
   fwd.append("owner_user_id", claims.sub);
 
   const res = await ragFetch("/documents", { method: "POST", body: fwd });
+  if (res.status === 409) {
+    return NextResponse.json(
+      { error: "同じ内容のファイルが既にアップロードされています" },
+      { status: 409 },
+    );
+  }
   if (!res.ok) {
     return NextResponse.json({ error: "索引化の開始に失敗しました" }, { status: 502 });
   }
