@@ -5,6 +5,8 @@ import { Icon } from "@/components/icons";
 import { ALL_CONNECTORS, SCOPE_PRESETS } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import type { ScopeValue } from "@/lib/types";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 
 interface Props {
   open: boolean;
@@ -19,6 +21,7 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
   const [pos, setPos] = useState({ left: 0, bottom: 0 });
   const [customSources, setCustomSources] = useState<string[]>(value.sources || ["confluence", "notion", "drive", "slack"]);
   const [mode, setMode] = useState<"preset" | "custom">(value.id === "custom" ? "custom" : "preset");
+  const { t } = useT();
 
   useEffect(() => {
     if (!open || !anchorRef.current) return;
@@ -49,7 +52,7 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
   };
 
   const applyCustom = () => {
-    onChange({ id: "custom", label: `${customSources.length}ソース`, iconName: "target", sources: customSources });
+    onChange({ id: "custom", label: interpolate(t.chat.customSourcesLabel, { n: customSources.length }), iconName: "target", sources: customSources });
     onClose();
   };
 
@@ -60,11 +63,11 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
     >
       <span className="absolute -bottom-[6px] left-[18px] h-2.5 w-2.5 rotate-45 border-b-[0.5px] border-r-[0.5px] border-divider-strong bg-surface" />
       <div className="flex items-center justify-between border-b-[0.5px] border-divider px-3.5 py-2.5 text-[12px] font-semibold text-muted">
-        <span>検索範囲</span>
+        <span>{t.chat.scopeHeader}</span>
         <kbd>⌘K</kbd>
       </div>
       <div className="overflow-y-auto p-1.5">
-        <div className="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-2">プリセット</div>
+        <div className="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-2">{t.chat.scopePresets}</div>
         {SCOPE_PRESETS.map((p) => {
           const isFiles = p.id === "files";
           const disabled = isFiles && !attachmentCount;
@@ -95,7 +98,7 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
                     </span>
                   )}
                 </div>
-                <div className="mt-px text-[11px] text-muted">{disabled ? "ファイルがアップロードされていません" : p.desc}</div>
+                <div className="mt-px text-[11px] text-muted">{disabled ? t.chat.noFilesUploaded : p.desc}</div>
               </div>
               {active && (
                 <svg viewBox="0 0 16 16" width="12" height="12" className="text-accent">
@@ -108,7 +111,7 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
 
         <div className="mx-1 my-1.5 h-px bg-divider" />
 
-        <div className="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-2">カスタム</div>
+        <div className="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-2">{t.chat.scopeCustom}</div>
         <div className="flex flex-col gap-px px-0.5 pb-1">
           {ALL_CONNECTORS.map((s) => {
             const checked = customSources.includes(s.id);
@@ -151,13 +154,13 @@ export function ScopePicker({ open, anchorRef, value, onChange, onClose, attachm
 
       {mode === "custom" && (
         <div className="flex items-center justify-between border-t-[0.5px] border-divider bg-surface-2 px-3.5 py-2.5">
-          <span className="text-[11.5px] text-muted">{customSources.length}個のソースを選択中</span>
+          <span className="text-[11.5px] text-muted">{interpolate(t.chat.customSourcesSelected, { n: customSources.length })}</span>
           <button
             disabled={!customSources.length}
             onClick={applyCustom}
             className="h-7 rounded-[7px] border-0 bg-accent px-3.5 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            適用
+            {t.chat.applyScope}
           </button>
         </div>
       )}
