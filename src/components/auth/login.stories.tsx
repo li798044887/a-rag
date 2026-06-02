@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn } from "storybook/test";
 import { Login } from "@/components/auth/login";
+import { LocaleProvider } from "@/i18n/context";
+import { getDictionary } from "@/i18n/dictionary";
 
 const meta = {
   title: "Auth/Login",
@@ -8,6 +10,13 @@ const meta = {
   tags: ["ai-generated"],
   parameters: { layout: "fullscreen" },
   args: { onSignIn: fn(), onRegister: fn() },
+  decorators: [
+    (Story) => (
+      <LocaleProvider locale="ja" dict={getDictionary("ja")}>
+        <Story />
+      </LocaleProvider>
+    ),
+  ],
 } satisfies Meta<typeof Login>;
 
 export default meta;

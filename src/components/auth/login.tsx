@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { BrandMark } from "@/components/icons";
+import { useT } from "@/i18n/context";
 
 type Mode = "signin" | "signup" | "reset";
 
@@ -12,6 +13,9 @@ interface LoginProps {
 }
 
 export function Login({ onSignIn, onRegister }: LoginProps) {
+  const { t } = useT();
+  const a = t.auth;
+
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,8 +42,8 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
     } catch {
       setError(
         mode === "signup"
-          ? "登録に失敗しました。もう一度お試しください。"
-          : "サインインに失敗しました。もう一度お試しください。",
+          ? a.errorSignup
+          : a.errorSignin,
       );
     } finally {
       setBusy(false);
@@ -84,24 +88,24 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
           </div>
           <div>
             <div className="text-[17px] font-bold tracking-[-0.01em] text-fg">ARag</div>
-            <div className="text-[11px] text-muted">社内ナレッジ・エージェント</div>
+            <div className="text-[11px] text-muted">{a.brandSubtitle}</div>
           </div>
         </div>
 
         <h1 className="m-0 mb-1.5 text-[26px] font-bold tracking-[-0.02em] text-fg">
-          {mode === "signin" && "おかえりなさい"}
-          {mode === "signup" && "アカウント作成"}
-          {mode === "reset" && "パスワードリセット"}
+          {mode === "signin" && a.headingSignin}
+          {mode === "signup" && a.headingSignup}
+          {mode === "reset" && a.headingReset}
         </h1>
         <p className="m-0 mb-7 text-[14px] leading-[1.5] text-muted">
-          {mode === "signin" && "社内SSOまたはメールでサインインしてください"}
-          {mode === "signup" && "メールアドレスとパスワードでアカウントを作成してください"}
-          {mode === "reset" && "リセット用のリンクをメールで送信します"}
+          {mode === "signin" && a.descSignin}
+          {mode === "signup" && a.descSignup}
+          {mode === "reset" && a.descReset}
         </p>
 
         <form onSubmit={submit} className="flex flex-col gap-[14px]">
           <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] font-semibold text-fg-2">メールアドレス</span>
+            <span className="text-[12px] font-semibold text-fg-2">{a.labelEmail}</span>
             <input
               type="email"
               value={email}
@@ -115,12 +119,12 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
 
           {mode === "signup" && (
             <label className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-semibold text-fg-2">氏名</span>
+              <span className="text-[12px] font-semibold text-fg-2">{a.labelName}</span>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="山田 太郎"
+                placeholder={a.placeholderName}
                 autoComplete="name"
                 required
                 className={fieldCls}
@@ -131,7 +135,7 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
           {mode !== "reset" && (
             <label className="flex flex-col gap-1.5">
               <span className="flex items-baseline justify-between text-[12px] font-semibold text-fg-2">
-                パスワード
+                {a.labelPassword}
                 {mode === "signin" && (
                   <a
                     href="#"
@@ -141,7 +145,7 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
                     }}
                     className="text-[12px] font-medium text-accent no-underline hover:underline"
                   >
-                    お忘れですか？
+                    {a.forgotPassword}
                   </a>
                 )}
               </span>
@@ -150,7 +154,7 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
                   type={showPw ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="8文字以上"
+                  placeholder={a.placeholderPassword}
                   autoComplete={mode === "signin" ? "current-password" : "new-password"}
                   required
                   className={`${fieldCls} w-full pr-[38px]`}
@@ -158,7 +162,7 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
                 <button
                   type="button"
                   onClick={() => setShowPw(!showPw)}
-                  aria-label={showPw ? "隠す" : "表示"}
+                  aria-label={showPw ? a.hidePassword : a.showPassword}
                   className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
                 >
                   {showPw ? (
@@ -185,9 +189,9 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
                 className="accent-[var(--accent)]"
               />
               <span>
-                このデバイスを記憶する{" "}
+                {a.rememberDevice}{" "}
                 <em className="font-mono text-[10.5px] not-italic text-muted-2">
-                  (JWT refresh token を 30日間保存)
+                  {a.rememberDeviceHint}
                 </em>
               </span>
             </label>
@@ -209,21 +213,21 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
             )}
             {busy
               ? mode === "signin"
-                ? "JWTを発行中…"
+                ? a.busySignin
                 : mode === "signup"
-                  ? "作成中…"
-                  : "送信中…"
+                  ? a.busySignup
+                  : a.busyReset
               : mode === "signin"
-                ? "サインイン"
+                ? a.submitSignin
                 : mode === "signup"
-                  ? "アカウントを作成"
-                  : "リセットリンクを送信"}
+                  ? a.submitSignup
+                  : a.submitReset}
           </button>
 
           {mode === "signin" && (
             <>
               <div className="mt-[14px] mb-1 flex items-center gap-2.5 text-[11px] text-muted before:h-0 before:flex-1 before:border-t-[0.5px] before:border-divider-strong after:h-0 after:flex-1 after:border-t-[0.5px] after:border-divider-strong">
-                または
+                {a.orDivider}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -254,23 +258,23 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
         <div className="mt-[22px] text-center text-[13px] text-muted">
           {mode === "signin" && (
             <span>
-              初めて？{" "}
+              {a.newHere}{" "}
               <a href="#" className="text-[12px] font-medium text-accent no-underline hover:underline" onClick={(e) => { e.preventDefault(); setMode("signup"); }}>
-                サインアップ
+                {a.signUp}
               </a>
             </span>
           )}
           {mode === "signup" && (
             <span>
-              既にアカウントがある？{" "}
+              {a.alreadyHaveAccount}{" "}
               <a href="#" className="text-[12px] font-medium text-accent no-underline hover:underline" onClick={(e) => { e.preventDefault(); setMode("signin"); }}>
-                サインイン
+                {a.submitSignin}
               </a>
             </span>
           )}
           {mode === "reset" && (
             <a href="#" className="text-[12px] font-medium text-accent no-underline hover:underline" onClick={(e) => { e.preventDefault(); setMode("signin"); }}>
-              ← サインインに戻る
+              {a.backToSignin}
             </a>
           )}
         </div>
@@ -280,7 +284,7 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
             <svg viewBox="0 0 16 16" width="11" height="11">
               <path d="M8 1l5 2v4.5C13 11 10.5 14 8 15c-2.5-1-5-4-5-7.5V3l5-2z" stroke="currentColor" strokeWidth="1.2" fill="none" />
             </svg>
-            JWT認証 · HS256 · 24h アクセストークン
+            {a.securityBadge}
           </div>
         </div>
       </div>
