@@ -9,7 +9,8 @@ import { resolveModels, DEFAULT_MODEL_ID } from "@/lib/agent/models";
 import { buildTools, type ToolCallMeta } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
 import { StepBus } from "@/lib/agent/step-bus";
-import type { AgentEvent, ToolCall, ToolName } from "@/lib/types";
+import type { AgentCfg, AgentEvent, ToolCall, ToolName } from "@/lib/types";
+import { AGENT_CFG_DEFAULTS, buildSystemPrompt } from "@/lib/agent/config";
 
 export interface RunInput {
   query: string;
@@ -19,6 +20,7 @@ export interface RunInput {
   attachments?: string[];
   attachmentDocIds?: string[];
   modelId?: string;
+  agentCfg?: AgentCfg;
 }
 
 /** 添付ありターンでは、添付ファイルが知識ベースへ取り込み済みで retrieve で検索できる旨を
@@ -36,13 +38,6 @@ export function buildUserContent(query: string, attachments: string[], attachmen
   return query;
 }
 
-const SYSTEM =
-  "あなたは社内ナレッジ検索アシスタントです。必要に応じて retrieve / fetch_document ツールを使い、" +
-  "会話の文脈を踏まえて自己完結した検索クエリを組み立ててください。" +
-  "回答は提供された一次資料のみに基づき日本語で簡潔に行い、重要な事実には必ずツール結果に付いた [1] [2] の出典番号を付け、" +
-  "Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。資料に無いことは推測しないでください。";
-
-const MAX_STEPS = 6;
 
 export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   const bus = new StepBus();
@@ -52,13 +47,14 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
 }
 
 async function pump(
-  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds }: RunInput,
+  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds, agentCfg }: RunInput,
   bus: StepBus,
 ): Promise<void> {
   // pump の本体は何が throw しても必ず bus.close() する。これを欠くと runAgent の
   // drain が永久にハングする（pump は fire-and-forget なので reject も握り潰される）。
   try {
     const started = Date.now();
+    const cfg = agentCfg ?? AGENT_CFG_DEFAULTS;
     const modelLabel = modelId ?? DEFAULT_MODEL_ID;
     const resolution = resolveModels(modelId);
 
@@ -73,17 +69,17 @@ async function pump(
 
     const registry = new CitationRegistry();
     const meta = new Map<string, ToolCallMeta>();
-    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds });
+    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, concurrency: cfg.parallelTools });
 
     const userContent = buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);
     const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: userContent }];
 
     const result = streamText({
       model: resolution.models.chat,
-      system: SYSTEM,
+      system: buildSystemPrompt(cfg),
       messages,
       tools,
-      stopWhen: stepCountIs(MAX_STEPS),
+      stopWhen: stepCountIs(cfg.maxSteps),
     });
 
     const stepStart = new Map<string, number>();
