@@ -21,6 +21,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useToasts } from "@/hooks/use-toasts";
 import { useTweaks } from "@/hooks/use-tweaks";
+import { useAgentCfg } from "@/hooks/use-agent-cfg";
 import { useUploads } from "@/hooks/use-uploads";
 import { useWorkspaceStats } from "@/hooks/use-workspace-stats";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ const NO_TURNS: Turn[] = [];
 
 export function Workspace() {
   const { tweaks, setTweak } = useTweaks();
+  const { agentCfg, setAgentCfg } = useAgentCfg();
   const { user, claims, status, signIn, register, signOut, setRemember, revokeAllSessions } = useAuth();
   const { toasts, push, dismiss } = useToasts();
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -206,7 +208,7 @@ export function Workspace() {
 
       const navAtStart = navToken.current;
 
-      await agent.run(finalQuery, attachNames, attachDocIds, continueId, model.id, {
+      await agent.run(finalQuery, attachNames, attachDocIds, continueId, model.id, agentCfg, {
         truncateFrom: regen ?? undefined,
         regenerateFrom: regen ?? undefined,
         onPendingThread: (id) => {
@@ -225,7 +227,7 @@ export function Workspace() {
         },
       });
     },
-    [agent, uploads, push, activeThreadId, refreshThreads, model, turns],
+    [agent, uploads, push, activeThreadId, refreshThreads, model, turns, agentCfg],
   );
 
   const stopRun = () => {
@@ -778,6 +780,8 @@ export function Workspace() {
         }}
         tweaks={tweaks}
         setTweak={setTweak}
+        agentCfg={agentCfg}
+        setAgentCfg={setAgentCfg}
         user={user}
         claims={claims}
         onSetRemember={async (v) => {

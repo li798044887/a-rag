@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { fn } from "storybook/test";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { MODELS, DEFAULT_USER } from "@/lib/data";
-import type { Tweaks, AppUser } from "@/lib/types";
+import type { AgentCfg, Tweaks, AppUser } from "@/lib/types";
 import type { SessionClaims } from "@/hooks/use-auth";
 
 const tweaks: Tweaks = {
@@ -11,6 +11,13 @@ const tweaks: Tweaks = {
   toolView: "card",
   density: "comfy",
   citationStyle: "numbered",
+};
+
+const agentCfg: AgentCfg = {
+  maxSteps: 12,
+  parallelTools: 3,
+  requireCitations: true,
+  admitUnknown: true,
 };
 
 const now = Math.floor(Date.now() / 1000);
@@ -41,6 +48,8 @@ const meta = {
     onClose: fn(),
     onModelChange: fn(),
     setTweak: fn(),
+    agentCfg,
+    setAgentCfg: fn(),
     onSetRemember: fn(),
     onRevokeAllSessions: fn(),
   },

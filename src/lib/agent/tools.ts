@@ -5,6 +5,8 @@ import { resolveImageUrls } from "@/lib/agent/image-urls";
 import { CitationRegistry } from "@/lib/agent/citations";
 import { StepBus } from "@/lib/agent/step-bus";
 import type { AgentEvent, ToolName } from "@/lib/types";
+import { Semaphore } from "@/lib/agent/semaphore";
+import { AGENT_CFG_DEFAULTS } from "@/lib/agent/config";
 
 /** toolCallId -> UI 用メタ。fullStream の tool-call/tool-result に対応付ける。 */
 export interface ToolCallMeta {
@@ -20,6 +22,8 @@ export interface BuildToolsInput {
   bus: StepBus;
   /** 添付ありターンでは retrieve をこの文書群に排他スコープする。空/未指定なら全体検索。 */
   attachmentDocIds?: string[];
+  /** ツール execute の同時実行上限。未指定なら既定の並列数。 */
+  concurrency?: number;
 }
 
 const RETRIEVE_TOP_K = 6;
@@ -96,7 +100,8 @@ function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string): 
   return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummary(ev.stage, ev.count) } };
 }
 
-export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds }: BuildToolsInput): ToolSet {
+export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, concurrency }: BuildToolsInput): ToolSet {
+  const sema = new Semaphore(concurrency ?? AGENT_CFG_DEFAULTS.parallelTools);
   return {
     retrieve: tool({
       description:
@@ -106,7 +111,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds 
       inputSchema: z.object({
         query: z.string().describe("検索クエリ（会話文脈を解決した自己完結な日本語）"),
       }),
-      execute: async ({ query }, { toolCallId }) => {
+      execute: ({ query }, { toolCallId }) => sema.run(async () => {
         const chunks = await retrieveChunksStream({
           query, ownerUserId, topK: RETRIEVE_TOP_K, candidateK: RETRIEVE_CANDIDATE_K,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
@@ -132,7 +137,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds 
         meta.set(toolCallId, { name: "retrieve", input: { query },
           summary: `「${query}」→ ${chunks.length} 件` });
         return lines.length ? lines.join("\n\n") : "該当する資料は見つかりませんでした。";
-      },
+      }),
     }),
     fetch_document: tool({
       description:
@@ -141,7 +146,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds 
       inputSchema: z.object({
         ref: z.number().int().describe("retrieve 結果の出典番号 [n] の数値（例: 1）"),
       }),
-      execute: async ({ ref }, { toolCallId }) => {
+      execute: ({ ref }, { toolCallId }) => sema.run(async () => {
         const hit = registry.resolve(ref);
         if (!hit) {
           meta.set(toolCallId, { name: "fetch_document", input: { ref },
@@ -164,7 +169,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds 
           input: { ref, document: doc.documentTitle },
           summary: `${doc.documentTitle} → ${doc.chunks.length} 段` });
         return lines.length ? lines.join("\n\n") : "文書の本文が取得できませんでした。";
-      },
+      }),
     }),
   };
 }

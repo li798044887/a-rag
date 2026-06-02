@@ -221,6 +221,18 @@ export interface Toast {
   kind: ToastKind;
 }
 
+// ── Agent behavior config (persisted, sent per chat request) ────────────────
+export interface AgentCfg {
+  /** エージェントが取れる最大のツール呼出し回数 */
+  maxSteps: number;
+  /** 同時に走らせるツール数 */
+  parallelTools: number;
+  /** 回答中の各事実に引用を付けることを強制 */
+  requireCitations: boolean;
+  /** 未知の場合に「わからない」と返す */
+  admitUnknown: boolean;
+}
+
 // ── Tweaks (persisted display preferences) ──────────────────────────────────
 export type ToolView = "card" | "timeline" | "log";
 export type Density = "compact" | "comfy";

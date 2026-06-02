@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { ModelMessage } from "ai";
 import { getSessionClaims } from "@/lib/auth";
 import { runAgent } from "@/lib/agent/run";
+import { clampAgentCfg } from "@/lib/agent/config";
 import { createThread, saveCompletedMessage, getThreadMessages, deleteMessagesFrom } from "@/lib/threads";
 import { toModelHistory } from "@/lib/agent/history";
 import type { AgentEvent, ToolCall } from "@/lib/types";
@@ -13,12 +14,13 @@ export async function POST(req: Request) {
   const claims = await getSessionClaims();
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { query, threadId, model, regenerateFrom, attachments, attachmentDocIds } =
+  const { query, threadId, model, regenerateFrom, attachments, attachmentDocIds, agentCfg } =
     (await req.json().catch(() => ({}))) as {
       query?: string; threadId?: string; model?: string; regenerateFrom?: number;
-      attachments?: string[]; attachmentDocIds?: string[];
+      attachments?: string[]; attachmentDocIds?: string[]; agentCfg?: unknown;
     };
   const q = query || "";
+  const cfg = clampAgentCfg(agentCfg);
 
   // スレッドを確定（無ければ作成、タイトルは query から）
   const tid = threadId || (await createThread(claims.sub, q || "新しいスレッド")).id;
@@ -52,7 +54,7 @@ export async function POST(req: Request) {
       let done: Extract<AgentEvent, { type: "done" }> | null = null;
 
       try {
-        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history, attachments, attachmentDocIds })) {
+        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history, attachments, attachmentDocIds, agentCfg: cfg })) {
           if (event.type === "answer-delta") answer += event.text;
           if (event.type === "step") {
             const idx = steps.findIndex((s) => s.id === event.step.id);
