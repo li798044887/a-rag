@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { CitationStyle } from "@/lib/types";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 
 interface Props {
   text: string;
@@ -29,13 +31,14 @@ function citeBtnClass(style: CitationStyle) {
  */
 function AnswerImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
+  const { t } = useT();
   if (!src.startsWith("/api/documents/")) {
     return <span>{alt || src}</span>;
   }
   if (failed) {
     return (
       <span className="text-[12px] text-muted">
-        ［画像を読み込めませんでした{alt ? `：${alt}` : ""}］
+        {interpolate(t.chat.imageLoadError, { alt: alt ? alt : "" })}
       </span>
     );
   }
@@ -54,6 +57,7 @@ function AnswerImage({ src, alt }: { src: string; alt: string }) {
 /** Renders markdown-lite (**bold**, bullets, ![](img), [N] citations) used by answers. */
 export function CitedText({ text, onCite, citationStyle }: Props) {
   const btnCls = citeBtnClass(citationStyle);
+  const { t: dict } = useT();
   const lines = text.split("\n");
   const elements: React.ReactNode[] = [];
 
@@ -91,7 +95,7 @@ export function CitedText({ text, onCite, citationStyle }: Props) {
         return (
           <span key={ti} className="inline">
             {nums.map((n) => (
-              <button key={n} className={btnCls} title={`引用 ${n} を開く`} onClick={() => onCite(Number(n))}>
+              <button key={n} className={btnCls} title={interpolate(dict.chat.openCitation, { n })} onClick={() => onCite(Number(n))}>
                 {citationStyle === "chip" ? `[${n}]` : n}
               </button>
             ))}
