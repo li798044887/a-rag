@@ -3,6 +3,8 @@ import { withThemeByClassName } from "@storybook/addon-themes";
 import { initialize, mswLoader } from "msw-storybook-addon";
 import MockDate from "mockdate";
 import { THEME_STORAGE_KEY } from "@/lib/constants";
+import { LocaleProvider } from "@/i18n/context";
+import { getDictionary } from "@/i18n/dictionary";
 import { mswHandlers } from "./msw-handlers";
 // アプリ本体と同じトークン/テーマ/アニメーションを読み込む（Tailwind v4 は
 // ルートの postcss.config.mjs 経由で処理される）。
@@ -23,6 +25,13 @@ const preview: Preview = {
   // ツールバーから light / dark を切り替え。アプリは <html> に theme-* を付与する
   // ので同じ仕組みに合わせる。
   decorators: [
+    // 既存ストーリーは日本語 UI を前提にアサートしているため、辞書は ja を既定にする。
+    // useT() を使うコンポーネントはこの Provider 配下でないと throw するので全体に適用する。
+    (Story) => (
+      <LocaleProvider locale="ja" dict={getDictionary("ja")}>
+        <Story />
+      </LocaleProvider>
+    ),
     withThemeByClassName({
       themes: { light: "theme-light", dark: "theme-dark" },
       defaultTheme: "light",
