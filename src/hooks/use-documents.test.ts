@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { mergeNextPage } from "@/hooks/use-documents";
+import { mergeNextPage, removeByIds } from "@/hooks/use-documents";
 import type { DocumentSummary } from "@/lib/types";
 
 const doc = (id: string): DocumentSummary => ({
@@ -11,4 +11,11 @@ test("mergeNextPage appends and dedupes by id", () => {
   const prev = [doc("a"), doc("b")];
   const merged = mergeNextPage(prev, [doc("b"), doc("c")]);
   expect(merged.map((d) => d.id)).toEqual(["a", "b", "c"]);
+});
+
+test("removeByIds drops matching ids and counts removals", () => {
+  const items = [doc("a"), doc("b"), doc("c")];
+  const { items: next, removed } = removeByIds(items, ["a", "c", "zzz"]);
+  expect(next.map((d) => d.id)).toEqual(["b"]);
+  expect(removed).toBe(2);
 });

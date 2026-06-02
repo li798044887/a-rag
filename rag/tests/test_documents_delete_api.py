@@ -11,6 +11,7 @@ def _install_fakes(monkeypatch, owner="u1"):
     deleted = {"vectors": None, "chunks": False, "jobs": False, "doc": False, "files": None}
 
     class _Doc:
+        id = "d1"
         owner_user_id = owner
         raw_path = "/u/d1.pdf"
         parsed_md_path = None
