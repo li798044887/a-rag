@@ -2,6 +2,7 @@ import { auth } from "./auth";
 import { chat } from "./chat";
 import { common } from "./common";
 import { documents } from "./documents";
+import { feedback } from "./feedback";
 import { modals } from "./modals";
 import { sidebar } from "./sidebar";
 import { sources } from "./sources";
@@ -13,6 +14,7 @@ export const zh = {
   chat,
   common,
   documents,
+  feedback,
   modals,
   sidebar,
   sources,

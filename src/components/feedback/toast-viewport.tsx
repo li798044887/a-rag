@@ -1,6 +1,7 @@
 "use client";
 
 import type { Toast } from "@/lib/types";
+import { useT } from "@/i18n/context";
 
 interface Props {
   toasts: Toast[];
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function ToastViewport({ toasts, onDismiss }: Props) {
+  const { t: dict } = useT();
   return (
     <div className="pointer-events-none fixed bottom-6 left-1/2 z-[200] flex -translate-x-1/2 flex-col-reverse gap-2 max-md:bottom-[max(82px,calc(env(safe-area-inset-bottom)+70px))] max-md:left-3 max-md:right-3 max-md:translate-x-0">
       {toasts.map((t) => (
@@ -44,7 +46,7 @@ export function ToastViewport({ toasts, onDismiss }: Props) {
           <button
             className="grid h-[22px] w-[22px] place-items-center rounded-[5px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
             onClick={() => onDismiss(t.id)}
-            aria-label="閉じる"
+            aria-label={dict.feedback.closeAriaLabel}
           >
             <svg viewBox="0 0 12 12" width="10" height="10">
               <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />

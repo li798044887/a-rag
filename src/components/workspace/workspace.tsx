@@ -21,6 +21,8 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useToasts } from "@/hooks/use-toasts";
 import { useTweaks } from "@/hooks/use-tweaks";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 import { useUploads } from "@/hooks/use-uploads";
 import { useWorkspaceStats } from "@/hooks/use-workspace-stats";
 import { cn } from "@/lib/utils";
@@ -36,6 +38,7 @@ const NO_TURNS: Turn[] = [];
 
 export function Workspace() {
   const { tweaks, setTweak } = useTweaks();
+  const { t } = useT();
   const { user, claims, status, signIn, register, signOut, setRemember, revokeAllSessions } = useAuth();
   const { toasts, push, dismiss } = useToasts();
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -220,38 +223,38 @@ export function Workspace() {
           ));
         },
         onDone: (id, status) => {
-          if (status === "error") push("実行に失敗しました", "error");
+          if (status === "error") push(t.feedback.runFailed, "error");
           refreshThreads();
         },
       });
     },
-    [agent, uploads, push, activeThreadId, refreshThreads, model, turns],
+    [agent, uploads, push, activeThreadId, refreshThreads, model, turns, t],
   );
 
   const stopRun = () => {
     agent.cancel(activeThreadId);
     setPhase("cancelled");
-    push("実行を停止しました", "info");
+    push(t.feedback.runStopped, "info");
   };
 
   const regenerate = (turnIdx: number) => {
     // 実行中の再生成は禁止。許すと truncateFrom が進行中ターンを state から切り落とす一方、
     // その fetch は中断されず、孤立したストリームが再生成ターンへ書き込んで破損する。
     if (phase === "running") {
-      push("実行中は再生成できません", "info");
+      push(t.feedback.regenerateBlocked, "info");
       return;
     }
     startRun("", { regenerateFrom: turnIdx });
-    push("回答を再生成しています", "info");
+    push(t.feedback.regenerating, "info");
   };
 
   const copyAnswer = async (turnIdx: number) => {
     try {
       const text = (turns[turnIdx]?.answer ?? "").replace(/\*\*/g, "").replace(/\[\d+\]/g, "");
       await navigator.clipboard.writeText(text);
-      push("回答をコピーしました", "success");
+      push(t.feedback.answerCopied, "success");
     } catch {
-      push("コピーに失敗しました", "error");
+      push(t.feedback.copyFailed, "error");
     }
   };
 
@@ -297,13 +300,13 @@ export function Workspace() {
           body: JSON.stringify({ title }),
         });
         if (!res.ok) throw new Error("failed");
-        push("スレッド名を変更しました", "success");
+        push(t.feedback.threadRenamed, "success");
       } catch {
         setThreads(prev);
-        push("名前の変更に失敗しました", "error");
+        push(t.feedback.threadRenameFailed, "error");
       }
     },
-    [threads, push],
+    [threads, push, t],
   );
 
   const toggleStar = useCallback(
@@ -317,13 +320,13 @@ export function Workspace() {
           body: JSON.stringify({ pinned }),
         });
         if (!res.ok) throw new Error("failed");
-        push(pinned ? "スターを付けました" : "スターを外しました", "success");
+        push(pinned ? t.feedback.starAdded : t.feedback.starRemoved, "success");
       } catch {
         setThreads(prev);
-        push("スターの更新に失敗しました", "error");
+        push(t.feedback.starUpdateFailed, "error");
       }
     },
-    [threads, push],
+    [threads, push, t],
   );
 
   const deleteThread = useCallback(
@@ -356,18 +359,18 @@ export function Workspace() {
       try {
         const res = await fetch(`/api/threads/${id}`, { method: "DELETE" });
         if (!res.ok) throw new Error("failed");
-        push("スレッドを削除しました", "success");
+        push(t.feedback.threadDeleted, "success");
       } catch {
         setThreads(prev);
-        push("削除に失敗しました", "error");
+        push(t.feedback.threadDeleteFailed, "error");
       }
     },
-    [threads, activeThreadId, liveId, agent, push, confirm],
+    [threads, activeThreadId, liveId, agent, push, confirm, t],
   );
 
   const addToProject = useCallback(() => {
-    push("プロジェクト機能は近日公開予定です", "info");
-  }, [push]);
+    push(t.feedback.projectComingSoon, "info");
+  }, [push, t]);
 
   const selectThread = (id: string) => {
     if (id === activeThreadId) {
@@ -424,12 +427,12 @@ export function Workspace() {
     const filename = src.path.split("/").pop() || `${src.id}.md`;
     const body = `# ${src.title}\n${src.author}\n\n` + src.sections.map((s) => `## ${s.heading}\n\n${s.body}\n`).join("\n");
     triggerDownload(new Blob([body], { type: "text/markdown" }), filename);
-    push(`「${filename}」をダウンロードしました`, "success");
+    push(interpolate(t.feedback.sourceDownloaded, { filename }), "success");
   };
 
   const openSourceTab = (src: Source) => {
     const win = window.open(`/api/documents/${encodeURIComponent(src.id)}/raw`, "_blank");
-    if (!win) push("ポップアップがブロックされています", "error");
+    if (!win) push(t.feedback.popupBlocked, "error");
   };
 
   const handleRPAction = (kind: RightPanelAction, src: Source) => {
@@ -440,12 +443,12 @@ export function Workspace() {
 
   const exportThread = () => {
     if (turns.length === 0) {
-      push("エクスポートするスレッドがありません", "info");
+      push(t.feedback.exportEmpty, "info");
       return;
     }
     const md = buildThreadMarkdown(turns);
     triggerDownload(new Blob([md], { type: "text/markdown" }), `arag-thread-${activeThreadId}.md`);
-    push("スレッドをMarkdownでエクスポートしました", "success");
+    push(t.feedback.exported, "success");
   };
 
   // ── Drag & drop ───────────────────────────────────────────────────────
@@ -688,7 +691,7 @@ export function Workspace() {
                       else next[idx] = v;
                       return next;
                     });
-                    if (feedback[idx] !== v) push(v === "up" ? "フィードバックを送信しました" : "改善要望を受け付けました", "success");
+                    if (feedback[idx] !== v) push(v === "up" ? t.feedback.feedbackSent : t.feedback.feedbackImprovement, "success");
                   }}
                   feedback={feedback}
                   activeCiteTurn={activeCiteTurn}
@@ -715,7 +718,7 @@ export function Workspace() {
             scope={scope}
             onChangeScope={(s) => {
               setScope(s);
-              push(`検索範囲: ${s.label}`, "info");
+              push(interpolate(t.feedback.scopeChanged, { label: s.label }), "info");
             }}
           />
         </div>
@@ -762,7 +765,7 @@ export function Workspace() {
         open={!!shareTarget}
         item={shareTarget?.item ?? null}
         onClose={() => setShareTarget(null)}
-        onCopyLink={(err) => push(err ? "コピーに失敗しました" : "共有リンクをコピーしました", err ? "error" : "success")}
+        onCopyLink={(err) => push(err ? t.feedback.linkCopyFailed : t.feedback.linkCopied, err ? "error" : "success")}
       />
       <DropOverlay visible={dragging} />
       <SettingsModal
@@ -774,7 +777,7 @@ export function Workspace() {
           setModel(m);
           localStorage.setItem(MODEL_STORAGE_KEY, m.id);
           setSettingsOpen(false);
-          push(`${m.label} に切り替えました`, "success");
+          push(interpolate(t.feedback.modelSwitched, { label: m.label }), "success");
         }}
         tweaks={tweaks}
         setTweak={setTweak}
@@ -783,9 +786,9 @@ export function Workspace() {
         onSetRemember={async (v) => {
           try {
             await setRemember(v);
-            push(v ? "セッションを保存します" : "セッション保存を解除しました", "success");
+            push(v ? t.feedback.sessionSaved : t.feedback.sessionSaveDisabled, "success");
           } catch {
-            push("セッション設定の更新に失敗しました", "error");
+            push(t.feedback.sessionUpdateFailed, "error");
           }
         }}
         onRevokeAllSessions={async () => {
@@ -799,10 +802,10 @@ export function Workspace() {
           if (!ok) return;
           try {
             await revokeAllSessions();
-            push("全デバイスからサインアウトしました", "success");
+            push(t.feedback.signedOutAll, "success");
             setSettingsOpen(false);
           } catch {
-            push("サインアウトに失敗しました", "error");
+            push(t.feedback.signOutFailed, "error");
           }
         }}
       />
