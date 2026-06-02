@@ -4,6 +4,7 @@ import { common } from "./common";
 import { documents } from "./documents";
 import { modals } from "./modals";
 import { sidebar } from "./sidebar";
+import { sources } from "./sources";
 import { uploads } from "./uploads";
 import type { Dictionary } from "../zh";
 
@@ -15,5 +16,6 @@ export const ja: Dictionary = {
   documents,
   modals,
   sidebar,
+  sources,
   uploads,
 };

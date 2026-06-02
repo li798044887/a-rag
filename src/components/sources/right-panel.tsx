@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { PanelResizer } from "@/components/sources/panel-resizer";
 import { PlainSectionBody, RenderedSectionBody } from "@/components/sources/rendered-section-body";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 import type { CitationMap, Source, SourceType } from "@/lib/types";
 
 export type RightPanelAction = "open-source" | "download" | "share";
@@ -51,6 +53,7 @@ const iconBtn = "grid h-[26px] w-[26px] place-items-center rounded-md border-0 b
 type ViewMode = "html" | "text" | "pdf";
 
 export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction, resizable, panelWidth = 420, onResizeWidth }: Props) {
+  const { t } = useT();
   const bodyRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("html");
@@ -82,15 +85,15 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
     return (
       <div className={cn(panelCls, "grid-rows-[auto_1fr]")}>
         <div className="flex h-[52px] items-center justify-between border-b-[0.5px] border-divider px-4 max-md:px-3.5">
-          <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-fg">一次資料</span>
-          <button className={iconBtn} title="閉じる" onClick={onClose}>
+          <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-fg">{t.sources.panelTitle}</span>
+          <button className={iconBtn} title={t.sources.closePanelTitle} onClick={onClose}>
             <svg viewBox="0 0 16 16" width="12" height="12">
               <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
             </svg>
           </button>
         </div>
         <div className="grid place-items-center px-6 text-center text-[12.5px] leading-[1.6] text-muted">
-          回答の生成が完了すると、参照された一次資料がここに表示されます。
+          {t.sources.emptyState}
         </div>
       </div>
     );
@@ -107,16 +110,16 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
               <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
               <path d="M6 6h4M6 8.5h4M6 11h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
-            <span>一次資料</span>
+            <span>{t.sources.panelTitle}</span>
             <span className="rounded-full bg-divider px-1.5 py-px font-mono text-[10.5px] text-muted">{sources.length}</span>
           </div>
           <div className="flex gap-0.5">
-            <button className={iconBtn} title="ソースを新しいタブで開く" onClick={() => onAction("open-source", active)}>
+            <button className={iconBtn} title={t.sources.openInNewTab} onClick={() => onAction("open-source", active)}>
               <svg viewBox="0 0 16 16" width="12" height="12">
                 <path d="M6 3H3v10h10v-3M9 3h4v4M13 3l-6 6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            <button className={iconBtn} title="閉じる" onClick={onClose}>
+            <button className={iconBtn} title={t.sources.closePanelTitle} onClick={onClose}>
               <svg viewBox="0 0 16 16" width="12" height="12">
                 <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
               </svg>
@@ -125,7 +128,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
         </div>
         {contextQuery && (
           <div className="truncate border-b-[0.5px] border-divider px-4 py-2 text-[11.5px] text-muted max-md:px-3.5">
-            「{contextQuery}」の出典
+            {interpolate(t.sources.contextLabel, { query: contextQuery })}
           </div>
         )}
       </div>
@@ -154,12 +157,12 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
       {/* Meta */}
       <div className="flex min-w-0 flex-col gap-1 border-b-[0.5px] border-divider bg-surface-2 px-4 py-2.5 max-md:px-3.5">
         <div className="flex items-baseline gap-2 text-[11px]">
-          <span className="min-w-[32px] font-mono text-[9.5px] uppercase tracking-[0.05em] text-muted-2">パス</span>
+          <span className="min-w-[32px] font-mono text-[9.5px] uppercase tracking-[0.05em] text-muted-2">{t.sources.metaPath}</span>
           <code className="break-all font-mono text-[11px] text-fg-2">{active.path}</code>
         </div>
         {active && (
           <div className="mt-1 flex gap-1">
-            {([["html", "HTML整形"], ["text", "解析テキスト"], ...(isPdf ? [["pdf", "元PDF"]] as const : [])] as const).map(([mode, label]) => (
+            {([["html", t.sources.viewHtml], ["text", t.sources.viewText], ...(isPdf ? [["pdf", t.sources.viewPdf]] as const : [])] as const).map(([mode, label]) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
@@ -208,7 +211,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
                   <svg viewBox="0 0 12 12" width="9" height="9">
                     <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  引用箇所
+                  {t.sources.citedSection}
                 </div>
               )}
               <h3 className="mb-1.5 min-w-0 text-[12.5px] font-bold tracking-[-0.005em] text-fg [overflow-wrap:anywhere]">{sec.heading}</h3>
@@ -230,7 +233,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
           <svg viewBox="0 0 16 16" width="11" height="11">
             <path d="M8 2v8m0 0l-3-3m3 3l3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          ダウンロード
+          {t.sources.download}
         </button>
         <button className="inline-flex h-[26px] items-center gap-[5px] rounded-[7px] border-[0.5px] border-divider-strong bg-surface px-2.5 text-[11.5px] font-medium text-fg-2 hover:bg-surface-2" onClick={() => onAction("share", active)}>
           <svg viewBox="0 0 16 16" width="11" height="11">
@@ -239,12 +242,12 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
             <circle cx="12" cy="12" r="1.5" fill="currentColor" />
             <path d="M5.3 7.3 10.7 4.7M5.3 8.7l5.4 2.6" stroke="currentColor" strokeWidth="1.3" />
           </svg>
-          共有
+          {t.sources.share}
         </button>
         <div className="flex-1 max-md:hidden" />
         {typeof active.score === "number" && (
           <span className="font-mono text-[11px] text-muted max-md:ml-auto">
-            関連度 <strong className="text-accent">{active.score.toFixed(2)}</strong>
+            {t.sources.relevance} <strong className="text-accent">{active.score.toFixed(2)}</strong>
           </span>
         )}
       </div>

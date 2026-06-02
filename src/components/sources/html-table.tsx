@@ -6,6 +6,7 @@ import { TeXText } from "@/components/sources/tex-text";
 import { useOverflow } from "@/components/sources/use-overflow";
 import { TableSheet } from "@/components/sources/table-sheet";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/context";
 
 function Seg({ s, renderMath }: { s: InlineSegment; renderMath?: boolean }) {
   const cls = cn(s.bold && "font-semibold", s.italic && "italic", s.underline && "underline");
@@ -35,6 +36,7 @@ function Lines({ lines, renderMath }: { lines: InlineSegment[][]; renderMath?: b
 /** テーブルHTML文字列を整形描画する。解析できない場合は素のテキストにフォールバック。
  *  renderMath=true でセル内の TeX 数式を KaTeX 描画する（既定は無効＝引用パネルの通貨 $ 誤爆を避ける）。 */
 export function HtmlTable({ html, className, renderMath }: { html: string; className?: string; renderMath?: boolean }) {
+  const { t } = useT();
   const model = parseTableHtml(html);
   const { ref, overflow } = useOverflow<HTMLDivElement>();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -108,13 +110,13 @@ export function HtmlTable({ html, className, renderMath }: { html: string; class
         <button
           type="button"
           onClick={() => setSheetOpen(true)}
-          title="表を全画面で開く"
+          title={t.sources.expandTable}
           className="absolute right-1.5 top-1.5 z-[1] inline-flex h-6 items-center gap-1 rounded-[6px] border-[0.5px] border-divider-strong bg-surface/90 px-1.5 text-[10.5px] font-medium text-fg-2 opacity-0 backdrop-blur-sm transition-opacity hover:bg-surface group-hover/tbl:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
         >
           <svg viewBox="0 0 16 16" width="11" height="11">
             <path d="M6 2H2v4M10 14h4v-4M2 2l5 5M14 14l-5-5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          拡大
+          {t.sources.expand}
         </button>
       )}
 

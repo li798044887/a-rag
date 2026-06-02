@@ -4,6 +4,7 @@ import { common } from "./common";
 import { documents } from "./documents";
 import { modals } from "./modals";
 import { sidebar } from "./sidebar";
+import { sources } from "./sources";
 import { uploads } from "./uploads";
 
 /** zh は辞書の唯一の出所。型 Dictionary はここから導出する。 */
@@ -14,6 +15,7 @@ export const zh = {
   documents,
   modals,
   sidebar,
+  sources,
   uploads,
 };
 

@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { clampPanelWidth, RP_WIDTH_DEFAULT, RP_WIDTH_MAX, RP_WIDTH_MIN } from "@/components/workspace/panel-width";
+import { useT } from "@/i18n/context";
 
 /**
  * パネル左境界に置く幅調整ハンドル。ハンドルは左にあるので
@@ -9,6 +10,7 @@ import { clampPanelWidth, RP_WIDTH_DEFAULT, RP_WIDTH_MAX, RP_WIDTH_MIN } from "@
  * ダブルクリックで既定幅に戻す。
  */
 export function PanelResizer({ width, onWidth }: { width: number; onWidth: (px: number) => void }) {
+  const { t } = useT();
   const drag = useRef<{ startX: number; startW: number } | null>(null);
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -46,7 +48,7 @@ export function PanelResizer({ width, onWidth }: { width: number; onWidth: (px: 
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="一次資料パネルの幅を調整"
+      aria-label={t.sources.panelResizerAriaLabel}
       aria-valuenow={width}
       aria-valuemin={RP_WIDTH_MIN}
       aria-valuemax={RP_WIDTH_MAX}

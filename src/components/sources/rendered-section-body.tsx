@@ -5,15 +5,21 @@ import { HtmlTable } from "@/components/sources/html-table";
 import { parseSectionBody } from "@/components/sources/parse-section-body";
 import { TeXBlock, TeXText } from "@/components/sources/tex-text";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 
 const proseCls = "whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2 [overflow-wrap:anywhere]";
 
 function SectionImage({ src, alt }: { src: string; alt: string }) {
+  const { t } = useT();
   const [failed, setFailed] = useState(false);
   if (failed) {
+    const msg = alt
+      ? interpolate(t.sources.imageLoadFailedWithAlt, { alt })
+      : t.sources.imageLoadFailed;
     return (
       <div className="rounded-[8px] border-[0.5px] border-divider bg-surface-2 px-3 py-4 text-center text-[11.5px] text-muted">
-        画像を読み込めませんでした{alt ? `（${alt}）` : ""}
+        {msg}
       </div>
     );
   }
