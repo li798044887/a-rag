@@ -23,6 +23,18 @@ export function uploadActionFor(status: UploadStatus): "abort" | "cancel" | "non
   return "remove";
 }
 
+/** 進捗監視が必要なファイル（queued/processing）の jobId を返す。 */
+export function activeJobIds(files: StagedFile[]): string[] {
+  return files
+    .filter((f) => (f.status === "queued" || f.status === "processing") && !!f.jobId)
+    .map((f) => f.jobId as string);
+}
+
+/** jobId 集合を順序非依存・重複排除した安定キーにする（再接続判定に使う）。 */
+export function reconnectKey(jobIds: string[]): string {
+  return Array.from(new Set(jobIds)).sort().join(",");
+}
+
 /** rag のステージ status を粗い UploadStatus に丸める。 */
 function toUploadStatus(s: string): UploadStatus {
   if (s === "ready") return "ready";
