@@ -1,4 +1,5 @@
 import io
+import os
 import uuid
 
 from app.config import settings
@@ -119,7 +120,6 @@ def test_duplicate_different_owner_allowed(client, monkeypatch):
 
 
 def test_duplicate_does_not_leave_orphan_file(client, monkeypatch):
-    import os
     owner = f"dup-{uuid.uuid4().hex}"
     content = uuid.uuid4().bytes
     _upload(client, owner, content, monkeypatch)

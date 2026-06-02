@@ -22,7 +22,7 @@ class Document(Base):
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String, default="queued")
     raw_path: Mapped[str] = mapped_column(String)
-    content_hash: Mapped[str | None] = mapped_column(String, nullable=True, index=False)
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     parsed_md_path: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="document")

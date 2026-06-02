@@ -27,8 +27,11 @@ def upgrade() -> None:
     bind = op.get_bind()
     rows = bind.execute(sa.text("SELECT id, raw_path FROM documents")).fetchall()
     for row in rows:
+        raw_path = row.raw_path
+        if not raw_path:
+            continue
         try:
-            data = Path(row.raw_path).read_bytes()
+            data = Path(raw_path).read_bytes()
         except OSError:
             continue
         digest = hashlib.sha256(data).hexdigest()
@@ -36,6 +39,25 @@ def upgrade() -> None:
             sa.text("UPDATE documents SET content_hash = :h WHERE id = :id"),
             {"h": digest, "id": row.id},
         )
+
+    # 既存データに同一 (owner, content_hash) の非 error 重複があると unique index 作成が
+    # 失敗するため、各グループで最古の1行だけ残し、残りは content_hash を NULL にして
+    # index 対象外にする（レガシー行は重複判定に参加しないが許容）。
+    bind.execute(sa.text("""
+        WITH ranked AS (
+            SELECT id,
+                   row_number() OVER (
+                       PARTITION BY owner_user_id, content_hash
+                       ORDER BY created_at, id
+                   ) AS rn
+            FROM documents
+            WHERE content_hash IS NOT NULL AND status != 'error'
+        )
+        UPDATE documents AS d
+        SET content_hash = NULL
+        FROM ranked
+        WHERE d.id = ranked.id AND ranked.rn > 1
+    """))
 
     # 同一ユーザー・同一内容で error 以外が同時に2行存在することを禁止する部分ユニークindex。
     op.create_index(
