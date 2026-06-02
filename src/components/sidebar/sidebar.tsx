@@ -72,11 +72,15 @@ export function Sidebar(props: SidebarProps) {
     );
   }
 
-  // relativeTime() の実出力（たった今 / X分前 / X時間前 / X日前 / X週間前 / Xヶ月前 / X年前）に
-  // 合わせて振り分ける。どれにも当たらないものは「以前」に落とし、スレッドが
-  // どのグループからも漏れて消えないようにする（catch-all）。
-  const isToday = (u: string) => u === "今" || u === "たった今" || u.includes("分前") || u.includes("時間");
-  const isWeek = (u: string) => u === "昨日" || u.includes("日前");
+  // relativeTime() の実出力に合わせて振り分ける。ja/zh 両言語のパターンを含む。
+  // ja: たった今/X分前/X時間前 → today, 昨日/X日前 → this week
+  // zh: 刚刚/X分钟前/X小时前 → today, X天前 → this week
+  // どれにも当たらないものは「以前」に落としてスレッドが消えないようにする（catch-all）。
+  const isToday = (u: string) =>
+    u === "今" || u === "たった今" || u === "刚刚" ||
+    u.includes("分前") || u.includes("分钟前") ||
+    u.includes("時間") || u.includes("小时");
+  const isWeek = (u: string) => u === "昨日" || u === "昨天" || u.includes("日前") || u.includes("天前");
   const pinned = filtered.filter((t) => t.pinned);
   const rest = filtered.filter((t) => !t.pinned);
   const groups = [

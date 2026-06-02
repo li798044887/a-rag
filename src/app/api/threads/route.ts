@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionClaims } from "@/lib/auth";
 import { createThread, listThreads } from "@/lib/threads";
+import { getLocale } from "@/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,8 @@ async function userId(): Promise<string | null> {
 export async function GET() {
   const uid = await userId();
   if (!uid) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  return NextResponse.json({ threads: await listThreads(uid) });
+  const locale = await getLocale();
+  return NextResponse.json({ threads: await listThreads(uid, locale) });
 }
 
 export async function POST(req: Request) {

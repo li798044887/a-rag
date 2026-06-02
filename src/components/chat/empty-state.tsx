@@ -1,7 +1,7 @@
 "use client";
 
 import { BrandMark, Icon } from "@/components/icons";
-import { SUGGESTED_PROMPTS } from "@/lib/data";
+import { getSuggestedPrompts } from "@/lib/data";
 import { formatLastSynced, type WorkspaceStats } from "@/lib/workspace-stats";
 import type { AppUser } from "@/lib/types";
 import { useT } from "@/i18n/context";
@@ -23,10 +23,11 @@ interface EmptyStateProps {
 export function EmptyState({ user, stats, onPickPrompt }: EmptyStateProps) {
   const { locale, t } = useT();
   const localeStr = locale === "zh" ? "zh-CN" : "ja-JP";
+  const suggestedPrompts = getSuggestedPrompts(locale);
   const meta = [
     [stats.indexedDocumentCount.toLocaleString(localeStr), t.chat.metaIndexed],
     [stats.connectedDataSourceCount.toLocaleString(localeStr), t.chat.metaConnected],
-    [t.chat.metaLastSync, formatLastSynced(stats.lastSyncedAt)],
+    [t.chat.metaLastSync, formatLastSynced(stats.lastSyncedAt, locale)],
   ];
 
   return (
@@ -43,7 +44,7 @@ export function EmptyState({ user, stats, onPickPrompt }: EmptyStateProps) {
         </p>
 
         <div className="mx-auto grid max-w-[820px] grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3 text-left max-md:max-w-none max-md:grid-cols-1 max-md:gap-2">
-          {SUGGESTED_PROMPTS.map((p, i) => (
+          {suggestedPrompts.map((p, i) => (
             <button
               key={i}
               onClick={() => onPickPrompt(p.label)}
