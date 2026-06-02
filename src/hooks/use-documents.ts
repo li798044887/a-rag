@@ -10,6 +10,13 @@ export function mergeNextPage(prev: DocumentSummary[], next: DocumentSummary[]):
   return [...prev, ...next.filter((d) => !seen.has(d.id))];
 }
 
+/** items から ids に一致する文書を除去し、除去件数も返す純粋関数。 */
+export function removeByIds(items: DocumentSummary[], ids: string[]): { items: DocumentSummary[]; removed: number } {
+  const idSet = new Set(ids);
+  const next = items.filter((d) => !idSet.has(d.id));
+  return { items: next, removed: items.length - next.length };
+}
+
 const PENDING = new Set(["queued", "processing", "parsing", "chunking", "embedding", "indexing"]);
 
 /** 文書一覧の取得・検索・ページング・削除・再索引・状態ポーリングを担うデータ層。 */
@@ -20,6 +27,8 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const onToastRef = useRef(onToast);
   useEffect(() => { onToastRef.current = onToast; }, [onToast]);
@@ -75,6 +84,42 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
     onToastRef.current?.("文書を削除しました", "success");
   }, [items, total]);
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+  const selectAllVisible = useCallback(() => setSelectedIds(new Set(items.map((d) => d.id))), [items]);
+  const enterSelection = useCallback(() => setSelectionMode(true), []);
+  const exitSelection = useCallback(() => { setSelectionMode(false); setSelectedIds(new Set()); }, []);
+
+  const removeMany = useCallback(async (ids: string[]) => {
+    if (!ids.length) return;
+    const prev = items;
+    const prevTotal = total;
+    const { items: next, removed } = removeByIds(items, ids);
+    setItems(next);
+    setTotal((t) => Math.max(0, t - removed));
+    const r = await fetch("/api/documents/bulk-delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ document_ids: ids }),
+    }).catch(() => null);
+    if (!r || !r.ok) {
+      setItems(prev);
+      setTotal(prevTotal);
+      onToastRef.current?.("削除に失敗しました", "error");
+      return;
+    }
+    onToastRef.current?.(`${removed}件の文書を削除しました`, "success");
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, [items, total]);
+
   const retry = useCallback(async (jobId: string, id: string) => {
     setItems((cur) => cur.map((d) => (d.id === id ? { ...d, status: "processing", error: null } : d)));
     const r = await fetch(`/api/uploads/${encodeURIComponent(jobId)}/retry`, { method: "POST" }).catch(() => null);
@@ -100,8 +145,12 @@ export function useDocuments(open: boolean, onToast?: PushToast) {
     return () => clearInterval(t);
   }, [open, items]);
 
+  const allVisibleSelected = items.length > 0 && items.every((d) => selectedIds.has(d.id));
+
   return {
     items, total, nextCursor, loading, query, statusFilter,
     setQuery, setStatusFilter, load, loadMore, remove, retry,
+    selectionMode, selectedIds, allVisibleSelected,
+    enterSelection, exitSelection, toggleSelect, clearSelection, selectAllVisible, removeMany,
   };
 }
