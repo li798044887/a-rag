@@ -10,6 +10,8 @@ import { buildTools, type ToolCallMeta } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
 import { StepBus } from "@/lib/agent/step-bus";
 import type { AgentEvent, ToolCall, ToolName } from "@/lib/types";
+// TODO(Task 9): locale をシグネチャから受け取り、getAgentPrompts(locale) へ切り替える。
+import { getAgentPrompts } from "@/lib/agent/prompts";
 
 export interface RunInput {
   query: string;
@@ -73,7 +75,8 @@ async function pump(
 
     const registry = new CitationRegistry();
     const meta = new Map<string, ToolCallMeta>();
-    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds });
+    // TODO(Task 9): locale を受け取り getAgentPrompts(locale) へ差し替える。
+    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts: getAgentPrompts("ja") });
 
     const userContent = buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);
     const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: userContent }];

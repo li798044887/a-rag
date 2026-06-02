@@ -24,11 +24,12 @@ import { CitationRegistry } from "@/lib/agent/citations";
 import { retrieveChunksStream, fetchDocument } from "@/lib/agent/retrieve-client";
 import { StepBus } from "@/lib/agent/step-bus";
 import type { AgentEvent } from "@/lib/types";
+import { getAgentPrompts } from "@/lib/agent/prompts";
 
 test("retrieve tool registers citations and returns numbered text", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja") });
   const out = await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-1", messages: [] } as never);
 
   expect(typeof out).toBe("string");
@@ -41,7 +42,7 @@ test("retrieve tool registers citations and returns numbered text", async () => 
 test("retrieve tool uses a bounded rerank candidate count", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja") });
 
   await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-candidates", messages: [] } as never);
 
@@ -52,7 +53,7 @@ test("retrieve tool uses a bounded rerank candidate count", async () => {
 test("fetch_document resolves a citation ref to the real document/chunk ids", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja") });
   // 先に retrieve して [1] を登録（chunkId=c1, documentId=d1）。
   await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-r", messages: [] } as never);
 
@@ -69,7 +70,7 @@ test("fetch_document resolves a citation ref to the real document/chunk ids", as
 test("fetch_document errors when the ref was never retrieved", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja") });
 
   const out = (await tools.fetch_document.execute!(
     { ref: 99 }, { toolCallId: "call-x", messages: [] } as never)) as string;
@@ -80,7 +81,7 @@ test("fetch_document errors when the ref was never retrieved", async () => {
 test("retrieve output does not leak raw uuids (only [n] is shown)", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja") });
   const out = (await tools.retrieve.execute!(
     { query: "認証" }, { toolCallId: "call-ids", messages: [] } as never)) as string;
 
@@ -93,7 +94,7 @@ test("retrieve tool falls back when no chunks are returned", async () => {
   vi.mocked(retrieveChunksStream).mockResolvedValueOnce([]);
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja") });
   const out = await tools.retrieve.execute!({ query: "存在しない" }, { toolCallId: "call-3", messages: [] } as never);
 
   expect(out).toBe("該当する資料は見つかりませんでした。");
@@ -104,7 +105,7 @@ test("fetch_document tool falls back when no chunks are returned", async () => {
   vi.mocked(fetchDocument).mockResolvedValueOnce({ documentId: "d1", documentTitle: "X", chunks: [] });
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja") });
   await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-r2", messages: [] } as never);
 
   const out = await tools.fetch_document.execute!(
@@ -120,7 +121,7 @@ test("stageToEvent populates per-stage input/output detail", async () => {
   const events: AgentEvent[] = [];
   const drain = (async () => { for await (const e of bus) events.push(e); })();
 
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus, prompts: getAgentPrompts("ja") });
   await tools.retrieve.execute!({ query: "認証は?" }, { toolCallId: "call-1", messages: [] } as never);
   bus.close();
   await drain;
@@ -143,7 +144,7 @@ test("retrieve tool pushes nested sub-steps with parentId to the bus", async () 
   const events: AgentEvent[] = [];
   const drain = (async () => { for await (const e of bus) events.push(e); })();
 
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus, prompts: getAgentPrompts("ja") });
   await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-1", messages: [] } as never);
   bus.close();
   await drain;
@@ -159,7 +160,7 @@ test("retrieve tool scopes to attachmentDocIds when provided", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
   const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(),
-    attachmentDocIds: ["docA", "docB"] });
+    attachmentDocIds: ["docA", "docB"], prompts: getAgentPrompts("ja") });
 
   await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-scope", messages: [] } as never);
 
@@ -170,7 +171,7 @@ test("retrieve tool scopes to attachmentDocIds when provided", async () => {
 test("retrieve tool passes undefined documentIds without attachments", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
-  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus() });
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja") });
 
   await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-noscope", messages: [] } as never);
 
