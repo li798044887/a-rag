@@ -165,11 +165,12 @@ export function useUploads(onToast?: PushToast) {
             applyFrame(JSON.parse(line.slice(5).trim()) as ProgressFrame);
           }
         }
-        // 正常終了（サーバが全ジョブ完了で close）。取りこぼしがあれば再同期する。
+        // 正常終了（サーバが全ジョブ完了で close）。状態を片付けるのみ。
+        // 新規ジョブは enqueue/retry の scheduleSync が拾う。ここで再同期すると
+        // filesRef 更新前で完了ジョブを再購読し、トースト二重発火やループを招くため行わない。
         if (progressStream.current === ctrl) {
           progressStream.current = null;
           streamKey.current = "";
-          if (activeJobIds(filesRef.current).length > 0) syncRef.current();
         }
       } catch {
         if (ctrl.signal.aborted) return; // 切り替え/clear による中断は無視。
