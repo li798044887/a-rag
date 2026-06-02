@@ -4,6 +4,7 @@ import { getSessionClaims } from "@/lib/auth";
 import { runAgent } from "@/lib/agent/run";
 import { createThread, saveCompletedMessage, getThreadMessages, deleteMessagesFrom } from "@/lib/threads";
 import { toModelHistory } from "@/lib/agent/history";
+import { getLocale } from "@/i18n/server";
 import type { AgentEvent, ToolCall } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -19,6 +20,9 @@ export async function POST(req: Request) {
       attachments?: string[]; attachmentDocIds?: string[];
     };
   const q = query || "";
+
+  // リクエストの Cookie から言語を解決し、システムプロンプト/フォールバックを言語別に切り替える。
+  const locale = await getLocale();
 
   // スレッドを確定（無ければ作成、タイトルは query から）
   const tid = threadId || (await createThread(claims.sub, q || "新しいスレッド")).id;
@@ -52,7 +56,7 @@ export async function POST(req: Request) {
       let done: Extract<AgentEvent, { type: "done" }> | null = null;
 
       try {
-        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history, attachments, attachmentDocIds })) {
+        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history, attachments, attachmentDocIds, locale })) {
           if (event.type === "answer-delta") answer += event.text;
           if (event.type === "step") {
             const idx = steps.findIndex((s) => s.id === event.step.id);
