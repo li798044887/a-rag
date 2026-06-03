@@ -6,6 +6,8 @@ import { PanelResizer } from "@/components/sources/panel-resizer";
 import { PlainSectionBody, RenderedSectionBody } from "@/components/sources/rendered-section-body";
 import { useT } from "@/i18n/context";
 import { interpolate } from "@/i18n/interpolate";
+import { OriginalPreview } from "@/components/documents/original-preview";
+import { isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
 import type { CitationMap, Source, SourceType } from "@/lib/types";
 
 export type RightPanelAction = "open-source" | "download" | "share";
@@ -50,15 +52,13 @@ function SourceIcon({ type }: { type: SourceType }) {
 
 const iconBtn = "grid h-[26px] w-[26px] place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg";
 
-type ViewMode = "html" | "text" | "pdf";
+type ViewMode = "html" | "text" | "original";
 
 export function RightPanel({ sources, citationMap, contextQuery, activeSourceId, highlightSectionId, onSetActive, onClose, onAction, resizable, panelWidth = 420, onResizeWidth }: Props) {
   const { t } = useT();
   const bodyRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("html");
-  // 原本(raw)が消えている（文書削除済み）と判明した文書ID。確認できた時だけ記録する。
-  const [missingRawId, setMissingRawId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!highlightSectionId || !hlRef.current || !bodyRef.current) return;
@@ -66,27 +66,17 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
   }, [highlightSectionId, activeSourceId]);
 
   const active = sources.find((s) => s.id === activeSourceId) || sources[0];
-  const isPdf = active ? /\.pdf$/i.test(active.title || active.path) : false;
-  const rawUrl = active ? `/api/documents/${encodeURIComponent(active.id)}/raw` : "";
   // ハイライト中セクション → 先頭セクションの順でページを決定（0-based を PDF の 1-based へ）。
   const hlSec = active?.sections.find((s) => s.id === highlightSectionId);
   const pdfPage = ((hlSec?.page ?? active?.sections[0]?.page ?? 0) | 0) + 1;
-  // PDF を持たない資料では HTML整形にフォールバックする。
-  const effectiveMode: ViewMode = isPdf ? viewMode : (viewMode === "pdf" ? "html" : viewMode);
-
-  // 元PDF表示に切り替わったとき raw の存在を HEAD で確認し、404（削除済み）と判明した文書だけ記録する。
-  // 存在する場合は iframe をそのまま出すため、判明するまではフォールバックを出さない（楽観表示）。
-  const activeId = active?.id;
-  useEffect(() => {
-    if (effectiveMode !== "pdf" || !rawUrl || !activeId) return;
-    let cancelled = false;
-    fetch(rawUrl, { method: "HEAD" })
-      .then((r) => { if (!cancelled && !r.ok) setMissingRawId(activeId); })
-      .catch(() => { if (!cancelled) setMissingRawId(activeId); });
-    return () => { cancelled = true; };
-  }, [effectiveMode, rawUrl, activeId]);
-  // 「今表示中の文書」が削除済みと判明している場合のみフォールバック。文書切替時は判明するまで false。
-  const rawMissing = effectiveMode === "pdf" && !!activeId && missingRawId === activeId;
+  // 原本タブは全形式で常設。表計算/Office変換はラベルを変える。
+  const fileName = active?.title || active?.path || "";
+  const originalLabel = isSpreadsheet(fileName)
+    ? t.documents.tabSpreadsheet
+    : isConvertibleToPdf(fileName)
+    ? t.documents.tabConvertedPdf
+    : t.documents.tabOriginal;
+  const effectiveMode: ViewMode = viewMode;
 
   const citationNum = (id: string) => {
     const entry = Object.entries(citationMap).find(([, c]) => c.sourceId === id);
@@ -179,7 +169,7 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
         </div>
         {active && (
           <div className="mt-1 flex gap-1">
-            {([["html", t.sources.viewHtml], ["text", t.sources.viewText], ...(isPdf ? [["pdf", t.sources.viewPdf]] as const : [])] as const).map(([mode, label]) => (
+            {([["html", t.sources.viewHtml], ["text", t.sources.viewText], ["original", originalLabel]] as const).map(([mode, label]) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
@@ -196,27 +186,14 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
       </div>
 
       {/* Body */}
-      <div ref={bodyRef} className={cn("min-w-0 overflow-x-hidden overflow-y-auto", effectiveMode === "pdf" ? "p-0" : "px-5 pb-6 pt-[18px] max-md:px-3.5")}>
-        {effectiveMode === "pdf" ? (
-          rawMissing ? (
-            <div className="grid h-full place-items-center px-6 py-10 text-center">
-              <div className="max-w-[320px]">
-                <div className="mb-1.5 text-[13px] font-semibold text-fg">{t.sources.deletedTitle}</div>
-                <div className="mb-3 text-[12px] leading-[1.6] text-muted">{t.sources.deletedDesc}</div>
-                <button
-                  onClick={() => setViewMode("html")}
-                  className="inline-flex items-center rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2"
-                >{t.sources.showCitedText}</button>
-              </div>
-            </div>
-          ) : (
-            <iframe
-              key={pdfPage}
-              src={`${rawUrl}#page=${pdfPage}`}
-              title={active.title}
-              className="h-full w-full border-0"
-            />
-          )
+      <div ref={bodyRef} className={cn("min-w-0 overflow-x-hidden overflow-y-auto", effectiveMode === "original" ? "p-0" : "px-5 pb-6 pt-[18px] max-md:px-3.5")}>
+        {effectiveMode === "original" ? (
+          <OriginalPreview
+            docId={active.id}
+            filename={active.title || active.path}
+            pdfPage={pdfPage}
+            onShowParsed={() => setViewMode("html")}
+          />
         ) : (
           <>
         <div className="mb-4 flex min-w-0 items-start gap-2.5">
