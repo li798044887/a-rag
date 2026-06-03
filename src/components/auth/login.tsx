@@ -133,22 +133,8 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
           )}
 
           {mode !== "reset" && (
-            <label className="flex flex-col gap-1.5">
-              <span className="flex items-baseline justify-between text-[12px] font-semibold text-fg-2">
-                {a.labelPassword}
-                {mode === "signin" && (
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setMode("reset");
-                    }}
-                    className="text-[12px] font-medium text-accent no-underline hover:underline"
-                  >
-                    {a.forgotPassword}
-                  </a>
-                )}
-              </span>
+            <label className="relative flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-fg-2">{a.labelPassword}</span>
               <div className="relative">
                 <input
                   type={showPw ? "text" : "password"}
@@ -177,6 +163,18 @@ export function Login({ onSignIn, onRegister }: LoginProps) {
                   )}
                 </button>
               </div>
+              {mode === "signin" && (
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setMode("reset");
+                  }}
+                  className="absolute right-0 top-0 text-[12px] font-medium text-accent no-underline hover:underline"
+                >
+                  {a.forgotPassword}
+                </a>
+              )}
             </label>
           )}
 
