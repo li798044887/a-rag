@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { getTextPreviewKind, isConvertibleToPdf, isSpreadsheet, type TextPreviewKind } from "@/lib/file-types";
+import { getTextPreviewKind, isConvertibleToPdf, isImage, isPdf, isSpreadsheet, type TextPreviewKind } from "@/lib/file-types";
 
 test("isConvertibleToPdf: Office 形式は true（拡張子の大小無視）", () => {
   for (const name of [
@@ -53,4 +53,16 @@ test("getTextPreviewKind: テキスト系でない/拡張子なしは null", () 
   for (const name of ["a.pdf", "a.png", "a.docx", "a.xlsx", "a.ods", "noext", ""]) {
     expect(getTextPreviewKind(name), name).toBeNull();
   }
+});
+
+test("isPdf: PDF のみ true（拡張子の大小無視）", () => {
+  for (const name of ["a.pdf", "REPORT.PDF"]) expect(isPdf(name), name).toBe(true);
+  for (const name of ["a.png", "a.docx", "a.txt", "noext", ""]) expect(isPdf(name), name).toBe(false);
+});
+
+test("isImage: ブラウザ表示可能な画像は true（拡張子の大小無視）", () => {
+  for (const name of ["a.png", "b.jpg", "c.jpeg", "d.gif", "e.webp", "f.svg", "g.bmp", "h.avif", "PHOTO.JPG"]) {
+    expect(isImage(name), name).toBe(true);
+  }
+  for (const name of ["a.pdf", "a.docx", "a.txt", "noext", ""]) expect(isImage(name), name).toBe(false);
 });
