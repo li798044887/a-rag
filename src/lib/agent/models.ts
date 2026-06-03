@@ -28,7 +28,7 @@ export type ModelResolution =
 export const DEFAULT_MODEL_ID = "deepseek-flash";
 
 const ANTHROPIC_REWRITE = "claude-haiku-4-5";
-const OPENAI_REWRITE = "gpt-4o-mini";
+const OPENAI_REWRITE = "gpt-4o";
 
 /** DeepSeek API モデル名へのマッピング */
 const DEEPSEEK_MODEL_MAP: Record<string, string> = {
