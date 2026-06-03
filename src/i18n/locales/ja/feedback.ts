@@ -50,4 +50,6 @@ export const feedback: typeof zhFeedback = {
   sessionUpdateFailed: "セッション設定の更新に失敗しました",
   signedOutAll: "全デバイスからサインアウトしました",
   signOutFailed: "サインアウトに失敗しました",
+  nameUpdated: "表示名を更新しました",
+  nameUpdateFailed: "表示名の更新に失敗しました",
 };

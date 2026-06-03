@@ -19,6 +19,7 @@ import { POST as login } from "@/app/api/auth/login/route";
 import { POST as remember } from "@/app/api/auth/remember/route";
 import { POST as revokeAll } from "@/app/api/auth/revoke-all/route";
 import { GET as me } from "@/app/api/auth/me/route";
+import { POST as saveName } from "@/app/api/account/name/route";
 import { AUTH_COOKIE } from "@/lib/constants";
 
 const email = `auth_${Date.now()}@example.com`;
@@ -82,6 +83,34 @@ test("/api/auth/remember flips the rem claim and re-issues the cookie", async ()
   const meRes = await me();
   const data = await meRes.json();
   expect(data.claims.rem).toBe(true);
+});
+
+test("/api/account/name persists the display name and recomputes firstName/initials", async () => {
+  await login(jsonReq({ email, password }));
+
+  const res = await saveName(jsonReq({ name: "  田中 浩  " }));
+  expect(res.status).toBe(200);
+  const { user } = await res.json();
+  // 前後の空白は除去され、firstName / initials も name から再導出される。
+  expect(user.name).toBe("田中 浩");
+  expect(user.firstName).toBe("浩");
+  expect(user.initials).toBe("田浩");
+
+  // /me（DB が永続源）にも反映されている。
+  const meRes = await me();
+  expect((await meRes.json()).user?.name).toBe("田中 浩");
+});
+
+test("/api/account/name rejects an empty display name", async () => {
+  await login(jsonReq({ email, password }));
+  const res = await saveName(jsonReq({ name: "   " }));
+  expect(res.status).toBe(400);
+});
+
+test("/api/account/name rejects an unauthenticated request", async () => {
+  cookieStore.clear();
+  const res = await saveName(jsonReq({ name: "誰か" }));
+  expect(res.status).toBe(401);
 });
 
 test("/api/auth/revoke-all invalidates the current session", async () => {

@@ -28,6 +28,8 @@ interface Props {
   claims: SessionClaims | null;
   onSetRemember: (value: boolean) => Promise<void> | void;
   onRevokeAllSessions: () => Promise<void> | void;
+  /** 表示名を永続化する。成功で resolve、失敗で reject。 */
+  onSaveName: (name: string) => Promise<void>;
 }
 
 export type SettingsSection = "model" | "sources" | "agent" | "appearance" | "security" | "account";
@@ -118,6 +120,7 @@ export function SettingsModal({
   claims,
   onSetRemember,
   onRevokeAllSessions,
+  onSaveName,
 }: Props) {
   const [section, setSection] = useState<Section>(() =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches ? "account" : "model",
@@ -136,6 +139,15 @@ export function SettingsModal({
   const [jwtCopied, setJwtCopied] = useState(false);
   const [rememberPending, setRememberPending] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  // 表示名の編集ドラフト。保存(/api)成功や非同期ロードで user.name が変わったら追従する
+  // （レンダー中に前回値と比較して調整する React 推奨パターン）。
+  const [nameDraft, setNameDraft] = useState(user.name);
+  const [nameSaving, setNameSaving] = useState(false);
+  const [prevUserName, setPrevUserName] = useState(user.name);
+  if (user.name !== prevUserName) {
+    setPrevUserName(user.name);
+    setNameDraft(user.name);
+  }
   // 「残り時間」を 30 秒ごとに再計算（モーダル開いている間のみ）。
   const [nowTick, setNowTick] = useState(0);
   useEffect(() => {
@@ -235,6 +247,24 @@ export function SettingsModal({
       setTimeout(() => setJwtCopied(false), 1500);
     } catch {
       /* clipboard unavailable (e.g. insecure context) — no-op */
+    }
+  };
+
+  // 表示名をコミット（フォーカス外し / Enter）。空欄・未変更は元へ戻すだけ。失敗時も元へ戻す。
+  const commitName = async () => {
+    if (nameSaving) return;
+    const next = nameDraft.trim();
+    if (!next || next === user.name) {
+      setNameDraft(user.name);
+      return;
+    }
+    setNameSaving(true);
+    try {
+      await onSaveName(next);
+    } catch {
+      setNameDraft(user.name);
+    } finally {
+      setNameSaving(false);
     }
   };
 
@@ -514,7 +544,21 @@ export function SettingsModal({
                   </div>
                 </div>
                 <Field label={t.modals.accountDisplayNameLabel}>
-                  <input type="text" defaultValue={user.name} className={fieldInput} />
+                  <input
+                    type="text"
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    onBlur={commitName}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    disabled={nameSaving}
+                    maxLength={80}
+                    className={cn(fieldInput, "disabled:opacity-60")}
+                  />
                 </Field>
                 <Field label={t.modals.accountLanguageLabel} hint={t.modals.languageHint}>
                   <select

@@ -46,6 +46,17 @@ export async function verifyPassword(user: UserRow, password: string): Promise<b
   return verify(user.passwordHash, password);
 }
 
+/** 表示名を更新する。firstName / initials は name から派生するため同時に再計算する。 */
+export async function updateUserName(userId: string, name: string): Promise<UserRow | null> {
+  const trimmed = name.trim();
+  const [row] = await db
+    .update(users)
+    .set({ name: trimmed, firstName: deriveFirstName(trimmed), initials: deriveInitials(trimmed) })
+    .where(eq(users.id, userId))
+    .returning();
+  return row ?? null;
+}
+
 export function toAppUser(user: UserRow): AppUser {
   return {
     name: user.name,

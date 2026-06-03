@@ -41,7 +41,7 @@ export function Workspace() {
   const { tweaks, setTweak } = useTweaks();
   const { t, locale } = useT();
   const { agentCfg, setAgentCfg } = useAgentCfg();
-  const { user, claims, status, signIn, register, signOut, setRemember, revokeAllSessions } = useAuth();
+  const { user, claims, status, signIn, register, signOut, updateName, setRemember, revokeAllSessions } = useAuth();
   const { toasts, push, dismiss } = useToasts();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const uploads = useUploads(push);
@@ -815,6 +815,15 @@ export function Workspace() {
             setSettingsOpen(false);
           } catch {
             push(t.feedback.signOutFailed, "error");
+          }
+        }}
+        onSaveName={async (name) => {
+          try {
+            await updateName(name);
+            push(t.feedback.nameUpdated, "success");
+          } catch (e) {
+            push(t.feedback.nameUpdateFailed, "error");
+            throw e;
           }
         }}
       />

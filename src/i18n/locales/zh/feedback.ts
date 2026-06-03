@@ -48,4 +48,6 @@ export const feedback = {
   sessionUpdateFailed: "会话设置更新失败",
   signedOutAll: "已从所有设备退出登录",
   signOutFailed: "退出登录失败",
+  nameUpdated: "已更新显示名称",
+  nameUpdateFailed: "显示名称更新失败",
 };

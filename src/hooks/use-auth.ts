@@ -90,6 +90,17 @@ export function useAuth() {
     setStatus("guest");
   }, []);
 
+  /** 表示名をユーザーデータへ永続化し、アバター頭文字や挨拶も即時反映する。 */
+  const updateName = useCallback(async (name: string) => {
+    const res = await fetch("/api/account/name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error("update name failed");
+    await refresh();
+  }, [refresh]);
+
   /** "Refresh Token を保存" トグル。Cookie 永続化と JWT の rem クレームを切り替える。 */
   const setRemember = useCallback(async (value: boolean) => {
     const res = await fetch("/api/auth/remember", {
@@ -110,5 +121,5 @@ export function useAuth() {
     setStatus("guest");
   }, []);
 
-  return { user, claims, status, signIn, register, signOut, setRemember, revokeAllSessions };
+  return { user, claims, status, signIn, register, signOut, updateName, setRemember, revokeAllSessions };
 }
