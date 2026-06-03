@@ -63,4 +63,12 @@ describe("getAgentPrompts", () => {
     expect(getAgentPrompts("zh").verify.system).toContain("名词短语");
     expect(getAgentPrompts("ja").verify.system).toContain("名詞句");
   });
+  it("verify/revise プロンプトは引用番号単位の検証を指示する", () => {
+    expect(getAgentPrompts("ja").verify.system).toContain("citedNums");
+    expect(getAgentPrompts("ja").verify.system).toContain("引用番号");
+    expect(getAgentPrompts("ja").revise.system).toContain("直前の主張");
+    expect(getAgentPrompts("zh").verify.system).toContain("citedNums");
+    expect(getAgentPrompts("zh").verify.system).toContain("出处编号");
+    expect(getAgentPrompts("zh").revise.system).toContain("紧邻主张");
+  });
 });

@@ -34,6 +34,22 @@ test("関連が一件も無ければ needRetry=true", async () => {
   expect(r.needRetry).toBe(true);
 });
 
+test("全件低スコアでも上位候補を LLM 判定し、関連なら kept にする", async () => {
+  generateText.mockResolvedValueOnce({ output: { relevantIds: ["c2"] } });
+  const r = await gradeChunks({
+    query: "q",
+    chunks: [mk("c1", 0.3), mk("c2", 0.2), mk("c3", 0.1), mk("c4", 0.01)],
+    threshold: 0.5,
+    model,
+    prompts,
+  });
+  expect(generateText).toHaveBeenCalledTimes(1);
+  const prompt = JSON.parse(generateText.mock.calls[0][0].prompt);
+  expect(prompt.candidates.map((c: { chunkId: string }) => c.chunkId)).toEqual(["c1", "c2", "c3"]);
+  expect(r.keptIds).toEqual(["c2"]);
+  expect(r.needRetry).toBe(false);
+});
+
 test("空入力は needRetry=true", async () => {
   const r = await gradeChunks({ query: "q", chunks: [], threshold: 0.5, model, prompts });
   expect(r.needRetry).toBe(true);

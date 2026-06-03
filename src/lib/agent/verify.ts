@@ -22,6 +22,26 @@ export interface VerifyResult {
   reviseUsage: LanguageModelUsage | null;
 }
 
+type VerifyVerdict = "supported" | "unsupported" | "not_a_claim";
+
+interface VerifiedClaim {
+  text: string;
+  citedNums: number[];
+  verdict: VerifyVerdict;
+  reason?: string;
+}
+
+const VerifiedClaimSchema = z.object({
+  text: z.string(),
+  citedNums: z.array(z.number().int()).default([]),
+  verdict: z.enum(["supported", "unsupported", "not_a_claim"]),
+  reason: z.string().optional(),
+});
+
+const VerifyOutputSchema = z.object({
+  claims: z.array(VerifiedClaimSchema),
+});
+
 const INSUFFICIENT_EVIDENCE_PATTERNS = [
   /无法(?:从|根据|基于)?(?:现有|已有|提供的|检索到的|给定)?(?:资料|信息|内容|出处|文档|材料)?(?:中)?(?:判断|确定|确认|得出|评估|比较|说明|推断)/,
   /(?:现有|已有|提供的|检索到的|给定)?(?:资料|信息|内容|出处|文档|材料)(?:不足|不够|有限|中没有|未提供|未显示|未提及|未记载|没有明确)/,
@@ -97,6 +117,16 @@ function filterUnsupportedClaims(claims: string[], answer: string): string[] {
   return claims.filter((claim) => !isInsufficientEvidenceClaim(claim, answer));
 }
 
+function unsupportedFromVerifiedClaims(claims: VerifiedClaim[], answer: string, sources: VerifySource[]): string[] {
+  if (isCautiousFallbackAnswer(answer)) return [];
+  const validNums = new Set(sources.map((source) => source.n));
+  const unsupported = claims
+    .filter((claim) => claim.verdict === "unsupported" || claim.citedNums.some((n) => !validNums.has(n)))
+    .map((claim) => claim.text.trim())
+    .filter(Boolean);
+  return filterUnsupportedClaims(unsupported, answer);
+}
+
 export async function verifyAnswer(input: {
   query: string;
   answer: string;
@@ -112,11 +142,14 @@ export async function verifyAnswer(input: {
   try {
     const { output, totalUsage } = await generateText({
       model,
-      output: Output.object({ schema: z.object({ unsupported: z.array(z.string()) }) }),
+      output: Output.object({ schema: VerifyOutputSchema }),
       system: prompts.verify.system,
       prompt: JSON.stringify({ query, answer, sources }),
     });
-    unsupported = filterUnsupportedClaims(output.unsupported, answer);
+    const raw = output as { claims?: VerifiedClaim[]; unsupported?: string[] };
+    unsupported = raw.claims
+      ? unsupportedFromVerifiedClaims(raw.claims, answer, sources)
+      : filterUnsupportedClaims(raw.unsupported ?? [], answer);
     verifyUsage = totalUsage;
   } catch {
     // 検証失敗時は素通し（回答は必ず出す方針）。
@@ -131,7 +164,7 @@ export async function verifyAnswer(input: {
     const { text, totalUsage } = await generateText({
       model,
       system: prompts.revise.system,
-      prompt: JSON.stringify({ answer, unsupported, sources }),
+      prompt: JSON.stringify({ query, answer, unsupported, sources }),
     });
     return { unsupported, revised: text.trim() || null, verifyUsage, reviseUsage: totalUsage };
   } catch {

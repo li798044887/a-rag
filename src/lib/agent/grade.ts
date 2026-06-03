@@ -1,5 +1,6 @@
 /** 取得チャンクの関連度判定（ハイブリッド）。
- *  まず rerank スコア閾値で安価にゲートし、閾値近傍の曖昧帯のみ LLM 判定する。
+ *  まず rerank スコア閾値で安価にゲートし、閾値近傍の曖昧帯を LLM 判定する。
+ *  rerank スコアが未校正で全件が低いケースでは、上位候補も LLM 判定へ回す。
  *  関連が一件も残らなければ needRetry=true を返し、呼び出し側が再検索する。 */
 import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
@@ -24,6 +25,8 @@ export interface GradeResult {
 
 /** 閾値からどれだけ下までを「曖昧帯」として LLM に回すか。 */
 const AMBIGUOUS_MARGIN = 0.1;
+/** スコアが全体に低いときに LLM 判定へ回す上位件数。 */
+const LOW_SCORE_REVIEW_LIMIT = 3;
 /** これ未満しか関連が残らなければ再検索する。 */
 const MIN_KEPT = 1;
 
@@ -41,8 +44,11 @@ export async function gradeChunks(input: {
   const ambiguous = chunks.filter((c) => c.score < threshold && c.score >= threshold - AMBIGUOUS_MARGIN);
 
   const kept = new Set(strong.map((c) => c.chunkId));
+  const llmCandidates = strong.length > 0 || ambiguous.length > 0
+    ? ambiguous
+    : chunks.slice(0, LOW_SCORE_REVIEW_LIMIT);
 
-  if (ambiguous.length > 0) {
+  if (llmCandidates.length > 0) {
     try {
       const { output } = await generateText({
         model,
@@ -50,13 +56,13 @@ export async function gradeChunks(input: {
         system: prompts.grade.system,
         prompt: JSON.stringify({
           query,
-          candidates: ambiguous.map((c) => ({
+          candidates: llmCandidates.map((c) => ({
             chunkId: c.chunkId, title: c.documentTitle, heading: c.headingPath,
             text: c.text.slice(0, 600),
           })),
         }),
       });
-      const valid = new Set(ambiguous.map((c) => c.chunkId));
+      const valid = new Set(llmCandidates.map((c) => c.chunkId));
       for (const id of output.relevantIds) if (valid.has(id)) kept.add(id);
     } catch {
       // LLM 失敗時は強スコアのみで続行（回答は必ず出す方針）。

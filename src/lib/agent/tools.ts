@@ -162,20 +162,17 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
         }
 
         const lines = chunks.map((c) => {
+          const body = resolveImageUrls(c.expandedText || c.text, c.documentId);
           const n = registry.register({
             documentId: c.documentId, documentTitle: c.documentTitle, chunkId: c.chunkId,
-            // 表は HTML をそのまま描画するため text を維持。文章は前後文脈込みの
-            // expandedText を優先する（見出しだけのチャンクが引用箇所になる問題への対策）。
+            // LLM に渡した本文と右パネルの引用箇所を一致させる。
+            // 表チャンクでも expandedText を優先することで、表だけでなく周辺の説明文も引用表示できる。
             headingPath: c.headingPath,
-            snippet: resolveImageUrls(
-              c.blockType === "table" ? c.text : (c.expandedText || c.text),
-              c.documentId,
-            ),
+            snippet: body,
             blockType: c.blockType, page: c.pageStart, score: c.score,
           });
           // LLM 向け本文も画像URLを絶対化する。回答にインライン表示された画像が
           // そのまま描画可能（相対パスのままだと描画されない／壊れる）になるため。
-          const body = resolveImageUrls(c.expandedText || c.text, c.documentId);
           return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${body}`;
         });
         meta.set(toolCallId, { name: "retrieve", input: { query: q },

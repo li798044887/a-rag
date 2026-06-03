@@ -30,7 +30,11 @@ test("全主張が裏付けられていれば revise しない", async () => {
 
 test("未裏付けがあり maxRevisions>0 なら訂正本文を返す", async () => {
   generateText.mockResolvedValueOnce({
-    output: { unsupported: ["48時間で失効する"] },
+    output: {
+      claims: [
+        { text: "48時間で失効する", citedNums: [1], verdict: "unsupported", reason: "出典は24時間と記載" },
+      ],
+    },
     totalUsage: { inputTokens: 20, outputTokens: 4, totalTokens: 24 },
   });
   generateText.mockResolvedValueOnce({
@@ -42,6 +46,37 @@ test("未裏付けがあり maxRevisions>0 なら訂正本文を返す", async (
   expect(r.revised).toBe("24時間で失効します[1]。");
   expect((r as { verifyUsage?: unknown }).verifyUsage).toMatchObject({ totalTokens: 24 });
   expect((r as { reviseUsage?: unknown }).reviseUsage).toMatchObject({ totalTokens: 39 });
+  expect(generateText).toHaveBeenCalledTimes(2);
+  expect(JSON.parse(generateText.mock.calls[1][0].prompt)).toMatchObject({ query: "q" });
+});
+
+test("claim 形式の supported / not_a_claim は revise しない", async () => {
+  generateText.mockResolvedValueOnce({
+    output: {
+      claims: [
+        { text: "トークンは24時間で失効する", citedNums: [1], verdict: "supported" },
+        { text: "認証トークンについて", citedNums: [], verdict: "not_a_claim" },
+      ],
+    },
+  });
+  const r = await verifyAnswer({ query: "q", answer: "トークンは24時間で失効します[1]。", sources, model, prompts, maxRevisions: 1 });
+  expect(r.unsupported).toEqual([]);
+  expect(r.revised).toBeNull();
+  expect(generateText).toHaveBeenCalledTimes(1);
+});
+
+test("存在しない引用番号を返した claim は未裏付け扱いにする", async () => {
+  generateText.mockResolvedValueOnce({
+    output: {
+      claims: [
+        { text: "トークンは24時間で失効する", citedNums: [99], verdict: "supported" },
+      ],
+    },
+  });
+  generateText.mockResolvedValueOnce({ text: "トークンは24時間で失効します[1]。" });
+  const r = await verifyAnswer({ query: "q", answer: "トークンは24時間で失効します[99]。", sources, model, prompts, maxRevisions: 1 });
+  expect(r.unsupported).toEqual(["トークンは24時間で失効する"]);
+  expect(r.revised).toBe("トークンは24時間で失効します[1]。");
   expect(generateText).toHaveBeenCalledTimes(2);
 });
 

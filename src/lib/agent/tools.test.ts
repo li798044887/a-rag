@@ -54,6 +54,30 @@ test("retrieve tool registers citations and returns numbered text", async () => 
   expect(meta.get("call-1")).toMatchObject({ name: "retrieve", summary: expect.stringContaining("1") });
 });
 
+test("table chunk citations keep expanded surrounding text shown to the model", async () => {
+  vi.mocked(retrieveChunksStream).mockResolvedValueOnce([{
+    chunkId: "table-1",
+    documentId: "doc-1",
+    documentTitle: "冷却ライン.pdf",
+    headingPath: "一次対応",
+    pageStart: 2,
+    pageEnd: 2,
+    blockType: "table",
+    text: "<table><tr><td>T2</td></tr></table>",
+    expandedText: "<table><tr><td>T2</td></tr></table>\n\nHX-7熱交換器は洗浄対象だが、交換対象ではない。",
+    score: 0.8,
+  }]);
+  const reg = new CitationRegistry();
+  const tools = buildTools({ registry: reg, ownerUserId: "u1", meta: new Map(), bus: new StepBus(), prompts: getAgentPrompts("ja") });
+
+  const out = await tools.retrieve.execute!({ query: "HX-7" }, { toolCallId: "call-table", messages: [] } as never);
+  const sources = reg.toSources();
+
+  expect(String(out)).toContain("HX-7熱交換器は洗浄対象");
+  expect(sources[0].sections[0].body).toContain("<table");
+  expect(sources[0].sections[0].body).toContain("HX-7熱交換器は洗浄対象");
+});
+
 test("retrieve tool は渡した topK / candidateK を検索へ透過する", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
@@ -205,7 +229,9 @@ test("grade が不足判定なら rewrite して再検索する", async () => {
     .mockImplementationOnce(async () => [
       { chunkId: "c2", documentId: "d2", documentTitle: "B", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "強", expandedText: "強", score: 0.9 },
     ]);
-  generateTextMock.mockResolvedValueOnce({ text: "改善クエリ" });
+  generateTextMock
+    .mockResolvedValueOnce({ output: { relevantIds: [] } })
+    .mockResolvedValueOnce({ text: "改善クエリ" });
 
   const reg = new CitationRegistry();
   const bus = new StepBus();
@@ -243,7 +269,9 @@ test("再検索時の retrieve サブステップは前回試行を上書きし�
         { chunkId: "c2", documentId: "d2", documentTitle: "B", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "強", expandedText: "強", score: 0.9 },
       ];
     });
-  generateTextMock.mockResolvedValueOnce({ text: "改善クエリ" });
+  generateTextMock
+    .mockResolvedValueOnce({ output: { relevantIds: [] } })
+    .mockResolvedValueOnce({ text: "改善クエリ" });
 
   const bus = new StepBus();
   const events: AgentEvent[] = [];
