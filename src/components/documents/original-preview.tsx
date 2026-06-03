@@ -66,9 +66,10 @@ export function MissingOriginalPreview({ onShowParsed }: { onShowParsed?: () => 
 }
 
 /** Office 原本をサーバ側で PDF 変換し iframe 表示する。初回は数秒の変換待ち、
- *  失敗時はダウンロード導線へ退避する。blob 経由にして HTTP エラーを iframe に晒さない。 */
+ *  失敗時はダウンロード導線へ退避する。blob 経由にして HTTP エラーを iframe に晒さない。
+ *  404 は原本欠落として MissingOriginalPreview へ、それ以外のエラーは UnsupportedPreview へ。 */
 export function RenderedPdfPreview({ docId, filename }: { docId: string; filename: string }) {
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "error" | "missing">("loading");
   const [url, setUrl] = useState<string | null>(null);
 
   // docId ごとに key で再マウントされる前提（初期状態 = loading）。
@@ -78,6 +79,10 @@ export function RenderedPdfPreview({ docId, filename }: { docId: string; filenam
     (async () => {
       try {
         const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/rendered`);
+        if (res.status === 404) {
+          if (!cancelled) setState("missing");
+          return;
+        }
         if (!res.ok) throw new Error(String(res.status));
         const blob = await res.blob();
         if (cancelled) return;
@@ -95,6 +100,7 @@ export function RenderedPdfPreview({ docId, filename }: { docId: string; filenam
   }, [docId]);
 
   const { t } = useT();
+  if (state === "missing") return <MissingOriginalPreview />;
   if (state === "error") return <UnsupportedPreview docId={docId} />;
   if (state === "loading" || !url) {
     return <div className="grid h-full place-items-center text-[12px] text-muted">{t.documents.pdfConverting}</div>;

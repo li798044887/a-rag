@@ -253,3 +253,20 @@ export const OriginalDeletedText: Story = {
     await expect(canvas.queryByRole("link", { name: "原本をダウンロード" })).toBeNull();
   },
 };
+
+/** 原本タブ（削除済み Office）: /rendered が 404 → 専用の削除メッセージ。 */
+export const OriginalDeletedConvertedPdf: Story = {
+  args: baseArgs("doc-docx-gone", "missing.docx"),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get("/api/documents/:id/rendered", () => new HttpResponse(null, { status: 404 })),
+      ],
+    },
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "原本PDF変換" }));
+    await waitFor(() => expect(canvas.getByText("原本ファイルは削除されたか利用できません")).toBeInTheDocument());
+    await expect(canvas.queryByRole("link", { name: "原本をダウンロード" })).toBeNull();
+  },
+};
