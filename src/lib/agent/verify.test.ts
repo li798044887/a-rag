@@ -32,6 +32,28 @@ test("未裏付けがあり maxRevisions>0 なら訂正本文を返す", async (
   expect(generateText).toHaveBeenCalledTimes(2);
 });
 
+test("資料不足の明示は未裏付け主張から除外して revise しない", async () => {
+  generateText.mockResolvedValueOnce({ output: { unsupported: ["企业当前收入在行业中的水平"] } });
+  const zhPrompts = getAgentPrompts("zh");
+  const answer = "无法从现有资料中判断企业当前收入在行业中的水平。";
+  const r = await verifyAnswer({ query: "q", answer, sources, model, prompts: zhPrompts, maxRevisions: 1 });
+  expect(r.unsupported).toEqual([]);
+  expect(r.revised).toBeNull();
+  expect(generateText).toHaveBeenCalledTimes(1);
+});
+
+test("資料不足の明示と未裏付け主張が混在する場合は主張だけ revise する", async () => {
+  generateText.mockResolvedValueOnce({
+    output: { unsupported: ["企業の現在収入", "48時間で失効する"] },
+  });
+  generateText.mockResolvedValueOnce({ text: "企業の現在収入は資料から判断できません。24時間で失効します[1]。" });
+  const answer = "企業の現在収入は資料から判断できません。48時間で失効します[1]。";
+  const r = await verifyAnswer({ query: "q", answer, sources, model, prompts, maxRevisions: 1 });
+  expect(r.unsupported).toEqual(["48時間で失効する"]);
+  expect(r.revised).toBe("企業の現在収入は資料から判断できません。24時間で失効します[1]。");
+  expect(generateText).toHaveBeenCalledTimes(2);
+});
+
 test("maxRevisions=0 なら未裏付けでも revise しない", async () => {
   generateText.mockResolvedValueOnce({ output: { unsupported: ["x"] } });
   const r = await verifyAnswer({ query: "q", answer: "a[1]", sources, model, prompts, maxRevisions: 0 });
