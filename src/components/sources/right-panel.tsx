@@ -158,7 +158,8 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
             onClick={() => onSetActive(s.id)}
             className={cn(
               "flex w-full items-center gap-2 rounded-[7px] px-2.5 py-1.5 text-left text-[12px]",
-              s.id === active.id ? "bg-surface font-medium text-fg shadow-e1" : "bg-transparent text-fg-2 hover:bg-divider hover:text-fg",
+              // 選択強調は背景/影/色のみ。font-weight を上げると CJK が合成太字でちぐはぐになる。
+              s.id === active.id ? "bg-surface text-fg shadow-e1" : "bg-transparent text-fg-2 hover:bg-divider hover:text-fg",
             )}
           >
             <span className="shrink-0 font-mono text-[10px] font-semibold text-accent">[{citationNum(s.id)}]</span>

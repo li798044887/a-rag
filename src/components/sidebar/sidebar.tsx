@@ -286,7 +286,8 @@ function ThreadRow({
         onClick={onSelect}
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pl-2 pr-8 text-left text-[12.5px] transition-colors",
-          active ? "font-medium text-fg" : "text-fg-2",
+          // 選択強調は色のみ（font-weight を上げると CJK が合成太字でちぐはぐになるため使わない）。
+          active ? "text-fg" : "text-fg-2",
         )}
       >
         {thread.pinned && (

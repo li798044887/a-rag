@@ -104,6 +104,9 @@
     margin: 0;
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "cv11";
+    /* CJK はフォールバックフォントに 500/600 の実ウェイトが無いことが多く、
+       合成太字(faux bold)で字ごとに太さがちぐはぐになる。合成を切り実ウェイトのみ使う。 */
+    font-synthesis: none;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     color: var(--fg);
