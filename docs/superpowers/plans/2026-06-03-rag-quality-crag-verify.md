@@ -1029,6 +1029,22 @@ git commit -m "test: CRAG/根拠検証の統合検証"
 
 ---
 
+## API 修正メモ（実装時に判明）
+
+本リポジトリの AI SDK は **v6**。`generateObject` は **非推奨**（「`generateText` に `output` 設定を使え」）。よって本計画の grade.ts / verify.ts / run.test.ts で `generateObject` を使う箇所はすべて、現行 API へ置換する:
+
+```ts
+import { generateText, Output } from "ai";
+const { output } = await generateText({
+  model,
+  output: Output.object({ schema: z.object({ /* … */ }) }),
+  system, prompt,
+});
+// output が構造化結果（result.output）
+```
+
+テストのモックも `vi.mock("ai", () => ({ generateText: (...a) => fn(...a), Output: { object: (c) => c, text: () => ({}) } }))` とし、構造化呼び出しの戻り値は `{ output: {...} }`、プレーン生成（revise）は `{ text: "…" }` を返す。revise は元から `generateText`（プレーン）なので `.text` 読み出しのまま。
+
 ## Self-Review メモ
 
 - **Spec カバレッジ**: grade→再検索（Task 4,6）／根拠検証＋訂正（Task 5,7）／設定 4 キー（Task 1）／プロンプト zh-ja parity（Task 3）／UX 現在ステージ表示（Task 6,7 のステップ送出＋Task 8 手動確認）／フォールバック（Task 4,5 の try/catch、Task 7 の `cfg.verify` ガード）を網羅。
