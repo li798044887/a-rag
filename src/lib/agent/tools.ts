@@ -75,15 +75,20 @@ function stageOutput(ev: RetrieveStageEvent): Record<string, unknown> | null {
   }
 }
 
+function attemptLabel(label: string, attempt: number): string {
+  return attempt > 0 ? `${label} #${attempt + 1}` : label;
+}
+
 /** retrieve の段階イベントを parentId 付きサブステップへ変換して bus に流す。 */
-function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, prompts: AgentPrompts): AgentEvent {
+function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, prompts: AgentPrompts, attempt: number): AgentEvent {
   // start と done は同一 id を共有し、reducer が id マージで running→done に更新する（衝突ではなく意図）。
+  // ただし CRAG の再検索では同じ stage が複数回流れるため、検索試行ごとに id を分ける。
   const stageKey = ev.stage as keyof AgentPrompts["stageLabels"];
   const base = {
-    id: `${parentId}:${ev.stage}`,
+    id: `${parentId}:retrieve-${attempt}:${ev.stage}`,
     name: ev.stage as ToolName,
     parentId,
-    label: prompts.stageLabels[stageKey] ?? ev.stage,
+    label: attemptLabel(prompts.stageLabels[stageKey] ?? ev.stage, attempt),
   };
   if (ev.status === "start") {
     return { type: "step", step: { ...base, status: "running", durationMs: 0, input: {}, output: null, summary: prompts.stageRunning[stageKey] ?? prompts.stageDefaultRunning } };
@@ -108,11 +113,12 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
       }),
       execute: ({ query }, { toolCallId }) => sema.run(async () => {
         let q = query;
-        let chunks = await retrieveChunksStream({
-          query: q, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
+        const runRetrieveAttempt = (attempt: number) => retrieveChunksStream({
+          query: q, rewritten: attempt > 0 ? q : undefined, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
-          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, q, prompts)),
+          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, q, prompts, attempt)),
         });
+        let chunks = await runRetrieveAttempt(0);
 
         // gradeModel が指定されたときのみ CRAG（grade→不足なら rewrite して再検索）。
         // 設計上、grade は「再検索の要否」と関連度サマリの算出のみに使い、取得チャンクの
@@ -129,7 +135,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
               })),
             });
             bus.push({ type: "step", step: {
-              id: `${toolCallId}:grade`, name: "grade", parentId: toolCallId, label: prompts.grade.label,
+              id: `${toolCallId}:grade-${retry}`, name: "grade", parentId: toolCallId, label: attemptLabel(prompts.grade.label, retry),
               status: "done", durationMs: 0, input: {}, output: { kept: grade.keptIds.length, total: grade.total },
               summary: prompts.grade.done(grade.keptIds.length, grade.total),
             } });
@@ -151,11 +157,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
               input: { original: q, rewritten }, output: null, summary: prompts.rewriteSummary(rewritten),
             } });
             q = rewritten;
-            chunks = await retrieveChunksStream({
-              query: q, rewritten: q, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
-              documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
-              onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, q, prompts)),
-            });
+            chunks = await runRetrieveAttempt(retry + 1);
           }
         }
 

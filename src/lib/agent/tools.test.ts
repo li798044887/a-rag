@@ -225,6 +225,46 @@ test("grade が不足判定なら rewrite して再検索する", async () => {
   expect(events.some((e) => e.type === "step" && e.step.name === "rewrite_query" && e.step.parentId === "call-1")).toBe(true);
 });
 
+test("再検索時の retrieve サブステップは前回試行を上書きしない", async () => {
+  vi.mocked(retrieveChunksStream)
+    .mockImplementationOnce(async ({ onStage }) => {
+      onStage({ stage: "bm25_search", status: "start" });
+      onStage({ stage: "bm25_search", status: "done", ms: 4, count: 1 });
+      onStage({ stage: "rerank", status: "done", ms: 5, count: 1 });
+      return [
+        { chunkId: "c1", documentId: "d1", documentTitle: "A", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "弱", expandedText: "弱", score: 0.05 },
+      ];
+    })
+    .mockImplementationOnce(async ({ onStage }) => {
+      onStage({ stage: "bm25_search", status: "start" });
+      onStage({ stage: "bm25_search", status: "done", ms: 6, count: 2 });
+      onStage({ stage: "rerank", status: "done", ms: 7, count: 1 });
+      return [
+        { chunkId: "c2", documentId: "d2", documentTitle: "B", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "強", expandedText: "強", score: 0.9 },
+      ];
+    });
+  generateTextMock.mockResolvedValueOnce({ text: "改善クエリ" });
+
+  const bus = new StepBus();
+  const events: AgentEvent[] = [];
+  const drain = (async () => { for await (const e of bus) events.push(e); })();
+  const tools = buildTools({
+    registry: new CitationRegistry(), ownerUserId: "u1", meta: new Map(), bus,
+    prompts: getAgentPrompts("ja"), gradeModel: "m" as never, gradeThreshold: 0.5, maxRetrieveRetries: 1,
+  });
+
+  await tools.retrieve.execute!({ query: "q" }, { toolCallId: "call-1", messages: [] } as never);
+  bus.close();
+  await drain;
+
+  const steps = events.filter((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step").map((e) => e.step);
+  const bm25Done = steps.filter((s) => s.name === "bm25_search" && s.status === "done");
+  expect(bm25Done).toHaveLength(2);
+  expect(new Set(bm25Done.map((s) => s.id)).size).toBe(2);
+  expect(bm25Done[1].label).toContain("#2");
+  expect(steps.filter((s) => s.name === "grade")).toHaveLength(2);
+});
+
 test("maxRetrieveRetries=0 なら grade のみで再検索しない", async () => {
   vi.mocked(retrieveChunksStream).mockImplementationOnce(async () => [
     { chunkId: "c1", documentId: "d1", documentTitle: "A", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "弱", expandedText: "弱", score: 0.05 },
