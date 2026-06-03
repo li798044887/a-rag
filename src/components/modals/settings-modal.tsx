@@ -10,7 +10,7 @@ import type { AgentCfg, AppUser, ModelOption, Tweaks } from "@/lib/types";
 import { useT } from "@/i18n/context";
 import { interpolate } from "@/i18n/interpolate";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
-import { performLocaleSwitch, browserLocaleEffects } from "@/i18n/use-locale-switch";
+import { persistAndSwitchLocale, browserLocaleEffects } from "@/i18n/use-locale-switch";
 import { useConfirm } from "@/hooks/use-confirm";
 
 interface Props {
@@ -178,7 +178,13 @@ export function SettingsModal({
       confirmLabel: t.common.confirm,
       cancelLabel: t.common.cancel,
     });
-    if (ok) performLocaleSwitch(next, browserLocaleEffects);
+    if (ok) {
+      try {
+        await persistAndSwitchLocale(next, browserLocaleEffects);
+      } catch {
+        // 保存失敗時はリロードしない（言語は変わらないまま）。
+      }
+    }
   };
 
   // セキュリティ画面: JWT クレームを読みやすい順に並べて JSON 表示する。null/undefined は省略。
@@ -431,19 +437,6 @@ export function SettingsModal({
                   </select>
                 </Field>
 
-                {/* 言語切替セレクト */}
-                <Field label={t.modals.languageLabel} hint={t.modals.languageHint}>
-                  <select
-                    value={locale}
-                    onChange={(e) => onLocaleSelect(e.target.value as Locale)}
-                    className={selectInput}
-                  >
-                    {LOCALES.map((l) => (
-                      <option key={l} value={l}>{LOCALE_LABELS[l]}</option>
-                    ))}
-                  </select>
-                </Field>
-
                 <Field label={t.modals.appearanceDensityLabel}>
                   <Segmented
                     value={tweaks.density}
@@ -523,10 +516,15 @@ export function SettingsModal({
                 <Field label={t.modals.accountDisplayNameLabel}>
                   <input type="text" defaultValue={user.name} className={fieldInput} />
                 </Field>
-                <Field label={t.modals.accountLanguageLabel}>
-                  <select defaultValue="ja" className={fieldInput}>
-                    <option value="ja">日本語</option>
-                    <option value="en">English</option>
+                <Field label={t.modals.accountLanguageLabel} hint={t.modals.languageHint}>
+                  <select
+                    value={locale}
+                    onChange={(e) => onLocaleSelect(e.target.value as Locale)}
+                    className={fieldInput}
+                  >
+                    {LOCALES.map((l) => (
+                      <option key={l} value={l}>{LOCALE_LABELS[l]}</option>
+                    ))}
                   </select>
                 </Field>
               </div>

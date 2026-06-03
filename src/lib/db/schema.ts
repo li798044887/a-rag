@@ -8,6 +8,8 @@ export const users = pgTable("users", {
   firstName: text("first_name").notNull(),
   org: text("org").notNull().default("ARag, Inc."),
   initials: text("initials").notNull(),
+  /** UI/プロンプト言語の永続設定（"zh" | "ja"）。null は未設定（Cookie/既定にフォールバック）。 */
+  locale: text("locale"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   /** 全デバイスサインアウト時刻。これ以前に発行(iat)された JWT は無効。 */
   tokenRevokedAt: timestamp("token_revoked_at", { withTimezone: true }),
