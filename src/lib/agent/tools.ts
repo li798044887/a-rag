@@ -115,6 +115,10 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
         });
 
         // gradeModel が指定されたときのみ CRAG（grade→不足なら rewrite して再検索）。
+        // 設計上、grade は「再検索の要否」と関連度サマリの算出のみに使い、取得チャンクの
+        // 間引きはしない（keptIds でのフィルタはしない）。根拠の担保は生成後の verify と、
+        // 回答本文に実際に出た [n] だけを出典パネルへ採用する引用抽出が担う多層防御とし、
+        // ここでの早すぎる間引きで本来有用な文脈を落とす取りこぼしを避ける（recall 優先）。
         if (gradeModel) {
           for (let retry = 0; retry <= resolvedMaxRetries; retry++) {
             const grade = await gradeChunks({
@@ -135,7 +139,8 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
             let rewritten = q;
             try {
               const { text } = await generateText({ model: gradeModel, system: prompts.queryRewrite.system, prompt: q });
-              rewritten = text.trim() || q;
+              // 冗長なモデル出力が検索クエリとして渡るのを防ぐため長さを上限で切る。
+              rewritten = text.trim().slice(0, 200) || q;
             } catch {
               break;
             }
