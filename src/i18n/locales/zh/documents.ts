@@ -82,6 +82,10 @@ export const documents = {
   unsupportedDescription: '请在"解析文本"标签页查看提取内容，或下载原文件。',
   unsupportedDownload: "下载原文件",
 
+  // MissingOriginalPreview（源文件が削除済み = /raw 404）
+  missingTitle: "源文件已删除或不可用",
+  missingDescription: '该文件已被删除，无法预览或下载。可在"解析文本"标签页查看已提取的引用文本。',
+
   // SpreadsheetPreview Fallback
   spreadsheetErrorTitle: "无法显示该表格文件",
   spreadsheetErrorDescription: '请在"解析文本"标签页查看提取内容，或下载原文件。',

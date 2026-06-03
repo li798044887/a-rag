@@ -84,6 +84,10 @@ export const documents: typeof zhDocuments = {
   unsupportedDescription: "「解析テキスト」タブで抽出済みの内容を確認するか、原本をダウンロードしてください。",
   unsupportedDownload: "原本をダウンロード",
 
+  // MissingOriginalPreview（源文件が削除済み = /raw 404）
+  missingTitle: "原本ファイルは削除されたか利用できません",
+  missingDescription: "このファイルは削除されており、プレビュー・ダウンロードできません。「解析テキスト」タブで抽出済みの引用テキストを確認できます。",
+
   // SpreadsheetPreview Fallback
   spreadsheetErrorTitle: "この表計算ファイルを表示できませんでした",
   spreadsheetErrorDescription: "「解析テキスト」タブで抽出済みの内容を確認するか、原本をダウンロードしてください。",
