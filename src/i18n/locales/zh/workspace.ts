@@ -10,7 +10,7 @@ export const workspace = {
   // header — action buttons
   btnShare: "分享",
   btnExport: "以 Markdown 格式导出",
-  btnSources: "一手资料 ({n})",
+  btnSources: "引用来源 ({n})",
 
   // header — theme toggle
   toLight: "切换到浅色模式",
