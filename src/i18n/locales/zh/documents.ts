@@ -52,7 +52,7 @@ export const documents = {
   // Preview tabs
   tabOriginal: "原文件",
   tabSpreadsheet: "表格",
-  tabConvertedPdf: "PDF转换原文件",
+  tabConvertedPdf: "原文档转换PDF",
   tabLayout: "布局",
   tabSpan: "Span",
   tabText: "解析文本",

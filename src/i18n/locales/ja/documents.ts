@@ -54,7 +54,7 @@ export const documents: typeof zhDocuments = {
   // Preview tabs
   tabOriginal: "原本",
   tabSpreadsheet: "スプレッドシート",
-  tabConvertedPdf: "PDF変換原本",
+  tabConvertedPdf: "原本PDF変換",
   tabLayout: "レイアウト",
   tabSpan: "Span",
   tabText: "解析テキスト",
