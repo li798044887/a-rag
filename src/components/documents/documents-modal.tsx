@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { RenderedSectionBody } from "@/components/sources/rendered-section-body";
 import { DocumentsUploadQueue } from "@/components/uploads/uploads";
-import { SpreadsheetPreview } from "@/components/documents/spreadsheet-preview";
 import { MarkdownView } from "@/components/documents/markdown-view";
 import { JsonView, JsonlView } from "@/components/documents/json-view";
 import { PlainTextView } from "@/components/documents/plain-text-view";
-import { useRawText, type RawTextState } from "@/hooks/use-raw-text";
+import { useRawText } from "@/hooks/use-raw-text";
+import { OriginalPreview, RawTextContent } from "@/components/documents/original-preview";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
 import { useUploads } from "@/hooks/use-uploads";
@@ -16,13 +16,10 @@ import { useT } from "@/i18n/context";
 import { interpolate } from "@/i18n/interpolate";
 import type { Dictionary } from "@/i18n/dictionary";
 import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
-import { getFileMeta, getTextPreviewKind, isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
+import { getFileMeta, getTextPreviewKind, isConvertibleToPdf, isImage, isPdf, isSpreadsheet } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
 import type { DocumentPreview, DocumentPreviewChunk, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
-
-// 純正 PDF ビューアの黒いクロムを隠し、紙系の世界観に馴染ませる。
-const PDF_VIEW_PARAMS = "#toolbar=0&navpanes=0&statusbar=0&view=FitH";
 
 type Tab = "pdf" | "layout" | "span" | "text" | "html" | "rich" | "images";
 const IMG_RE = /!\[[^\]]*\]\((\/api\/documents\/[^)\s]+)\)/g;
@@ -40,57 +37,6 @@ function statusLabels(t: Dictionary): Record<string, string> {
   };
 }
 
-/** プレビュー不可フォールバック（原本ダウンロード導線）。 */
-function UnsupportedPreview({ docId }: { docId: string }) {
-  const { t } = useT();
-  return (
-    <div className="grid h-full place-items-center p-8 text-center">
-      <div className="max-w-[380px]">
-        <div className="mb-1.5 text-[13px] font-semibold text-fg">{t.documents.unsupportedTitle}</div>
-        <div className="mb-4 text-[12px] leading-[1.6] text-muted">{t.documents.unsupportedDescription}</div>
-        <a href={`/api/documents/${encodeURIComponent(docId)}/raw?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2">{t.documents.unsupportedDownload}</a>
-      </div>
-    </div>
-  );
-}
-
-/** Office 原本をサーバ側で PDF 変換し iframe 表示する。初回は数秒の変換待ち、
- *  失敗時はダウンロード導線へ退避する。blob 経由にして HTTP エラーを iframe に晒さない。 */
-function RenderedPdfPreview({ docId, filename }: { docId: string; filename: string }) {
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [url, setUrl] = useState<string | null>(null);
-
-  // docId ごとに key で再マウントされる前提（初期状態 = loading）。
-  useEffect(() => {
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    (async () => {
-      try {
-        const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/rendered`);
-        if (!res.ok) throw new Error(String(res.status));
-        const blob = await res.blob();
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setUrl(objectUrl);
-        setState("ready");
-      } catch {
-        if (!cancelled) setState("error");
-      }
-    })();
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [docId]);
-
-  const { t } = useT();
-  if (state === "error") return <UnsupportedPreview docId={docId} />;
-  if (state === "loading" || !url) {
-    return <div className="grid h-full place-items-center text-[12px] text-muted">{t.documents.pdfConverting}</div>;
-  }
-  return <iframe title={filename} src={url + PDF_VIEW_PARAMS} className="h-full w-full border-0" />;
-}
-
 /** チャンク本文を HTML整形ビューで描画する。
  *  一次資料パネルと同じ本文レンダラを使う。 */
 function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
@@ -100,27 +46,6 @@ function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
         <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">{chunk.heading_path}</div>
       )}
       <RenderedSectionBody body={chunk.text} blockType={chunk.block_type} />
-    </div>
-  );
-}
-
-/** 原本テキストの読み込み状態をラップする。ready のとき children（整形ビュー）を表示し、
- *  children 無し（原本タブ）のときは生テキストを PlainTextView で表示する。
- *  loading/error と truncate 注記もここで一元的に出す。 */
-function RawTextContent({ raw, docId, children }: { raw: RawTextState; docId: string; children?: ReactNode }) {
-  const { t } = useT();
-  if (raw.status === "loading" || raw.status === "idle") {
-    return <div className="grid h-full place-items-center text-[12px] text-muted">{t.common.loading}</div>;
-  }
-  if (raw.status === "error") return <UnsupportedPreview docId={docId} />;
-  return (
-    <div>
-      {raw.truncated && (
-        <div className="border-b-[0.5px] border-divider bg-accent-soft px-5 py-2 text-[11.5px] text-fg-2">
-          {t.documents.rawTruncated}
-        </div>
-      )}
-      {children ?? <PlainTextView text={raw.text} />}
     </div>
   );
 }
@@ -156,8 +81,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   }, [readyCount, open]);
 
   const selected = docs.items.find((d) => d.id === selectedId) ?? null;
-  const isPdf = selected?.mime === "application/pdf";
-  const isImage = selected?.mime.startsWith("image/") ?? false;
+  const isPdfFile = selected ? isPdf(selected.filename) : false;
   // Office 系原本はサーバ側で PDF 変換してプレビューできる（拡張子で判定）。
   const isConvertible = selected ? isConvertibleToPdf(selected.filename) : false;
   // 表計算は PDF 化せず Excel 風グリッドでネイティブ描画する（PDF/画像/Office PDF 変換より優先）。
@@ -171,7 +95,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   const selectDoc = (d: DocumentSummary) => {
     setSelectedId(d.id);
     if (getTextPreviewKind(d.filename)) { setTab("rich"); return; }
-    const previewable = d.mime === "application/pdf" || d.mime.startsWith("image/") || isSpreadsheet(d.filename) || isConvertibleToPdf(d.filename);
+    const previewable = isPdf(d.filename) || isImage(d.filename) || isSpreadsheet(d.filename) || isConvertibleToPdf(d.filename);
     setTab(previewable ? "pdf" : "text");
   };
 
@@ -464,7 +388,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   <div className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
                     {(textKind
                       ? ([["pdf", t.documents.tabOriginal], ["text", t.documents.tabText], ["rich", t.documents.tabRich]] as [Tab, string][])
-                      : ([["pdf", isSheet ? t.documents.tabSpreadsheet : isConvertible ? t.documents.tabConvertedPdf : t.documents.tabOriginal], ...(isPdf ? [["layout", t.documents.tabLayout], ["span", t.documents.tabSpan]] as [Tab, string][] : []), ["text", t.documents.tabText], ["html", t.documents.tabHtml], ["images", images.length ? interpolate(t.documents.tabImagesCount, { n: images.length }) : t.documents.tabImages]] as [Tab, string][])
+                      : ([["pdf", isSheet ? t.documents.tabSpreadsheet : isConvertible ? t.documents.tabConvertedPdf : t.documents.tabOriginal], ...(isPdfFile ? [["layout", t.documents.tabLayout], ["span", t.documents.tabSpan]] as [Tab, string][] : []), ["text", t.documents.tabText], ["html", t.documents.tabHtml], ["images", images.length ? interpolate(t.documents.tabImagesCount, { n: images.length }) : t.documents.tabImages]] as [Tab, string][])
                     ).map(([tabKey, label]) => (
                       <button key={tabKey} onClick={() => setTab(tabKey)} className={cn(
                         "shrink-0 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
@@ -481,41 +405,13 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto bg-bg-2">
-                  {tab === "pdf" && isPdf && (
-                    <div className="h-full p-3">
-                      <iframe title={selected.filename} src={`/api/documents/${encodeURIComponent(selected.id)}/raw${PDF_VIEW_PARAMS}`} className="h-full w-full rounded-[10px] border-[0.5px] border-divider-strong bg-surface shadow-e1" />
-                    </div>
+                  {tab === "pdf" && (
+                    <OriginalPreview docId={selected.id} filename={selected.filename} framed />
                   )}
-                  {tab === "pdf" && isImage && (
-                    <div className="grid h-full place-items-center p-5">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/api/documents/${encodeURIComponent(selected.id)}/raw`} alt={selected.filename} className="max-h-full max-w-full rounded-lg border-[0.5px] border-divider" />
-                    </div>
-                  )}
-                  {tab === "pdf" && !isPdf && !isImage && isSheet && (
-                    <div className="h-full p-3">
-                      <div className="h-full overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface shadow-e1">
-                        <SpreadsheetPreview key={selected.id} docId={selected.id} filename={selected.filename} />
-                      </div>
-                    </div>
-                  )}
-                  {tab === "pdf" && !isPdf && !isImage && !isSheet && isConvertible && (
-                    <div className="h-full p-3">
-                      <div className="h-full overflow-hidden rounded-[10px] border-[0.5px] border-divider-strong bg-surface shadow-e1">
-                        <RenderedPdfPreview key={selected.id} docId={selected.id} filename={selected.filename} />
-                      </div>
-                    </div>
-                  )}
-                  {tab === "pdf" && !isPdf && !isImage && !isSheet && !isConvertible && textKind && (
-                    <RawTextContent raw={raw} docId={selected.id} />
-                  )}
-                  {tab === "pdf" && !isPdf && !isImage && !isSheet && !isConvertible && !textKind && (
-                    <UnsupportedPreview docId={selected.id} />
-                  )}
-                  {tab === "layout" && isPdf && (
+                  {tab === "layout" && isPdfFile && (
                     <iframe title={`${selected.filename} ${t.documents.tabLayout}`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />
                   )}
-                  {tab === "span" && isPdf && (
+                  {tab === "span" && isPdfFile && (
                     <iframe title={`${selected.filename} ${t.documents.tabSpan}`} src={`/api/documents/${encodeURIComponent(selected.id)}/span`} className="h-full w-full border-0" />
                   )}
                   {tab === "html" && (

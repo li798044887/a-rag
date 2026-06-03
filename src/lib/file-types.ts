@@ -55,6 +55,21 @@ export function isSpreadsheet(name: string): boolean {
   return name.includes(".") && SPREADSHEET_EXTS.has(ext);
 }
 
+// ブラウザが直接表示できる画像形式（拡張子・小文字）。
+const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]);
+
+// 純正 PDF かを拡張子で判定する。
+export function isPdf(name: string): boolean {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  return name.includes(".") && ext === "pdf";
+}
+
+// ブラウザで <img> 直接表示できる画像形式かを拡張子で判定する。
+export function isImage(name: string): boolean {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  return name.includes(".") && IMAGE_EXTS.has(ext);
+}
+
 export type TextPreviewKind = "markdown" | "json" | "jsonl" | "text";
 
 // 整形プレビュー対象のテキスト系拡張子 → 種別。表計算(xlsx/xls/ods)は isSpreadsheet が優先するため除外。
