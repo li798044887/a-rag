@@ -70,4 +70,5 @@ export const chat = {
   sectionUsedTokens: "使用 token",
   sectionOutput: "输出",
   moreItems: "… 其他 {n} 条",
+  stepCancelled: "已取消",
 };

@@ -72,4 +72,5 @@ export const chat: typeof zhChat = {
   sectionUsedTokens: "使用トークン",
   sectionOutput: "出力",
   moreItems: "… 他 {n} 件",
+  stepCancelled: "キャンセルされました",
 };

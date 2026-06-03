@@ -19,7 +19,8 @@ export function LocaleProvider({
 }: {
   locale: Locale;
   dict: Dictionary;
-  children: React.ReactNode;
+  // createElement(LocaleProvider, props, child) 形式（テスト）でも渡せるよう optional。
+  children?: React.ReactNode;
 }) {
   return (
     <LocaleContext.Provider value={{ locale, t: dict }}>
