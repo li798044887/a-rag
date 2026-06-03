@@ -1,8 +1,8 @@
-/** サポートする UI/プロンプト言語。zh が既定。 */
+/** サポートする UI/プロンプト言語。ja が既定。 */
 export type Locale = "zh" | "ja";
 
-export const LOCALES: Locale[] = ["zh", "ja"];
-export const DEFAULT_LOCALE: Locale = "zh";
+export const LOCALES: Locale[] = ["ja", "zh"];
+export const DEFAULT_LOCALE: Locale = "ja";
 
 /** 言語設定の保存先 Cookie 名（クライアント書き込み・サーバ読み取り）。 */
 export const LOCALE_COOKIE = "arag_locale";

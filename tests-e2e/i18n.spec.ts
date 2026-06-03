@@ -15,17 +15,17 @@ async function setLocaleCookie(context: import("@playwright/test").BrowserContex
   ]);
 }
 
-test("既定（Cookie なし）は中国語 UI で描画される", async ({ page, context }) => {
+test("既定（Cookie なし）は日本語 UI で描画される", async ({ page, context }) => {
   await context.clearCookies();
   await page.goto("/");
 
-  // ログイン見出し（中国語）が出る
-  await expect(page.getByText("欢迎回来")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
-  // 日本語版の見出しは出ていない
-  await expect(page.getByText("おかえりなさい")).toHaveCount(0);
-  // <html lang> が zh-CN
-  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  // ログイン見出し（日本語）が出る
+  await expect(page.getByText("おかえりなさい")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "サインイン" })).toBeVisible();
+  // 中国語版の見出しは出ていない
+  await expect(page.getByText("欢迎回来")).toHaveCount(0);
+  // <html lang> が ja
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja");
 });
 
 test("arag_locale=ja の Cookie で日本語 UI に切り替わる", async ({ page, context }) => {
@@ -46,12 +46,12 @@ test("arag_locale=zh の Cookie で明示的に中国語へ戻せる", async ({ 
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
 });
 
-test("不正な arag_locale 値は既定（中国語）にフォールバックする", async ({ page, context }) => {
+test("不正な arag_locale 値は既定（日本語）にフォールバックする", async ({ page, context }) => {
   await context.addCookies([
     { name: LOCALE_COOKIE, value: "en", url: "http://localhost:3000" },
   ]);
   await page.goto("/");
 
-  await expect(page.getByText("欢迎回来")).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.getByText("おかえりなさい")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja");
 });

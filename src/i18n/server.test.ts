@@ -18,12 +18,12 @@ describe("getLocale", () => {
     getMock.mockReturnValue({ value: "zh" });
     expect(await getLocale()).toBe("zh");
   });
-  it("缺失时回退默认 zh", async () => {
+  it("缺失时回退默认 ja", async () => {
     getMock.mockReturnValue(undefined);
-    expect(await getLocale()).toBe("zh");
+    expect(await getLocale()).toBe("ja");
   });
-  it("非法值回退默认 zh", async () => {
+  it("非法值回退默认 ja", async () => {
     getMock.mockReturnValue({ value: "en" });
-    expect(await getLocale()).toBe("zh");
+    expect(await getLocale()).toBe("ja");
   });
 });
