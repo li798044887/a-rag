@@ -32,7 +32,6 @@ export interface BuildToolsInput {
   candidateK?: number;
 }
 
-
 /** done 時の段階別 summary を prompts から組み立てる。 */
 function stageDoneSummaryOf(prompts: AgentPrompts, stage: string, count?: number): string {
   const c = count ?? 0;
