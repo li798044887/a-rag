@@ -41,6 +41,32 @@ export interface AgentPrompts {
   fetchMetaSummary: (title: string, count: number) => string;
   fetchUnresolvedSummary: (ref: number) => string;
   toolErrorSummary: string;
+  /** grade（関連度判定）ノード。 */
+  grade: {
+    label: string;
+    running: string;
+    /** 曖昧帯チャンクの関連性を判定する LLM system。 */
+    system: string;
+    done: (kept: number, total: number) => string;
+    /** 関連不足で再検索する際のサマリ。 */
+    retry: string;
+  };
+  /** 再検索時のクエリ改善 LLM system。 */
+  queryRewrite: { system: string };
+  /** verify（根拠検証）ノード。 */
+  verify: {
+    label: string;
+    running: string;
+    system: string;
+    done: (unsupported: number) => string;
+  };
+  /** revise（訂正再生成）ノード。 */
+  revise: {
+    label: string;
+    running: string;
+    system: string;
+    done: string;
+  };
   /** ツール結果/回答のフォールバック文。 */
   fallback: {
     retrieveNoHits: string;
@@ -112,6 +138,37 @@ const JA: AgentPrompts = {
   fetchMetaSummary: (t, c) => `${t} → ${c} 段`,
   fetchUnresolvedSummary: (ref) => `出典 [${ref}] は未取得`,
   toolErrorSummary: "ツール実行に失敗",
+  grade: {
+    label: "関連度判定",
+    running: "取得結果の関連度を判定中…",
+    system:
+      "あなたは検索結果の関連性を判定する審査器です。ユーザーの質問に対し、各候補チャンクが回答の根拠になり得るかを判定し、" +
+      "関連すると判断したチャンクの chunkId のみを返してください。確証が持てないものは含めないでください。",
+    done: (k, t) => `${t} 件中 ${k} 件が関連`,
+    retry: "関連資料が不足のため再検索",
+  },
+  queryRewrite: {
+    system:
+      "あなたは検索クエリを改善する補助器です。直前の検索では十分な関連資料が得られませんでした。" +
+      "質問の意図を保ちつつ、語彙や言い回しを変えた自己完結な検索クエリを1つだけ返してください。",
+  },
+  verify: {
+    label: "根拠検証",
+    running: "回答の根拠を検証中…",
+    system:
+      "あなたは事実検証器です。回答中の各主張が、与えられた出典の記述で裏付けられるかを検証し、" +
+      "裏付けの取れない主張だけを短く列挙してください。出典に明記されていない主張は未裏付けとみなします。",
+    done: (n) => (n > 0 ? `未裏付けの主張 ${n} 件` : "全主張が出典で裏付け済み"),
+  },
+  revise: {
+    label: "回答の訂正",
+    running: "未裏付け箇所を訂正中…",
+    system:
+      "あなたは回答を訂正する編集器です。指摘された未裏付けの主張を、与えられた出典のみを根拠に書き直すか、" +
+      "根拠が無ければ削除してください。出典に無い情報を新たに追加しないでください。出典番号 [n] の表記は保持してください。" +
+      "訂正後の回答本文だけを返してください。",
+    done: "未裏付け箇所を訂正",
+  },
   fallback: {
     retrieveNoHits: "該当する資料は見つかりませんでした。",
     fetchUnresolved: (ref) => `出典 [${ref}] はまだ取得していません。先に retrieve を実行し、結果に付いた番号を指定してください。`,
@@ -181,6 +238,36 @@ const ZH: AgentPrompts = {
   fetchMetaSummary: (t, c) => `${t} → ${c} 段`,
   fetchUnresolvedSummary: (ref) => `出处 [${ref}] 尚未获取`,
   toolErrorSummary: "工具执行失败",
+  grade: {
+    label: "相关性判定",
+    running: "正在判定检索结果的相关性…",
+    system:
+      "你是检索结果相关性审查器。针对用户问题，判断每个候选片段是否能作为回答依据，" +
+      "只返回你判定为相关的片段 chunkId。无法确定的不要包含。",
+    done: (k, t) => `${t} 条中 ${k} 条相关`,
+    retry: "相关资料不足，重新检索",
+  },
+  queryRewrite: {
+    system:
+      "你是检索查询改写助手。上一次检索未获得足够相关资料。" +
+      "请在保持问题意图的前提下，更换措辞与表达，只返回一个自包含的检索查询。",
+  },
+  verify: {
+    label: "依据校验",
+    running: "正在校验回答依据…",
+    system:
+      "你是事实校验器。校验回答中每条主张是否被给定出处支撑，只简要列出无法被出处支撑的主张。" +
+      "出处中未明确记载的主张视为无依据。",
+    done: (n) => (n > 0 ? `无依据主张 ${n} 条` : "全部主张均有出处支撑"),
+  },
+  revise: {
+    label: "修订回答",
+    running: "正在修订无依据内容…",
+    system:
+      "你是回答修订编辑器。请将被指出的无依据主张仅依据给定出处重写，若无依据则删除。" +
+      "不要新增出处中没有的信息。保留出处编号 [n] 标注。只返回修订后的回答正文。",
+    done: "已修订无依据内容",
+  },
   fallback: {
     retrieveNoHits: "未找到相关资料。",
     fetchUnresolved: (ref) => `出处 [${ref}] 尚未获取。请先执行 retrieve，再指定结果中给出的编号。`,

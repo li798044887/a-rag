@@ -39,4 +39,18 @@ describe("getAgentPrompts", () => {
     const zh = getAgentPrompts("zh");
     expect(zh.buildUserContent("你好", [], [])).toBe("你好");
   });
+  it("grade/verify/revise プロンプトが zh/ja 双方で揃う", () => {
+    for (const loc of ["zh", "ja"] as const) {
+      const p = getAgentPrompts(loc);
+      expect(p.grade.label.length).toBeGreaterThan(0);
+      expect(p.grade.system.length).toBeGreaterThan(0);
+      expect(p.grade.done(1, 3).length).toBeGreaterThan(0);
+      expect(p.queryRewrite.system.length).toBeGreaterThan(0);
+      expect(p.verify.system.length).toBeGreaterThan(0);
+      expect(p.verify.done(0).length).toBeGreaterThan(0);
+      expect(p.verify.done(2).length).toBeGreaterThan(0);
+      expect(p.revise.system.length).toBeGreaterThan(0);
+      expect(p.revise.done.length).toBeGreaterThan(0);
+    }
+  });
 });
