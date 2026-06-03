@@ -180,14 +180,20 @@ export function Composer({
           )}
         </div>
       </div>
-      <div className="pt-2 text-center font-mono text-[10.5px] text-muted-2 max-md:hidden">
+      <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 pt-2 text-center text-[11px] text-muted-2 max-md:hidden">
         {running ? (
-          t.chat.cancelHint
+          <span><kbd>⌘+⌫</kbd>{t.chat.cancelHintText}</span>
         ) : pending ? (
           t.chat.pendingHint
         ) : (
           <>
-            {t.chat.hintPreKbd}<kbd>⌘N</kbd>{t.chat.hintPostKbd}
+            <span><kbd>Enter</kbd>{t.chat.hintSend}</span>
+            <span className="text-divider-strong">·</span>
+            <span><kbd>Shift+Enter</kbd>{t.chat.hintNewline}</span>
+            <span className="text-divider-strong">·</span>
+            <span>{t.chat.hintDrop}</span>
+            <span className="text-divider-strong">·</span>
+            <span><kbd>⌘N</kbd>{t.chat.hintNewThread}</span>
           </>
         )}
       </div>

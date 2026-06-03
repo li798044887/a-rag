@@ -25,10 +25,12 @@ export const chat = {
   scopeTitle: "选择检索范围",
   stopTitle: "停止执行",
   pendingSubmitTitle: "请等待上传完成",
-  cancelHint: "⌘+⌫ 取消执行",
+  cancelHintText: " 取消执行",
   pendingHint: "请等待上传完成…",
-  hintPreKbd: "Enter 发送 · Shift+Enter 换行 · 拖放文件 · ",
-  hintPostKbd: " 新建会话",
+  hintSend: " 发送",
+  hintNewline: " 换行",
+  hintDrop: "拖放文件",
+  hintNewThread: " 新建会话",
 
   // answer-footer
   sourcesTitle: "查看本轮一手资料",

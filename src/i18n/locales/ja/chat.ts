@@ -27,10 +27,12 @@ export const chat: typeof zhChat = {
   scopeTitle: "検索範囲を選択",
   stopTitle: "実行を停止",
   pendingSubmitTitle: "アップロード完了までお待ちください",
-  cancelHint: "⌘+⌫ で実行をキャンセル",
+  cancelHintText: "で実行をキャンセル",
   pendingHint: "アップロード完了までお待ちください…",
-  hintPreKbd: "Enterで送信 · Shift+Enterで改行 · ファイルをドラッグ&ドロップ · ",
-  hintPostKbd: " で新規スレッド",
+  hintSend: "で送信",
+  hintNewline: "で改行",
+  hintDrop: "ファイルをドラッグ&ドロップ",
+  hintNewThread: "で新規スレッド",
 
   // answer-footer
   sourcesTitle: "このターンの一次資料を表示",

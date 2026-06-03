@@ -116,6 +116,13 @@
   kbd {
     font-family: var(--font-mono);
     font-size: 0.85em;
+    padding: 0.05em 0.4em;
+    border: 0.5px solid var(--divider-strong);
+    border-radius: 5px;
+    background: var(--surface-2);
+    color: var(--fg-2);
+    line-height: 1;
+    white-space: nowrap;
   }
   /* Custom scrollbars matching the surface */
   * {
