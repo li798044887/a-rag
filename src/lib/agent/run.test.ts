@@ -24,6 +24,7 @@ vi.mock("ai", async (orig) => {
     ...actual,
     stepCountIs: actual.stepCountIs,
     tool: actual.tool,
+    generateText: vi.fn(async () => ({ output: { unsupported: [] }, text: "" })),
     streamText: vi.fn(({ tools }: { tools: ToolSet }) => {
       async function* gen() {
         yield { type: "tool-call", toolCallId: "call-1", toolName: "retrieve", input: { query: "認証" } };
@@ -43,7 +44,7 @@ vi.mock("ai", async (orig) => {
 // streamText はモック済みのため返すモデル値は実際には使われない。
 vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model", createAnthropic: () => () => "model" }));
 
-import { streamText } from "ai";
+import { streamText, generateText } from "ai";
 import { retrieveChunksStream } from "@/lib/agent/retrieve-client";
 import { runAgent } from "@/lib/agent/run";
 import { getAgentPrompts } from "@/lib/agent/prompts";
@@ -55,6 +56,7 @@ process.env.DEEPSEEK_API_KEY = "test-key";
 afterEach(() => {
   process.env.DEEPSEEK_API_KEY = "test-key";
   vi.mocked(streamText).mockClear();
+  vi.mocked(generateText).mockClear();
 });
 
 test("runAgent runs tool loop, streams answer, finishes with sources+citationMap", async () => {
@@ -220,4 +222,33 @@ test("runAgent with locale zh uses Chinese no-sources fallback", async () => {
   expect(answer).toBe(getAgentPrompts("zh").fallback.noSources);
   // 中文フォールバックには日本語文字が含まれていないことを確認する。
   expect(answer).not.toContain("該当");
+});
+
+test("生成はバッファ化され、根拠検証ステップの後に回答がストリームされる", async () => {
+  const events: AgentEvent[] = [];
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {
+    events.push(e);
+  }
+  expect(events.some((e) => e.type === "step" && e.step.name === "verify")).toBe(true);
+
+  const idxVerify = events.findIndex((e) => e.type === "step" && e.step.name === "verify" && e.step.status === "done");
+  const idxAnswerStart = events.findIndex((e) => e.type === "answer-start");
+  expect(idxVerify).toBeGreaterThanOrEqual(0);
+  expect(idxAnswerStart).toBeGreaterThan(idxVerify);
+
+  const answer = events.filter((e) => e.type === "answer-delta").map((e) => (e as { text: string }).text).join("");
+  expect(answer).toContain("失効");
+});
+
+test("未裏付けがあれば訂正本文が最終回答になる", async () => {
+  vi.mocked(generateText)
+    .mockResolvedValueOnce({ output: { unsupported: ["x"] } } as never)
+    .mockResolvedValueOnce({ text: "訂正後の回答[1]。" } as never);
+  const events: AgentEvent[] = [];
+  for await (const e of runAgent({ query: "q", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {
+    events.push(e);
+  }
+  expect(events.some((e) => e.type === "step" && e.step.name === "revise")).toBe(true);
+  const answer = events.filter((e) => e.type === "answer-delta").map((e) => (e as { text: string }).text).join("");
+  expect(answer).toBe("訂正後の回答[1]。");
 });

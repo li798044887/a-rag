@@ -13,6 +13,7 @@ import type { AgentCfg, AgentEvent, ToolCall, ToolName } from "@/lib/types";
 import { getAgentPrompts, type AgentPrompts } from "@/lib/agent/prompts";
 import { DEFAULT_LOCALE, type Locale } from "@/i18n/config";
 import { AGENT_CFG_DEFAULTS, buildSystemPrompt } from "@/lib/agent/config";
+import { verifyAnswer } from "@/lib/agent/verify";
 
 export interface RunInput {
   query: string;
@@ -58,7 +59,12 @@ async function pump(
 
     const registry = new CitationRegistry();
     const meta = new Map<string, ToolCallMeta>();
-    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency: cfg.parallelTools, topK: cfg.topK, candidateK: cfg.candidateK });
+    const tools = buildTools({
+      registry, ownerUserId, meta, bus, attachmentDocIds, prompts,
+      concurrency: cfg.parallelTools, topK: cfg.topK, candidateK: cfg.candidateK,
+      gradeModel: resolution.models.rewrite, gradeThreshold: cfg.gradeThreshold,
+      maxRetrieveRetries: cfg.maxRetrieveRetries,
+    });
 
     const userContent = prompts.buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);
     const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: userContent }];
@@ -148,29 +154,55 @@ async function pump(
             answerStartT = Date.now();
             bus.push(emitAnswerStep("running", answerStartT));
             answerStepEmitted = true;
-            bus.push({ type: "answer-start" });
+            // バッファ化: answer-start / answer-delta はここでは出さず、検証後に確定ストリームする。
           }
           answer += part.text;
-          bus.push({ type: "answer-delta", text: part.text });
         } else if (part.type === "finish") {
           totalUsage = part.totalUsage;
         }
       }
     } catch {
       if (!answer) {
-        if (!answerStarted) bus.push({ type: "answer-start" });
         answer = prompts.fallback.genFailed;
-        bus.push({ type: "answer-delta", text: answer });
       }
     }
 
     if (!answer) {
-      if (!answerStarted) bus.push({ type: "answer-start" });
       answer = registry.size === 0 ? prompts.fallback.noSources : prompts.fallback.genUnavailable;
-      bus.push({ type: "answer-delta", text: answer });
     }
 
     if (answerStepEmitted) bus.push(emitAnswerStep("done", answerStartT, totalUsage));
+
+    // 根拠検証（バッファ生成→検証→確定）。実際に生成が行われ、出典がある場合のみ。
+    // 失敗時は verifyAnswer 内部で素通しするため answer は必ず確定ストリームされる。
+    if (cfg.verify && answerStarted && answer && registry.size > 0) {
+      const vStart = Date.now();
+      bus.push({ type: "step", step: {
+        id: "verify", name: "verify" as ToolName, label: prompts.verify.label,
+        status: "running", durationMs: 0, input: {}, output: null, summary: prompts.verify.running,
+      } });
+      const v = await verifyAnswer({
+        query, answer, sources: registry.listSources(),
+        model: resolution.models.rewrite, prompts, maxRevisions: cfg.maxRevisions,
+      });
+      bus.push({ type: "step", step: {
+        id: "verify", name: "verify" as ToolName, label: prompts.verify.label,
+        status: "done", durationMs: Date.now() - vStart,
+        input: {}, output: { unsupported: v.unsupported.length },
+        summary: prompts.verify.done(v.unsupported.length),
+      } });
+      if (v.revised) {
+        bus.push({ type: "step", step: {
+          id: "revise", name: "revise" as ToolName, label: prompts.revise.label,
+          status: "done", durationMs: 0, input: {}, output: null, summary: prompts.revise.done,
+        } });
+        answer = v.revised;
+      }
+    }
+
+    // 確定ストリーム: 検証済み本文をここで初めて送出する。
+    bus.push({ type: "answer-start" });
+    bus.push({ type: "answer-delta", text: answer });
 
     const tokens = totalUsage?.totalTokens ?? totalUsage?.outputTokens ?? Math.max(1, Math.round(answer.length / 1.8));
     // 回答本文に実際に出現した出典番号 [n] だけをパネル/引用へ採用する。
