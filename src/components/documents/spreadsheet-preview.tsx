@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { SpreadsheetGrid } from "@/components/documents/spreadsheet-grid";
 import { clampGrid, sheetToGrid, type GridModel } from "@/components/documents/spreadsheet-model";
+import { MissingOriginalPreview } from "@/components/documents/original-preview";
 import { useT } from "@/i18n/context";
 
 const ROW_CLAMP = 2000;
@@ -26,8 +27,8 @@ function Fallback({ docId }: { docId: string }) {
   );
 }
 
-export function SpreadsheetPreview({ docId, filename }: { docId: string; filename: string }) {
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+export function SpreadsheetPreview({ docId, filename, onShowParsed }: { docId: string; filename: string; onShowParsed?: () => void }) {
+  const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [active, setActive] = useState(0);
 
@@ -37,6 +38,10 @@ export function SpreadsheetPreview({ docId, filename }: { docId: string; filenam
     (async () => {
       try {
         const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/raw`);
+        if (res.status === 404) {
+          if (!cancelled) setState("missing");
+          return;
+        }
         if (!res.ok) throw new Error(String(res.status));
         const buf = await res.arrayBuffer();
         const XLSX = await import("xlsx");
@@ -54,6 +59,7 @@ export function SpreadsheetPreview({ docId, filename }: { docId: string; filenam
   }, [docId]);
 
   const { t } = useT();
+  if (state === "missing") return <MissingOriginalPreview onShowParsed={onShowParsed} />;
   if (state === "error") return <Fallback docId={docId} />;
   if (state === "loading" || !parsed) {
     return <div className="grid h-full place-items-center text-[12px] text-muted" title={filename}>{t.documents.spreadsheetLoading}</div>;

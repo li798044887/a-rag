@@ -200,7 +200,7 @@ export function OriginalPreview({ docId, filename, pdfPage, framed, onShowParsed
     );
   }
   if (isSpreadsheet(filename)) {
-    return card(<SpreadsheetPreview key={docId} docId={docId} filename={filename} />);
+    return card(<SpreadsheetPreview key={docId} docId={docId} filename={filename} onShowParsed={onShowParsed} />);
   }
   if (isConvertibleToPdf(filename)) {
     return card(<RenderedPdfPreview key={docId} docId={docId} filename={filename} />);

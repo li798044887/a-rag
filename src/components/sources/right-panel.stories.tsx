@@ -270,3 +270,20 @@ export const OriginalDeletedConvertedPdf: Story = {
     await expect(canvas.queryByRole("link", { name: "原本をダウンロード" })).toBeNull();
   },
 };
+
+/** 原本タブ（削除済み表計算）: /raw が 404 → 専用の削除メッセージ。 */
+export const OriginalDeletedSpreadsheet: Story = {
+  args: baseArgs("doc-xlsx-gone", "missing.xlsx"),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get("/api/documents/:id/raw", () => new HttpResponse(null, { status: 404 })),
+      ],
+    },
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "スプレッドシート" }));
+    await waitFor(() => expect(canvas.getByText("原本ファイルは削除されたか利用できません")).toBeInTheDocument());
+    await expect(canvas.queryByRole("link", { name: "原本をダウンロード" })).toBeNull();
+  },
+};
