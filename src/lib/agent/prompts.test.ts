@@ -8,11 +8,13 @@ describe("getAgentPrompts", () => {
     expect(sys).toContain("仅");
     expect(sys).toContain("出处");
     expect(sys).toContain("中文");
+    expect(sys).toContain("必须始终使用中文回答");
     expect(sys).toContain("不要");
     expect(sys).not.toContain("ください");
   });
   it("ja 的系统提示词（默认配置）为日语", () => {
     const sys = buildSystemPrompt(AGENT_CFG_DEFAULTS, "ja");
+    expect(sys).toContain("必ず日本語で回答");
     expect(sys).toContain("ください");
     expect(sys).toContain("出典番号");
   });
@@ -52,5 +54,9 @@ describe("getAgentPrompts", () => {
       expect(p.revise.system.length).toBeGreaterThan(0);
       expect(p.revise.done.length).toBeGreaterThan(0);
     }
+  });
+  it("revise プロンプトも locale の回答言語を強制する", () => {
+    expect(getAgentPrompts("zh").revise.system).toContain("必须始终使用中文回答");
+    expect(getAgentPrompts("ja").revise.system).toContain("必ず日本語で回答");
   });
 });
