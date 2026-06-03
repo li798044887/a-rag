@@ -251,4 +251,12 @@ test("未裏付けがあれば訂正本文が最終回答になる", async () =>
   expect(events.some((e) => e.type === "step" && e.step.name === "revise")).toBe(true);
   const answer = events.filter((e) => e.type === "answer-delta").map((e) => (e as { text: string }).text).join("");
   expect(answer).toBe("訂正後の回答[1]。");
+
+  // verify ステップは未裏付け主張の一覧を、revise ステップは訂正前→訂正後を保持する。
+  const verifyDone = events.find((e) => e.type === "step" && e.step.name === "verify" && e.step.status === "done");
+  expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({ claims: ["x"] });
+  const revise = events.find((e) => e.type === "step" && e.step.name === "revise");
+  const reviseOut = (revise as Extract<AgentEvent, { type: "step" }>).step.output as { draft: unknown; revised: unknown };
+  expect(reviseOut.revised).toBe("訂正後の回答[1]。");
+  expect(typeof reviseOut.draft).toBe("string");
 });

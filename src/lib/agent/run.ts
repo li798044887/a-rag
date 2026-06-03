@@ -185,16 +185,19 @@ async function pump(
         query, answer, sources: registry.listSources(),
         model: resolution.models.rewrite, prompts, maxRevisions: cfg.maxRevisions,
       });
+      // 検証ステップに未裏付け主張の一覧を載せ、検証内容を展開して確認できるようにする。
       bus.push({ type: "step", step: {
         id: "verify", name: "verify" as ToolName, label: prompts.verify.label,
         status: "done", durationMs: Date.now() - vStart,
-        input: {}, output: { unsupported: v.unsupported.length },
+        input: {}, output: { unsupported: v.unsupported.length, claims: v.unsupported },
         summary: prompts.verify.done(v.unsupported.length),
       } });
       if (v.revised) {
+        // 訂正ステップには訂正前→訂正後を載せ、差分を確認できるようにする。
         bus.push({ type: "step", step: {
           id: "revise", name: "revise" as ToolName, label: prompts.revise.label,
-          status: "done", durationMs: 0, input: {}, output: null, summary: prompts.revise.done,
+          status: "done", durationMs: 0, input: {}, output: { draft: answer, revised: v.revised },
+          summary: prompts.revise.done,
         } });
         answer = v.revised;
       }

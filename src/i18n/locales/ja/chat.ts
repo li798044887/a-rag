@@ -73,6 +73,10 @@ export const chat: typeof zhChat = {
   sectionInput: "入力",
   sectionUsedTokens: "使用トークン",
   sectionOutput: "出力",
+  sectionDraft: "訂正前の回答",
+  sectionUnsupported: "未裏付けの主張",
+  sectionRevised: "訂正後の回答",
+  allGrounded: "全主張が出典で裏付け済み",
   moreItems: "… 他 {n} 件",
   stepCancelled: "キャンセルされました",
 };

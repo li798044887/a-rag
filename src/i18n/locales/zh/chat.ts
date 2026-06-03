@@ -71,6 +71,10 @@ export const chat = {
   sectionInput: "输入",
   sectionUsedTokens: "使用 token",
   sectionOutput: "输出",
+  sectionDraft: "修订前回答",
+  sectionUnsupported: "无依据主张",
+  sectionRevised: "修订后回答",
+  allGrounded: "全部主张均有出处支撑",
   moreItems: "… 其他 {n} 条",
   stepCancelled: "已取消",
 };

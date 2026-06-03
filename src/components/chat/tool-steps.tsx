@@ -52,6 +52,19 @@ const TOOL_ICONS: Partial<Record<ToolName, React.ReactNode>> = {
     </>
   ),
   expand: <path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />,
+  grade: <path d="M2.5 3.5h11l-4.3 5v4l-2.4-1.2V8.5L2.5 3.5z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />,
+  verify: (
+    <>
+      <path d="M8 2.2l4.5 1.8v3.6c0 2.7-1.9 4.6-4.5 5.4-2.6-.8-4.5-2.7-4.5-5.4V4L8 2.2z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round" />
+      <path d="M6 7.8l1.5 1.5L10.3 6" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  revise: (
+    <>
+      <path d="M10.5 3.2l2.3 2.3-6.6 6.6-2.9.6.6-2.9 6.6-6.6z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round" />
+      <path d="M9.3 4.4l2.3 2.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </>
+  ),
 };
 
 function StatusIcon({ status, t }: { status: ToolStatus; t: Dictionary }) {
@@ -299,6 +312,50 @@ function ToolOutputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
     return (
       <div className="rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 text-[12px] leading-[1.55] text-fg-2">
         {output.result}
+      </div>
+    );
+  }
+
+  if (step.name === "verify") {
+    const claims = Array.isArray(output.claims) ? (output.claims as string[]) : [];
+    if (claims.length === 0) {
+      return (
+        <div className="rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 text-[12px] leading-[1.55] text-fg-2">
+          {t.chat.allGrounded}
+        </div>
+      );
+    }
+    return (
+      <ul className="flex flex-col gap-1.5 rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5">
+        {claims.map((c, i) => (
+          <li key={i} className="grid grid-cols-[14px_1fr] gap-2 text-[12px] leading-[1.5] text-fg-2">
+            <span className="pt-px text-center font-mono text-[11px] font-semibold text-[#B83A1F]">!</span>
+            <span className="min-w-0 whitespace-pre-wrap break-words">{c}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (step.name === "revise") {
+    return (
+      <div className="flex flex-col gap-2">
+        {typeof output.draft === "string" && (
+          <div>
+            <div className={sectionLabelCls}>{t.chat.sectionDraft}</div>
+            <div className="whitespace-pre-wrap break-words rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 text-[12px] leading-[1.55] text-muted">
+              {output.draft}
+            </div>
+          </div>
+        )}
+        {typeof output.revised === "string" && (
+          <div>
+            <div className={sectionLabelCls}>{t.chat.sectionRevised}</div>
+            <div className="whitespace-pre-wrap break-words rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 text-[12px] leading-[1.55] text-fg-2">
+              {output.revised}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
