@@ -1,7 +1,7 @@
 /** 取得チャンクの関連度判定（ハイブリッド）。
  *  まず rerank スコア閾値で安価にゲートし、閾値近傍の曖昧帯のみ LLM 判定する。
  *  関連が一件も残らなければ needRetry=true を返し、呼び出し側が再検索する。 */
-import { generateObject, type LanguageModel } from "ai";
+import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
 import type { AgentPrompts } from "@/lib/agent/prompts";
 
@@ -44,9 +44,9 @@ export async function gradeChunks(input: {
 
   if (ambiguous.length > 0) {
     try {
-      const { object } = await generateObject({
+      const { output } = await generateText({
         model,
-        schema: z.object({ relevantIds: z.array(z.string()) }),
+        output: Output.object({ schema: z.object({ relevantIds: z.array(z.string()) }) }),
         system: prompts.grade.system,
         prompt: JSON.stringify({
           query,
@@ -57,7 +57,7 @@ export async function gradeChunks(input: {
         }),
       });
       const valid = new Set(ambiguous.map((c) => c.chunkId));
-      for (const id of object.relevantIds) if (valid.has(id)) kept.add(id);
+      for (const id of output.relevantIds) if (valid.has(id)) kept.add(id);
     } catch {
       // LLM 失敗時は強スコアのみで続行（回答は必ず出す方針）。
     }
