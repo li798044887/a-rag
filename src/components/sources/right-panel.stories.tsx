@@ -218,7 +218,7 @@ export const OriginalConvertedPdf: Story = {
   },
 };
 
-/** 原本タブ（削除済み PDF）: HEAD が 404 → 非対応フォールバック（DL/引用テキスト）に退避。 */
+/** 原本タブ（削除済み PDF）: HEAD が 404 → 専用の削除メッセージ。DL ボタンは出さない。 */
 export const OriginalDeletedPdf: Story = {
   args: baseArgs("doc-gone", "missing.pdf"),
   parameters: {
@@ -231,6 +231,25 @@ export const OriginalDeletedPdf: Story = {
   },
   play: async ({ canvas, userEvent }) => {
     await userEvent.click(canvas.getByRole("button", { name: "原本" }));
-    await waitFor(() => expect(canvas.getByText("この形式はブラウザでプレビューできません")).toBeInTheDocument());
+    await waitFor(() => expect(canvas.getByText("原本ファイルは削除されたか利用できません")).toBeInTheDocument());
+    await expect(canvas.queryByRole("link", { name: "原本をダウンロード" })).toBeNull();
+    await expect(canvas.getByRole("button", { name: "引用テキストを表示" })).toBeInTheDocument();
+  },
+};
+
+/** 原本タブ（削除済みテキスト）: GET が 404 → 専用の削除メッセージ。 */
+export const OriginalDeletedText: Story = {
+  args: baseArgs("doc-txt-gone", "missing.txt"),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get("/api/documents/:id/raw", () => new HttpResponse(null, { status: 404 })),
+      ],
+    },
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "原本" }));
+    await waitFor(() => expect(canvas.getByText("原本ファイルは削除されたか利用できません")).toBeInTheDocument());
+    await expect(canvas.queryByRole("link", { name: "原本をダウンロード" })).toBeNull();
   },
 };

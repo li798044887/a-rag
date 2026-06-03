@@ -45,6 +45,26 @@ export function UnsupportedPreview({ docId, onShowParsed }: { docId: string; onS
   );
 }
 
+/** 原本欠落（削除済み = /raw 404）専用フォールバック。
+ *  ダウンロード導線は出さない（404 になるため）。onShowParsed 指定時のみ引用テキスト導線を出す。 */
+export function MissingOriginalPreview({ onShowParsed }: { onShowParsed?: () => void }) {
+  const { t } = useT();
+  return (
+    <div className="grid h-full place-items-center p-8 text-center">
+      <div className="max-w-[380px]">
+        <div className="mb-1.5 text-[13px] font-semibold text-fg">{t.documents.missingTitle}</div>
+        <div className="mb-4 text-[12px] leading-[1.6] text-muted">{t.documents.missingDescription}</div>
+        {onShowParsed && (
+          <button
+            onClick={onShowParsed}
+            className="inline-flex items-center rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2"
+          >{t.sources.showCitedText}</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Office 原本をサーバ側で PDF 変換し iframe 表示する。初回は数秒の変換待ち、
  *  失敗時はダウンロード導線へ退避する。blob 経由にして HTTP エラーを iframe に晒さない。 */
 export function RenderedPdfPreview({ docId, filename }: { docId: string; filename: string }) {
@@ -95,6 +115,7 @@ export function RawTextContent({
   if (raw.status === "loading" || raw.status === "idle") {
     return <div className="grid h-full place-items-center text-[12px] text-muted">{t.common.loading}</div>;
   }
+  if (raw.status === "missing") return <MissingOriginalPreview onShowParsed={onShowParsed} />;
   if (raw.status === "error") return <UnsupportedPreview docId={docId} onShowParsed={onShowParsed} />;
   return (
     <div>
@@ -123,7 +144,7 @@ function RawObjectPreview({ docId, onShowParsed, children }: { docId: string; on
       .catch(() => { if (!cancelled) setMissingFor(docId); });
     return () => { cancelled = true; };
   }, [docId]);
-  if (missingFor === docId) return <UnsupportedPreview docId={docId} onShowParsed={onShowParsed} />;
+  if (missingFor === docId) return <MissingOriginalPreview onShowParsed={onShowParsed} />;
   return <>{children}</>;
 }
 

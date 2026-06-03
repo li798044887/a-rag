@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 const MAX_TEXT_PREVIEW_CHARS = 2 * 1024 * 1024;
 
 export interface RawTextState {
-  status: "idle" | "loading" | "ready" | "error";
+  status: "idle" | "loading" | "ready" | "missing" | "error";
   text: string;
   truncated: boolean;
 }
@@ -27,6 +27,10 @@ export function useRawText(docId: string | null): RawTextState {
       setState({ status: "loading", text: "", truncated: false });
       try {
         const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/raw`);
+        if (res.status === 404) {
+          if (!cancelled) setState({ status: "missing", text: "", truncated: false });
+          return;
+        }
         if (!res.ok) throw new Error(String(res.status));
         const full = await res.text();
         if (cancelled) return;
