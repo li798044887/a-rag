@@ -224,6 +224,37 @@ test("runAgent with locale zh uses Chinese no-sources fallback", async () => {
   expect(answer).not.toContain("該当");
 });
 
+test("runAgent returns generation failure fallback when the model stream emits an error part", async () => {
+  vi.mocked(streamText).mockReturnValueOnce({
+    fullStream: (async function* () {
+      yield {
+        type: "error",
+        error: {
+          message: "Failed after 3 attempts",
+          reason: "maxRetriesExceeded",
+          errors: [
+            new Error("Cannot connect to API: Client network socket disconnected before secure TLS connection was established"),
+          ],
+        },
+      };
+    })(),
+  } as never);
+
+  const events: AgentEvent[] = [];
+  for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {
+    events.push(e);
+  }
+
+  const answer = events.filter((e) => e.type === "answer-delta").map((e) => e.text).join("");
+  expect(answer).toContain(getAgentPrompts("ja").fallback.genFailed);
+  expect(answer).toContain("エラー詳細");
+  expect(answer).toContain("Failed after 3 attempts");
+  expect(answer).toContain("maxRetriesExceeded");
+  expect(answer).toContain("Cannot connect to API");
+  expect(answer).not.toBe(getAgentPrompts("ja").fallback.noSources);
+  expect(events.some((e) => e.type === "done")).toBe(true);
+});
+
 test("生成はバッファ化され、根拠検証ステップの後に回答がストリームされる", async () => {
   const events: AgentEvent[] = [];
   for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {

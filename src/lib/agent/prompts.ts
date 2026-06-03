@@ -73,6 +73,7 @@ export interface AgentPrompts {
     fetchUnresolved: (ref: number) => string;
     fetchEmpty: string;
     genFailed: string;
+    genFailedWithDetail: (detail: string) => string;
     noSources: string;
     genUnavailable: string;
     modelUnavailable: string;
@@ -175,6 +176,7 @@ const JA: AgentPrompts = {
     fetchUnresolved: (ref) => `出典 [${ref}] はまだ取得していません。先に retrieve を実行し、結果に付いた番号を指定してください。`,
     fetchEmpty: "文書の本文が取得できませんでした。",
     genFailed: "回答の生成に失敗しました。時間をおいて再度お試しください。",
+    genFailedWithDetail: (detail) => `回答の生成に失敗しました。時間をおいて再度お試しください。\n\nエラー詳細: ${detail}`,
     noSources: "該当する資料が見つかりませんでした。別の言い回しで質問するか、関連ファイルをアップロードしてください。",
     genUnavailable: "回答を生成できませんでした。時間をおいて再度お試しください。",
     modelUnavailable: "モデルが利用できません。API キーの設定を確認してください。",
@@ -276,6 +278,7 @@ const ZH: AgentPrompts = {
     fetchUnresolved: (ref) => `出处 [${ref}] 尚未获取。请先执行 retrieve，再指定结果中给出的编号。`,
     fetchEmpty: "未能获取文档正文。",
     genFailed: "生成回答失败，请稍后重试。",
+    genFailedWithDetail: (detail) => `生成回答失败，请稍后重试。\n\n错误详情：${detail}`,
     noSources: "未找到相关资料。请换一种说法提问，或上传相关文件。",
     genUnavailable: "未能生成回答，请稍后重试。",
     modelUnavailable: "模型不可用，请检查 API 密钥配置。",

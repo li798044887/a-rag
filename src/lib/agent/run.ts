@@ -159,11 +159,16 @@ async function pump(
           answer += part.text;
         } else if (part.type === "finish") {
           totalUsage = part.totalUsage;
+        } else if (part.type === "error") {
+          if (!answer) {
+            answer = generationFailureText(prompts, part.error);
+          }
+          break;
         }
       }
-    } catch {
+    } catch (err) {
       if (!answer) {
-        answer = prompts.fallback.genFailed;
+        answer = generationFailureText(prompts, err);
       }
     }
 
@@ -238,6 +243,49 @@ function runningSummaryOf(prompts: AgentPrompts, name: string): string {
   if (name === "retrieve") return prompts.runningSummaries.retrieve;
   if (name === "fetch_document") return prompts.runningSummaries.fetch_document;
   return prompts.runningSummaries.default;
+}
+
+function generationFailureText(prompts: AgentPrompts, error: unknown): string {
+  const detail = describeError(error);
+  return detail ? prompts.fallback.genFailedWithDetail(detail) : prompts.fallback.genFailed;
+}
+
+function describeError(error: unknown): string {
+  const parts = collectErrorParts(error);
+  const deduped = [...new Set(parts.map(sanitizeErrorDetail).filter(Boolean))];
+  return deduped.join(" / ").slice(0, 1000);
+}
+
+function collectErrorParts(error: unknown): string[] {
+  if (typeof error === "string") return [error];
+  if (error instanceof Error) {
+    return [
+      error.message,
+      ...collectNestedErrorParts(error as unknown as Record<string, unknown>),
+    ];
+  }
+  if (error && typeof error === "object") {
+    return collectNestedErrorParts(error as Record<string, unknown>);
+  }
+  return [];
+}
+
+function collectNestedErrorParts(error: Record<string, unknown>): string[] {
+  const parts: string[] = [];
+  if (typeof error.message === "string") parts.push(error.message);
+  if (typeof error.reason === "string") parts.push(error.reason);
+  if (Array.isArray(error.errors) && error.errors.length) {
+    parts.push(...collectErrorParts(error.errors[error.errors.length - 1]));
+  }
+  if (error.cause) parts.push(...collectErrorParts(error.cause));
+  return parts;
+}
+
+function sanitizeErrorDetail(detail: string): string {
+  return detail
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
+    .replace(/sk-[A-Za-z0-9_-]{10,}/g, "sk-[redacted]")
+    .trim();
 }
 
 export { DEFAULT_MODEL_ID };
