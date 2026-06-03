@@ -6,8 +6,7 @@ import { PanelResizer } from "@/components/sources/panel-resizer";
 import { PlainSectionBody, RenderedSectionBody } from "@/components/sources/rendered-section-body";
 import { useT } from "@/i18n/context";
 import { interpolate } from "@/i18n/interpolate";
-import { OriginalPreview } from "@/components/documents/original-preview";
-import { isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
+import { OriginalPreview, originalTabLabel } from "@/components/documents/original-preview";
 import type { CitationMap, Source, SourceType } from "@/lib/types";
 
 export type RightPanelAction = "open-source" | "download" | "share";
@@ -69,13 +68,8 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
   // ハイライト中セクション → 先頭セクションの順でページを決定（0-based を PDF の 1-based へ）。
   const hlSec = active?.sections.find((s) => s.id === highlightSectionId);
   const pdfPage = ((hlSec?.page ?? active?.sections[0]?.page ?? 0) | 0) + 1;
-  // 原本タブは全形式で常設。表計算/Office変換はラベルを変える。
-  const fileName = active?.title || active?.path || "";
-  const originalLabel = isSpreadsheet(fileName)
-    ? t.documents.tabSpreadsheet
-    : isConvertibleToPdf(fileName)
-    ? t.documents.tabConvertedPdf
-    : t.documents.tabOriginal;
+  // 原本タブは全形式で常設。ラベルはファイル種別で変わる（原本/スプレッドシート/原本PDF変換）。
+  const originalLabel = originalTabLabel(active?.title || active?.path || "", t);
   const effectiveMode: ViewMode = viewMode;
 
   const citationNum = (id: string) => {

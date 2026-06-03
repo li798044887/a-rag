@@ -16,7 +16,6 @@ export const sources = {
   metaPath: "路径",
   viewHtml: "HTML格式",
   viewText: "解析文本",
-  viewPdf: "原PDF",
 
   // Citation highlight badge
   citedSection: "引用位置",
@@ -42,8 +41,6 @@ export const sources = {
   // PanelResizer aria-label
   panelResizerAriaLabel: "调整来源面板宽度",
 
-  // Deleted-document fallback (original PDF tab)
-  deletedTitle: "该文档已被删除",
-  deletedDesc: "原始文件已被删除。引用文本可在「HTML格式」「解析文本」标签页中查看。",
+  // Show cited (parsed) text action（原本欠落/非対応時のフォールバック導線）
   showCitedText: "查看引用文本",
 };

@@ -36,7 +36,7 @@ test("maps rag 409 to 409 with duplicate message", async () => {
   const res = await POST(uploadRequest());
   expect(res.status).toBe(409);
   const body = await res.json();
-  // ロケール未設定時は zh にフォールバック
+  // ロケール未設定時は既定の ja にフォールバック
   expect(body.error).toBe(getDictionary("ja").api.duplicateFile);
 });
 

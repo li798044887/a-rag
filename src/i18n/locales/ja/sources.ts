@@ -18,7 +18,6 @@ export const sources: typeof zhSources = {
   metaPath: "パス",
   viewHtml: "HTML整形",
   viewText: "解析テキスト",
-  viewPdf: "元PDF",
 
   // Citation highlight badge
   citedSection: "引用箇所",
@@ -44,8 +43,6 @@ export const sources: typeof zhSources = {
   // PanelResizer aria-label
   panelResizerAriaLabel: "一次資料パネルの幅を調整",
 
-  // Deleted-document fallback (original PDF tab)
-  deletedTitle: "この文書は削除済みです",
-  deletedDesc: "原本ファイルは削除されています。引用テキストは「HTML整形」「解析テキスト」タブで確認できます。",
+  // Show cited (parsed) text action（原本欠落/非対応時のフォールバック導線）
   showCitedText: "引用テキストを表示",
 };

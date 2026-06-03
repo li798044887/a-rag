@@ -6,6 +6,15 @@ import { PlainTextView } from "@/components/documents/plain-text-view";
 import { useRawText, type RawTextState } from "@/hooks/use-raw-text";
 import { getTextPreviewKind, isConvertibleToPdf, isImage, isPdf, isSpreadsheet } from "@/lib/file-types";
 import { useT } from "@/i18n/context";
+import type { Dictionary } from "@/i18n/dictionary";
+
+/** 原本タブのラベルをファイル種別で決める（modal/panel 共通）。
+ *  表計算→スプレッドシート / Office→原本PDF変換 / それ以外→原本。 */
+export function originalTabLabel(filename: string, t: Dictionary): string {
+  if (isSpreadsheet(filename)) return t.documents.tabSpreadsheet;
+  if (isConvertibleToPdf(filename)) return t.documents.tabConvertedPdf;
+  return t.documents.tabOriginal;
+}
 
 // 純正 PDF ビューアの黒いクロムを隠し、紙系の世界観に馴染ませる。
 const PDF_VIEW_PARAMS = "#toolbar=0&navpanes=0&statusbar=0&view=FitH";
@@ -109,7 +118,8 @@ function RawObjectPreview({ docId, onShowParsed, children }: { docId: string; on
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/documents/${encodeURIComponent(docId)}/raw`, { method: "HEAD" })
-      .then((r) => { if (!cancelled && !r.ok) setMissingFor(docId); })
+      // 成功時は null へ戻して自己回復させる（一過性404や同一IDの再アップロードに追従）。
+      .then((r) => { if (!cancelled) setMissingFor(r.ok ? null : docId); })
       .catch(() => { if (!cancelled) setMissingFor(docId); });
     return () => { cancelled = true; };
   }, [docId]);
