@@ -318,8 +318,10 @@ def preview_document(document_id: str, owner_user_id: str):
     return _preview_document(document_id, owner_user_id)
 
 
-@router.get("/documents/{document_id}/raw",
-            dependencies=[Depends(require_internal_token)])
+# フロントの原本存在確認は HEAD（right-panel）。FastAPI は GET ルートへ HEAD を
+# 自動付与しないため明示的に許可する。FileResponse は HEAD では本文を送らない。
+@router.api_route("/documents/{document_id}/raw", methods=["GET", "HEAD"],
+                  dependencies=[Depends(require_internal_token)])
 def get_document_raw(document_id: str, owner_user_id: str, download: bool = False):
     session = SessionLocal()
     try:

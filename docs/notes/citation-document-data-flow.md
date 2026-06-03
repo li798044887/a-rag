@@ -89,7 +89,8 @@ sequenceDiagram
 | 引用番号 [1][2]… とハイライト対応 | ✅ 残る | `citationMap` も保存済み |
 | 一次資料パネルの「HTML整形」表示（既定ビュー） | ✅ 残る | 保存済み `snippet` を描画 |
 | 見出し・ページ番号・関連度スコア | ✅ 残る | スナップショット |
-| 「原本 / PDF」タブ・「ソースを新しいタブで開く」 | ❌ 404 | `/api/documents/{id}/raw` をライブ取得（`src/components/sources/right-panel.tsx:65,114`）。rag 側の文書が消えると読めない |
+| 「原本 / PDF」タブ | ⚠️ フォールバック表示 | 開いた時に HEAD で原本存在を確認し、本当に消えていれば「この文書は削除済みです（引用テキストのみ）」を表示（`src/components/sources/right-panel.tsx`）。実在すれば iframe で原本PDFを表示 |
+| 「ソースを新しいタブで開く」 | ❌ 404 | `/api/documents/{id}/raw` をライブ取得。rag 側の文書が消えると読めない |
 
 → **引用された証跡テキストは履歴に残り、壊れるのは「原本ファイルを開く」導線だけ。** これは単一削除でも一括削除でも同じ（削除処理は共通の `_delete_one`、`rag/app/routers/documents.py`）。
 
@@ -100,6 +101,8 @@ sequenceDiagram
 - 一次資料パネル: `src/components/sources/right-panel.tsx`
 - 文書削除（単一/一括 共通）: `rag/app/routers/documents.py`（`_delete_one` / `delete_document` / `bulk_delete_documents`）
 
-## 改善余地（任意）
+## 原本タブのフォールバックと HEAD 存在確認（実装済み）
 
-原本タブを開くと無言で 404 になる。right-panel で raw 取得失敗時に「この文書は削除済みです（引用テキストのみ表示）」とフォールバック表示すると親切。必須ではない。
+削除済み文書で原本タブが無言の 404 にならないよう、`right-panel.tsx` が「原本/PDF」タブを開いた時に `/api/documents/{id}/raw` へ **HEAD** で存在確認し、404 の文書だけ「この文書は削除済みです」を表示する（実在すれば iframe で原本PDFを描画）。
+
+⚠️ **落とし穴（修正済み）**: rag の raw ルートは元々 `@router.get(...)` のみで、FastAPI は GET ルートへ HEAD を自動付与しない。そのため HEAD が **405** を返し、Next プロキシ（`src/app/api/documents/[id]/raw/route.ts` の HEAD）が 404 に変換 → **実在文書でも常に「削除済み」**になっていた。`@router.api_route(..., methods=["GET", "HEAD"])` で HEAD を許可して解消（`rag/app/routers/documents.py`）。HEAD の回帰テストは `rag/tests/test_documents_api.py`。

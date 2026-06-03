@@ -72,6 +72,49 @@ def test_raw_streams_file(client, monkeypatch, tmp_path):
     assert res.content.startswith(b"%PDF")
 
 
+def test_raw_head_ok_when_exists(client, monkeypatch, tmp_path):
+    # フロントの存在確認は HEAD。原本があれば 200（本文なし）を返すこと。
+    pdf = tmp_path / "src.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n...")
+
+    class _Doc:
+        owner_user_id = "u1"
+        mime = "application/pdf"
+        raw_path = str(pdf)
+        filename = "src.pdf"
+
+    class _Session:
+        def get(self, model, _id):
+            return _Doc()
+        def close(self):
+            pass
+
+    monkeypatch.setattr(documents_router, "SessionLocal", lambda: _Session())
+    res = client.head("/documents/d1/raw?owner_user_id=u1",
+                      headers={"x-internal-token": settings.rag_internal_token})
+    assert res.status_code == 200
+    assert res.content == b""
+
+
+def test_raw_head_404_when_not_owner(client, monkeypatch):
+    class _Doc:
+        owner_user_id = "owner-A"
+        mime = "application/pdf"
+        raw_path = "/nope.pdf"
+        filename = "x.pdf"
+
+    class _Session:
+        def get(self, model, _id):
+            return _Doc()
+        def close(self):
+            pass
+
+    monkeypatch.setattr(documents_router, "SessionLocal", lambda: _Session())
+    res = client.head("/documents/d1/raw?owner_user_id=intruder-B",
+                      headers={"x-internal-token": settings.rag_internal_token})
+    assert res.status_code == 404
+
+
 def test_raw_404_when_not_owner(client, monkeypatch):
     class _Doc:
         owner_user_id = "owner-A"
