@@ -70,7 +70,7 @@ function stageOutput(ev: RetrieveStageEvent): Record<string, unknown> | null {
     case "vector_search":
     case "bm25_search": return { count: ev.count ?? 0, hits: ev.hits ?? [] };
     case "rerank": return { count: ev.count ?? 0, selected: ev.selected ?? [] };
-    case "expand": return { count: ev.count ?? 0 };
+    case "expand": return { count: ev.count ?? 0, expanded: ev.expanded ?? [] };
     default: return ev.count != null ? { count: ev.count } : null;
   }
 }
@@ -80,7 +80,7 @@ function attemptLabel(label: string, attempt: number): string {
 }
 
 /** retrieve の段階イベントを parentId 付きサブステップへ変換して bus に流す。 */
-function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, prompts: AgentPrompts, attempt: number): AgentEvent {
+function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, prompts: AgentPrompts, attempt: number, showAttemptLabel = true): AgentEvent {
   // start と done は同一 id を共有し、reducer が id マージで running→done に更新する（衝突ではなく意図）。
   // ただし CRAG の再検索では同じ stage が複数回流れるため、検索試行ごとに id を分ける。
   const stageKey = ev.stage as keyof AgentPrompts["stageLabels"];
@@ -88,7 +88,7 @@ function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, p
     id: `${parentId}:retrieve-${attempt}:${ev.stage}`,
     name: ev.stage as ToolName,
     parentId,
-    label: attemptLabel(prompts.stageLabels[stageKey] ?? ev.stage, attempt),
+    label: showAttemptLabel ? attemptLabel(prompts.stageLabels[stageKey] ?? ev.stage, attempt) : (prompts.stageLabels[stageKey] ?? ev.stage),
   };
   if (ev.status === "start") {
     return { type: "step", step: { ...base, status: "running", durationMs: 0, input: {}, output: null, summary: prompts.stageRunning[stageKey] ?? prompts.stageDefaultRunning } };
@@ -116,10 +116,10 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
         let q = query;
         let activeParentId = toolCallId;
         let activeParentStarted: number | null = null;
-        const runRetrieveAttempt = (attempt: number, parentId: string) => retrieveChunksStream({
+        const runRetrieveAttempt = (attempt: number, parentId: string, showAttemptLabel = true) => retrieveChunksStream({
           query: q, rewritten: attempt > 0 ? q : undefined, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
-          onStage: (ev) => bus.push(stageToEvent(ev, parentId, q, prompts, attempt)),
+          onStage: (ev) => bus.push(stageToEvent(ev, parentId, q, prompts, attempt, showAttemptLabel)),
         });
         let chunks = await runRetrieveAttempt(0, activeParentId);
 
@@ -137,16 +137,28 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
                 headingPath: c.headingPath, text: c.expandedText || c.text,
               })),
             });
+            const kept = new Set(grade.keptIds);
+            const gradeCandidates = chunks.map((c) => ({
+              chunkId: c.chunkId,
+              title: c.documentTitle,
+              heading: c.headingPath,
+              score: c.score,
+              kept: kept.has(c.chunkId),
+            }));
             bus.push({ type: "step", step: {
-              id: `${activeParentId}:grade-${retry}`, name: "grade", parentId: activeParentId, label: attemptLabel(prompts.grade.label, retry),
-              status: "done", durationMs: 0, input: {}, output: { kept: grade.keptIds.length, total: grade.total },
+              id: `${activeParentId}:grade-${retry}`, name: "grade", parentId: activeParentId,
+              label: activeParentId === toolCallId ? attemptLabel(prompts.grade.label, retry) : prompts.grade.label,
+              status: "done", durationMs: 0, input: {},
+              output: { kept: grade.keptIds.length, total: grade.total, needRetry: grade.needRetry, candidates: gradeCandidates },
               summary: prompts.grade.done(grade.keptIds.length, grade.total),
             } });
             if (activeParentId !== toolCallId && activeParentStarted != null) {
               bus.push({ type: "step", step: {
-                id: activeParentId, name: "retrieve", label: prompts.toolLabels.retrieve,
+                id: activeParentId, name: "retrieve", label: prompts.grade.retryLabel,
                 status: "done", durationMs: Date.now() - activeParentStarted,
-                input: { query: q }, output: null, summary: prompts.retrieveMetaSummary(q, chunks.length),
+                input: { query: q, retryReason: prompts.grade.retry },
+                output: null,
+                summary: `${prompts.grade.retry}: ${prompts.retrieveMetaSummary(q, chunks.length)}`,
               } });
               activeParentStarted = null;
             }
@@ -171,11 +183,13 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
             activeParentId = `${toolCallId}:retry-${retry + 1}:retrieve`;
             activeParentStarted = Date.now();
             bus.push({ type: "step", step: {
-              id: activeParentId, name: "retrieve", label: prompts.toolLabels.retrieve,
+              id: activeParentId, name: "retrieve", label: prompts.grade.retryLabel,
               status: "running", durationMs: 0,
-              input: { query: q }, output: null, summary: prompts.runningSummaries.retrieve,
+              input: { query: q, retryReason: prompts.grade.retry },
+              output: null,
+              summary: prompts.grade.retry,
             } });
-            chunks = await runRetrieveAttempt(retry + 1, activeParentId);
+            chunks = await runRetrieveAttempt(retry + 1, activeParentId, false);
           }
         }
 

@@ -184,6 +184,9 @@ def test_retrieve_stream_done_events_carry_detail(caplog):
 
     exp = by["expand"]
     assert exp["count"] == len(rr["selected"])
+    assert isinstance(exp["expanded"], list) and exp["expanded"]
+    assert {"id", "title", "heading", "score", "page", "blockType", "expandedChars", "preview"} <= set(exp["expanded"][0].keys())
+    assert exp["expanded"][0]["title"] == "設計.pdf"
     assert "stage=rerank status=start candidate_count=" in caplog.text
     assert "stage=rerank status=done" in caplog.text
 

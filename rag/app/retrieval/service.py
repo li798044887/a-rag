@@ -67,6 +67,22 @@ def _hit_rows(session: Session, hits: list[dict], title_cache: dict[str, str]) -
     return rows
 
 
+def _expanded_rows(chunks: list[RetrievedChunk]) -> list[dict]:
+    rows = []
+    for c in chunks:
+        rows.append({
+            "id": c.chunk_id,
+            "title": c.document_title,
+            "heading": c.heading_path,
+            "score": float(c.score),
+            "page": c.page_start,
+            "blockType": c.block_type,
+            "expandedChars": len(c.expanded_text or ""),
+            "preview": (c.expanded_text or c.text or "")[:240],
+        })
+    return rows
+
+
 def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, reranker: Reranker,
                     *, query: str, owner_user_id: str, top_k: int = 6,
                     candidate_k: int = DEFAULT_CANDIDATE_K,
@@ -159,7 +175,8 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
             expanded_text=expanded, score=float(score)))
     expand_ms = _ms(te)
     _log_info("retrieve_stream stage=expand status=done ms=%s count=%s", expand_ms, len(out))
-    yield {"stage": "expand", "status": "done", "ms": expand_ms, "count": len(out)}
+    yield {"stage": "expand", "status": "done", "ms": expand_ms, "count": len(out),
+           "expanded": _expanded_rows(out)}
     _log_info("retrieve_stream stage=result count=%s", len(out))
     yield {"stage": "result", "chunks": out}
 

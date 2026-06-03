@@ -67,6 +67,16 @@ export interface RetrieveStageEvent {
   top_n?: number;
   hits?: { title: string; heading: string; score: number }[];
   selected?: { id: string; score: number; title: string }[];
+  expanded?: {
+    id: string;
+    title: string;
+    heading: string;
+    score: number;
+    page: number;
+    blockType: string;
+    expandedChars: number;
+    preview: string;
+  }[];
 }
 
 /** /retrieve/stream を読み、段階イベントを onStage に流し、最終 result の chunks を返す。 */

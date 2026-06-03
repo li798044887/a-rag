@@ -257,9 +257,20 @@ test("grade が不足判定なら rewrite して再検索する", async () => {
   const retryRewrite = events.find((e) => e.type === "step" && e.step.name === "rewrite_query" && e.step.id === "call-1:rewrite-retry-0");
   expect(retryRewrite).toBeDefined();
   expect((retryRewrite as Extract<AgentEvent, { type: "step" }>).step.parentId).toBeUndefined();
+  const firstGrade = events.find((e) => e.type === "step" && e.step.name === "grade" && e.step.parentId === "call-1");
+  expect((firstGrade as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({
+    kept: 0,
+    total: 1,
+    needRetry: true,
+    candidates: [{ title: "A", heading: "h", score: 0.05, kept: false }],
+  });
   const retryRetrieve = events.find((e) => e.type === "step" && e.step.name === "retrieve" && e.step.id === "call-1:retry-1:retrieve" && e.step.status === "done");
   expect(retryRetrieve).toBeDefined();
-  expect((retryRetrieve as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ query: "改善クエリ" });
+  expect((retryRetrieve as Extract<AgentEvent, { type: "step" }>).step).toMatchObject({
+    label: "再検索",
+    input: { query: "改善クエリ", retryReason: "関連資料が不足のため再検索" },
+    summary: expect.stringContaining("関連資料が不足のため再検索"),
+  });
   expect(events.some((e) => e.type === "step" && e.step.name === "grade" && e.step.parentId === "call-1:retry-1:retrieve")).toBe(true);
 });
 
@@ -301,8 +312,10 @@ test("再検索時の retrieve サブステップは前回試行を上書きし�
   const bm25Done = steps.filter((s) => s.name === "bm25_search" && s.status === "done");
   expect(bm25Done).toHaveLength(2);
   expect(new Set(bm25Done.map((s) => s.id)).size).toBe(2);
-  expect(bm25Done[1].label).toContain("#2");
+  expect(bm25Done[1].label).toBe("キーワード検索");
+  expect(bm25Done[1].label).not.toContain("#2");
   expect(steps.filter((s) => s.name === "grade")).toHaveLength(2);
+  expect(steps.filter((s) => s.name === "grade")[1].label).toBe("関連度判定");
 });
 
 test("maxRetrieveRetries=0 なら grade のみで再検索しない", async () => {

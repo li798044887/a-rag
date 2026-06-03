@@ -50,6 +50,8 @@ export interface AgentPrompts {
     done: (kept: number, total: number) => string;
     /** 関連不足で再検索する際のサマリ。 */
     retry: string;
+    /** 再検索 retrieve の短い表示ラベル。 */
+    retryLabel: string;
   };
   /** 再検索時のクエリ改善 LLM system。 */
   queryRewrite: { system: string };
@@ -150,6 +152,7 @@ const JA: AgentPrompts = {
       "単語が似ているだけで論点が違うものは含めないでください。",
     done: (k, t) => `${t} 件中 ${k} 件が関連`,
     retry: "関連資料が不足のため再検索",
+    retryLabel: "再検索",
   },
   queryRewrite: {
     system:
@@ -260,6 +263,7 @@ const ZH: AgentPrompts = {
       "仅词面相似但论点不同的片段不要包含。",
     done: (k, t) => `${t} 条中 ${k} 条相关`,
     retry: "相关资料不足，重新检索",
+    retryLabel: "重新检索",
   },
   queryRewrite: {
     system:

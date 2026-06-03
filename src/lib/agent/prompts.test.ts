@@ -47,6 +47,8 @@ describe("getAgentPrompts", () => {
       expect(p.grade.label.length).toBeGreaterThan(0);
       expect(p.grade.system.length).toBeGreaterThan(0);
       expect(p.grade.done(1, 3).length).toBeGreaterThan(0);
+      expect(p.grade.retry.length).toBeGreaterThan(0);
+      expect(p.grade.retryLabel.length).toBeGreaterThan(0);
       expect(p.queryRewrite.system.length).toBeGreaterThan(0);
       expect(p.verify.system.length).toBeGreaterThan(0);
       expect(p.verify.done(0).length).toBeGreaterThan(0);
@@ -58,6 +60,10 @@ describe("getAgentPrompts", () => {
   it("revise プロンプトも locale の回答言語を強制する", () => {
     expect(getAgentPrompts("zh").revise.system).toContain("必须始终使用中文回答");
     expect(getAgentPrompts("ja").revise.system).toContain("必ず日本語で回答");
+  });
+  it("再検索ラベルは locale ごとに短く表示できる", () => {
+    expect(getAgentPrompts("ja").grade.retryLabel).toBe("再検索");
+    expect(getAgentPrompts("zh").grade.retryLabel).toBe("重新检索");
   });
   it("verify プロンプトは名詞句を未裏付け主張にしないよう指示する", () => {
     expect(getAgentPrompts("zh").verify.system).toContain("名词短语");

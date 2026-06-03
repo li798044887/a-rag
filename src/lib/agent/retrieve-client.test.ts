@@ -109,6 +109,7 @@ test("retrieveChunksStream forwards detail fields (hits/selected/model/dims)", a
     '{"stage":"embed","status":"done","ms":1,"model":"BAAI/bge-m3","dims":1024}\n' +
     '{"stage":"vector_search","status":"done","ms":2,"count":1,"hits":[{"title":"t","heading":"H","score":0.8}]}\n' +
     '{"stage":"rerank","status":"done","ms":3,"count":1,"model":"BAAI/bge-reranker-v2-m3","top_n":6,"selected":[{"id":"c1","score":0.04,"title":"t"}]}\n' +
+    '{"stage":"expand","status":"done","ms":4,"count":1,"expanded":[{"id":"c1","title":"t","heading":"H","score":0.04,"page":2,"blockType":"text","expandedChars":120,"preview":"本文"}]}\n' +
     '{"stage":"result","chunks":[]}\n';
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(ndjson, { status: 200 }));
   process.env.RAG_SERVICE_URL = "http://rag:8000";
@@ -124,4 +125,6 @@ test("retrieveChunksStream forwards detail fields (hits/selected/model/dims)", a
   const rr = stages.find((s) => s.stage === "rerank")!;
   expect(rr.top_n).toBe(6);
   expect(rr.selected).toEqual([{ id: "c1", score: 0.04, title: "t" }]);
+  const exp = stages.find((s) => s.stage === "expand")!;
+  expect(exp.expanded).toEqual([{ id: "c1", title: "t", heading: "H", score: 0.04, page: 2, blockType: "text", expandedChars: 120, preview: "本文" }]);
 });

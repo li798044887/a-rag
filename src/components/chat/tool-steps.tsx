@@ -14,6 +14,25 @@ interface CandidateHit {
   score: number;
 }
 
+interface ExpandedHit {
+  id: string;
+  title: string;
+  heading: string;
+  score: number;
+  page: number;
+  blockType: string;
+  expandedChars: number;
+  preview: string;
+}
+
+interface GradeCandidate {
+  chunkId: string;
+  title: string;
+  heading: string;
+  score: number;
+  kept: boolean;
+}
+
 const TOOL_ICONS: Partial<Record<ToolName, React.ReactNode>> = {
   rewrite_query: <path d="M3 8h7M7 5l-3 3 3 3M13 4v8" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />,
   vector_search: (
@@ -284,7 +303,56 @@ function ToolOutputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
     return <KeyValueGrid rows={[{ k: "dims", v: String(output.dims ?? "—") }]} />;
   }
   if (step.name === "expand") {
-    return <KeyValueGrid rows={[{ k: t.chat.expandCount, v: String(output.count ?? 0) }]} />;
+    const expanded = Array.isArray(output.expanded) ? (output.expanded as ExpandedHit[]) : [];
+    if (expanded.length === 0) {
+      return <KeyValueGrid rows={[{ k: t.chat.expandCount, v: String(output.count ?? 0) }]} />;
+    }
+    return (
+      <div className="flex flex-col gap-2">
+        <KeyValueGrid rows={[{ k: t.chat.expandCount, v: String(output.count ?? expanded.length) }]} />
+        <div className="overflow-hidden rounded-lg border-[0.5px] border-divider bg-code-bg">
+          {expanded.map((h, i) => (
+            <div key={`${h.id}-${i}`} className={cn("px-3 py-2.5", i > 0 && "border-t-[0.5px] border-divider")}>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="font-mono text-[11px] font-semibold tabular-nums text-accent">{h.score.toFixed(2)}</span>
+                <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-fg">{h.title}</span>
+                <span className="shrink-0 font-mono text-[10.5px] text-muted-2">p.{h.page}</span>
+                <span className="shrink-0 font-mono text-[10.5px] text-muted-2">{h.expandedChars}ch</span>
+              </div>
+              {h.heading && <div className="mt-0.5 truncate font-mono text-[10.5px] text-muted-2">{h.heading}</div>}
+              {h.preview && <div className="mt-1 line-clamp-2 whitespace-pre-wrap text-[11.5px] leading-[1.5] text-fg-2">{h.preview}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (step.name === "grade") {
+    const candidates = Array.isArray(output.candidates) ? (output.candidates as GradeCandidate[]) : [];
+    if (candidates.length === 0) return <pre className={preCls}>{JSON.stringify(output, null, 2)}</pre>;
+    return (
+      <div className="flex flex-col gap-2">
+        <KeyValueGrid rows={[
+          { k: "kept", v: `${String(output.kept ?? 0)} / ${String(output.total ?? candidates.length)}` },
+          { k: "retry", v: output.needRetry ? "yes" : "no" },
+        ]} />
+        <div className="overflow-hidden rounded-lg border-[0.5px] border-divider bg-code-bg">
+          {candidates.map((c, i) => (
+            <div key={`${c.chunkId}-${i}`} className={cn("grid grid-cols-[58px_42px_1fr] items-start gap-2.5 px-3 py-2.5 text-[11.5px]", i > 0 && "border-t-[0.5px] border-divider")}>
+              <span className={cn("rounded-full px-2 py-px text-center text-[10.5px] font-semibold", c.kept ? "bg-accent-soft text-accent" : "bg-divider text-muted")}>
+                {c.kept ? "kept" : "skip"}
+              </span>
+              <span className="font-mono text-[11px] font-semibold tabular-nums text-accent">{c.score.toFixed(2)}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-fg">{c.title}</span>
+                {c.heading && <span className="block truncate font-mono text-[10.5px] text-muted-2">{c.heading}</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if ((step.name === "retrieve" || step.name === "fetch_document") && typeof output.result === "string") {
