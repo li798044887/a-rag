@@ -59,4 +59,8 @@ describe("getAgentPrompts", () => {
     expect(getAgentPrompts("zh").revise.system).toContain("必须始终使用中文回答");
     expect(getAgentPrompts("ja").revise.system).toContain("必ず日本語で回答");
   });
+  it("verify プロンプトは名詞句を未裏付け主張にしないよう指示する", () => {
+    expect(getAgentPrompts("zh").verify.system).toContain("名词短语");
+    expect(getAgentPrompts("ja").verify.system).toContain("名詞句");
+  });
 });

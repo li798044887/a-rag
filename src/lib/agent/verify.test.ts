@@ -73,6 +73,40 @@ test("資料不足と追加情報依頼だけの中国語回答は unsupported �
   expect(generateText).toHaveBeenCalledTimes(1);
 });
 
+test("資料未記載とわからない旨だけの日本語回答は unsupported を空にする", async () => {
+  generateText.mockResolvedValueOnce({
+    output: {
+      unsupported: ["自社の収入が業界においてどのレベルにあるかの具体的な情報"],
+    },
+    totalUsage: { inputTokens: 20, outputTokens: 4, totalTokens: 24 },
+  });
+  const answer =
+    "**現在の収入の業界比較について**\n\n" +
+    "- 社内資料には自社の収入が業界においてどのレベルにあるかの具体的な情報は含まれていない。[1][2][3][4][5][6]\n" +
+    "- そのため、収入レベルの具体的な業界比較は「わからない」と答えるしかありません。";
+  const r = await verifyAnswer({ query: "q", answer, sources, model, prompts, maxRevisions: 1 });
+  expect(r.unsupported).toEqual([]);
+  expect(r.revised).toBeNull();
+  expect(r.verifyUsage).toMatchObject({ totalTokens: 24 });
+  expect(generateText).toHaveBeenCalledTimes(1);
+});
+
+test("論点を表すだけの名詞句は unsupported から除外する", async () => {
+  generateText.mockResolvedValueOnce({
+    output: {
+      unsupported: [
+        "自社の収入が業界においてどのレベルにあるかの具体的な情報",
+        "企业当前收入在行业中的水平",
+      ],
+    },
+  });
+  const answer = "質問は収入の業界比較についてです。";
+  const r = await verifyAnswer({ query: "q", answer, sources, model, prompts, maxRevisions: 1 });
+  expect(r.unsupported).toEqual([]);
+  expect(r.revised).toBeNull();
+  expect(generateText).toHaveBeenCalledTimes(1);
+});
+
 test("資料不足の明示と未裏付け主張が混在する場合は主張だけ revise する", async () => {
   generateText.mockResolvedValueOnce({
     output: { unsupported: ["企業の現在収入", "48時間で失効する"] },
