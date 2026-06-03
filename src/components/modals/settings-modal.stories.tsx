@@ -18,6 +18,8 @@ const agentCfg: AgentCfg = {
   parallelTools: 3,
   requireCitations: true,
   admitUnknown: true,
+  topK: 6,
+  candidateK: 10,
 };
 
 const now = Math.floor(Date.now() / 1000);

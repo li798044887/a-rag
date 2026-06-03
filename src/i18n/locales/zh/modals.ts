@@ -29,6 +29,10 @@ export const modals = {
   agentRequireCitationsLabel: "强制引用",
   agentRequireCitationsHint: "要求回答中每条事实都附带引用",
   agentAdmitUnknownLabel: '对未知内容回答"不知道"',
+  agentTopKLabel: "返回片段数",
+  agentTopKHint: "重排序后传入回答的最终片段数（top_k）",
+  agentCandidateKLabel: "候选池大小",
+  agentCandidateKHint: "向量/关键词检索各自的候选数量（candidate_k），越大召回越全但越慢",
 
   // 外观面板
   appearanceDarkModeLabel: "深色模式",

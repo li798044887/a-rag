@@ -27,6 +27,10 @@ export const modals: typeof zhModals = {
   agentRequireCitationsLabel: "引用の必須化",
   agentRequireCitationsHint: "回答中の各事実に引用を付けることを強制",
   agentAdmitUnknownLabel: '未知の場合に "わからない" と返す',
+  agentTopKLabel: "返却チャンク数",
+  agentTopKHint: "リランク後に回答へ渡す最終チャンク数（top_k）",
+  agentCandidateKLabel: "候補プール件数",
+  agentCandidateKHint: "ベクトル/キーワード検索それぞれの候補件数（candidate_k）。多いほど再現率は上がるが遅くなる",
 
   appearanceDarkModeLabel: "ダークモード",
   appearanceDarkModeHint: "目に優しい暗い配色に切り替えます",

@@ -231,6 +231,10 @@ export interface AgentCfg {
   requireCitations: boolean;
   /** 未知の場合に「わからない」と返す */
   admitUnknown: boolean;
+  /** リランク後に回答へ渡す最終チャンク数 */
+  topK: number;
+  /** ベクトル/BM25 検索それぞれの候補プール件数（リランク対象） */
+  candidateK: number;
 }
 
 // ── Tweaks (persisted display preferences) ──────────────────────────────────

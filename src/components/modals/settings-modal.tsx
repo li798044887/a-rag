@@ -12,6 +12,7 @@ import { interpolate } from "@/i18n/interpolate";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
 import { persistAndSwitchLocale, browserLocaleEffects } from "@/i18n/use-locale-switch";
 import { useConfirm } from "@/hooks/use-confirm";
+import { TOP_K_MIN, TOP_K_MAX, CANDIDATE_K_MIN, CANDIDATE_K_MAX } from "@/lib/agent/config";
 
 interface Props {
   open: boolean;
@@ -399,6 +400,26 @@ export function SettingsModal({
                     min={1}
                     value={agentCfg.parallelTools}
                     onChange={(e) => setAgentCfg("parallelTools", Number(e.target.value))}
+                    className={fieldInput}
+                  />
+                </Field>
+                <Field label={t.modals.agentTopKLabel} hint={t.modals.agentTopKHint}>
+                  <input
+                    type="number"
+                    min={TOP_K_MIN}
+                    max={TOP_K_MAX}
+                    value={agentCfg.topK}
+                    onChange={(e) => setAgentCfg("topK", Number(e.target.value))}
+                    className={fieldInput}
+                  />
+                </Field>
+                <Field label={t.modals.agentCandidateKLabel} hint={t.modals.agentCandidateKHint}>
+                  <input
+                    type="number"
+                    min={CANDIDATE_K_MIN}
+                    max={CANDIDATE_K_MAX}
+                    value={agentCfg.candidateK}
+                    onChange={(e) => setAgentCfg("candidateK", Number(e.target.value))}
                     className={fieldInput}
                   />
                 </Field>

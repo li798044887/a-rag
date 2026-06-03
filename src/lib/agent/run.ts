@@ -58,7 +58,7 @@ async function pump(
 
     const registry = new CitationRegistry();
     const meta = new Map<string, ToolCallMeta>();
-    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency: cfg.parallelTools });
+    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency: cfg.parallelTools, topK: cfg.topK, candidateK: cfg.candidateK });
 
     const userContent = prompts.buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);
     const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: userContent }];

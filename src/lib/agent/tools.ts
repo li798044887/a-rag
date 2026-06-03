@@ -26,10 +26,11 @@ export interface BuildToolsInput {
   prompts: AgentPrompts;
   /** ツール execute の同時実行上限。未指定なら既定の並列数。 */
   concurrency?: number;
+  /** リランク後の最終件数。未指定なら既定値。 */
+  topK?: number;
+  /** ベクトル/BM25 検索の候補プール件数。未指定なら既定値。 */
+  candidateK?: number;
 }
-
-const RETRIEVE_TOP_K = 6;
-const RETRIEVE_CANDIDATE_K = 10;
 
 /** done 時の段階別 summary を prompts から組み立てる。 */
 function stageDoneSummaryOf(prompts: AgentPrompts, stage: string, count?: number): string {
@@ -86,8 +87,10 @@ function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, p
   return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummaryOf(prompts, ev.stage, ev.count) } };
 }
 
-export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency }: BuildToolsInput): ToolSet {
+export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency, topK, candidateK }: BuildToolsInput): ToolSet {
   const sema = new Semaphore(concurrency ?? AGENT_CFG_DEFAULTS.parallelTools);
+  const resolvedTopK = topK ?? AGENT_CFG_DEFAULTS.topK;
+  const resolvedCandidateK = candidateK ?? AGENT_CFG_DEFAULTS.candidateK;
   return {
     retrieve: tool({
       description: prompts.toolDescriptions.retrieve,
@@ -96,7 +99,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
       }),
       execute: ({ query }, { toolCallId }) => sema.run(async () => {
         const chunks = await retrieveChunksStream({
-          query, ownerUserId, topK: RETRIEVE_TOP_K, candidateK: RETRIEVE_CANDIDATE_K,
+          query, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
           onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, query, prompts)),
         });
