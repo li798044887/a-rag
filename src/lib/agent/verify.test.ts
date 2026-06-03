@@ -55,6 +55,24 @@ test("資料不足の明示は未裏付け主張から除外して revise しな
   expect(generateText).toHaveBeenCalledTimes(1);
 });
 
+test("資料不足と追加情報依頼だけの中国語回答は unsupported を空にする", async () => {
+  generateText.mockResolvedValueOnce({
+    output: {
+      unsupported: [
+        "关于公司目前的收入在业内的水平，根据现有资料，无法确定具体的数据和比较情况。",
+      ],
+    },
+  });
+  const zhPrompts = getAgentPrompts("zh");
+  const answer =
+    "关于公司目前的收入在业内的水平，根据现有资料，无法确定具体的数据和比较情况。" +
+    "如果您能提供具体的公司名称或相关财务数据，我可以尝试更深入地为您查找相关信息。";
+  const r = await verifyAnswer({ query: "q", answer, sources, model, prompts: zhPrompts, maxRevisions: 1 });
+  expect(r.unsupported).toEqual([]);
+  expect(r.revised).toBeNull();
+  expect(generateText).toHaveBeenCalledTimes(1);
+});
+
 test("資料不足の明示と未裏付け主張が混在する場合は主張だけ revise する", async () => {
   generateText.mockResolvedValueOnce({
     output: { unsupported: ["企業の現在収入", "48時間で失効する"] },

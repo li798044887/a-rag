@@ -33,9 +33,12 @@ const INSUFFICIENT_EVIDENCE_PATTERNS = [
 
 const ADVICE_PATTERNS = [
   /建议(?:您)?(?:查看|查询|参考|查阅|确认)/,
+  /如果(?:您|你)?能?(?:提供|补充).{0,40}(?:我|我们)?(?:可|可以|会|将)?(?:尝试|帮(?:您|你)?|为(?:您|你)?|查找|查询|检索|确认|分析)/,
   /(?:確認|参照)(?:してください|ください|することをおすすめ)/,
   /(?:ご確認|ご参照)ください/,
+  /(?:追加|具体的な).{0,24}(?:情報|資料|データ|会社名).{0,24}(?:提供|共有).{0,24}(?:いただければ|ください)/,
   /(?:please )?(?:check|review|refer to|consult)/i,
+  /if you (?:can|could) provide.{0,80}(?:i|we) (?:can|could|will)/i,
 ];
 
 function normalizeText(text: string): string {
@@ -63,7 +66,17 @@ function isInsufficientEvidenceClaim(claim: string, answer: string): boolean {
     .some((sentence) => normalizeText(sentence).includes(claimText));
 }
 
+function isCautiousFallbackSentence(sentence: string): boolean {
+  return matchesAny(sentence, INSUFFICIENT_EVIDENCE_PATTERNS) || matchesAny(sentence, ADVICE_PATTERNS);
+}
+
+function isCautiousFallbackAnswer(answer: string): boolean {
+  const sentences = splitSentences(answer);
+  return sentences.length > 0 && sentences.every(isCautiousFallbackSentence);
+}
+
 function filterUnsupportedClaims(claims: string[], answer: string): string[] {
+  if (isCautiousFallbackAnswer(answer)) return [];
   return claims.filter((claim) => !isInsufficientEvidenceClaim(claim, answer));
 }
 
