@@ -18,6 +18,11 @@ export interface ResolvedModels {
   chat: LanguageModel;
   /** クエリ書き換え（rewrite_query）用の安価モデル。 */
   rewrite: LanguageModel;
+  /** プロバイダに実際に渡すモデル名。 */
+  modelNames: {
+    chat: string;
+    rewrite: string;
+  };
 }
 
 export type ModelResolution =
@@ -45,13 +50,27 @@ export function resolveModels(modelId: string = DEFAULT_MODEL_ID): ModelResoluti
       apiKey: process.env.DEEPSEEK_API_KEY,
       baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/anthropic",
     });
-    return { ok: true, models: { chat: deepseek(apiModel), rewrite: deepseek("deepseek-chat") } };
+    return {
+      ok: true,
+      models: {
+        chat: deepseek(apiModel),
+        rewrite: deepseek("deepseek-chat"),
+        modelNames: { chat: apiModel, rewrite: "deepseek-chat" },
+      },
+    };
   }
 
   // Anthropic (claude-*)
   if (modelId.startsWith("claude-")) {
     if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: missingKey("ANTHROPIC_API_KEY") };
-    return { ok: true, models: { chat: anthropic(modelId), rewrite: anthropic(ANTHROPIC_REWRITE) } };
+    return {
+      ok: true,
+      models: {
+        chat: anthropic(modelId),
+        rewrite: anthropic(ANTHROPIC_REWRITE),
+        modelNames: { chat: modelId, rewrite: ANTHROPIC_REWRITE },
+      },
+    };
   }
 
   // OpenAI (gpt-*)。OPENAI_BASE_URL 設定時は OpenAI 互換エンドポイントへ。
@@ -61,7 +80,14 @@ export function resolveModels(modelId: string = DEFAULT_MODEL_ID): ModelResoluti
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: process.env.OPENAI_BASE_URL || undefined,
     });
-    return { ok: true, models: { chat: openai(modelId), rewrite: openai(OPENAI_REWRITE) } };
+    return {
+      ok: true,
+      models: {
+        chat: openai(modelId),
+        rewrite: openai(OPENAI_REWRITE),
+        modelNames: { chat: modelId, rewrite: OPENAI_REWRITE },
+      },
+    };
   }
 
   return { ok: false, reason: `未対応のモデルです (${modelId})。` };

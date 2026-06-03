@@ -1,6 +1,6 @@
 /** 生成回答の根拠検証（groundedness）と訂正再生成。
  *  回答中の主張を出典 snippet と突合し、未裏付けがあれば（上限内で）出典のみに基づき書き直す。 */
-import { generateText, Output, type LanguageModel } from "ai";
+import { generateText, Output, type LanguageModel, type LanguageModelUsage } from "ai";
 import { z } from "zod";
 import type { AgentPrompts } from "@/lib/agent/prompts";
 
@@ -16,6 +16,10 @@ export interface VerifyResult {
   unsupported: string[];
   /** 訂正再生成した本文（行わなかった場合は null）。 */
   revised: string | null;
+  /** 根拠検証に実際に使ったトークン量。 */
+  verifyUsage: LanguageModelUsage | null;
+  /** 訂正再生成に実際に使ったトークン量（行わなかった場合は null）。 */
+  reviseUsage: LanguageModelUsage | null;
 }
 
 const INSUFFICIENT_EVIDENCE_PATTERNS = [
@@ -74,31 +78,33 @@ export async function verifyAnswer(input: {
   const { query, answer, sources, model, prompts, maxRevisions } = input;
 
   let unsupported: string[] = [];
+  let verifyUsage: LanguageModelUsage | null = null;
   try {
-    const { output } = await generateText({
+    const { output, totalUsage } = await generateText({
       model,
       output: Output.object({ schema: z.object({ unsupported: z.array(z.string()) }) }),
       system: prompts.verify.system,
       prompt: JSON.stringify({ query, answer, sources }),
     });
     unsupported = filterUnsupportedClaims(output.unsupported, answer);
+    verifyUsage = totalUsage;
   } catch {
     // 検証失敗時は素通し（回答は必ず出す方針）。
-    return { unsupported: [], revised: null };
+    return { unsupported: [], revised: null, verifyUsage: null, reviseUsage: null };
   }
 
   if (unsupported.length === 0 || maxRevisions <= 0) {
-    return { unsupported, revised: null };
+    return { unsupported, revised: null, verifyUsage, reviseUsage: null };
   }
 
   try {
-    const { text } = await generateText({
+    const { text, totalUsage } = await generateText({
       model,
       system: prompts.revise.system,
       prompt: JSON.stringify({ answer, unsupported, sources }),
     });
-    return { unsupported, revised: text.trim() || null };
+    return { unsupported, revised: text.trim() || null, verifyUsage, reviseUsage: totalUsage };
   } catch {
-    return { unsupported, revised: null };
+    return { unsupported, revised: null, verifyUsage, reviseUsage: null };
   }
 }
