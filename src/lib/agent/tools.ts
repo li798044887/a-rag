@@ -112,13 +112,16 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
         query: z.string().describe(prompts.retrieveQueryDescribe),
       }),
       execute: ({ query }, { toolCallId }) => sema.run(async () => {
+        const originalQuery = query;
         let q = query;
-        const runRetrieveAttempt = (attempt: number) => retrieveChunksStream({
+        let activeParentId = toolCallId;
+        let activeParentStarted: number | null = null;
+        const runRetrieveAttempt = (attempt: number, parentId: string) => retrieveChunksStream({
           query: q, rewritten: attempt > 0 ? q : undefined, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
-          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, q, prompts, attempt)),
+          onStage: (ev) => bus.push(stageToEvent(ev, parentId, q, prompts, attempt)),
         });
-        let chunks = await runRetrieveAttempt(0);
+        let chunks = await runRetrieveAttempt(0, activeParentId);
 
         // gradeModel が指定されたときのみ CRAG（grade→不足なら rewrite して再検索）。
         // 設計上、grade は「再検索の要否」と関連度サマリの算出のみに使い、取得チャンクの
@@ -135,10 +138,18 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
               })),
             });
             bus.push({ type: "step", step: {
-              id: `${toolCallId}:grade-${retry}`, name: "grade", parentId: toolCallId, label: attemptLabel(prompts.grade.label, retry),
+              id: `${activeParentId}:grade-${retry}`, name: "grade", parentId: activeParentId, label: attemptLabel(prompts.grade.label, retry),
               status: "done", durationMs: 0, input: {}, output: { kept: grade.keptIds.length, total: grade.total },
               summary: prompts.grade.done(grade.keptIds.length, grade.total),
             } });
+            if (activeParentId !== toolCallId && activeParentStarted != null) {
+              bus.push({ type: "step", step: {
+                id: activeParentId, name: "retrieve", label: prompts.toolLabels.retrieve,
+                status: "done", durationMs: Date.now() - activeParentStarted,
+                input: { query: q }, output: null, summary: prompts.retrieveMetaSummary(q, chunks.length),
+              } });
+              activeParentStarted = null;
+            }
             if (!grade.needRetry || retry >= resolvedMaxRetries) break;
 
             // 再検索クエリを生成（失敗したら再検索を打ち切る）。
@@ -152,12 +163,19 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
             }
             if (rewritten === q) break;
             bus.push({ type: "step", step: {
-              id: `${toolCallId}:rewrite-retry-${retry}`, name: "rewrite_query", parentId: toolCallId,
+              id: `${toolCallId}:rewrite-retry-${retry}`, name: "rewrite_query",
               label: prompts.rewriteLabel, status: "done", durationMs: 0,
               input: { original: q, rewritten }, output: null, summary: prompts.rewriteSummary(rewritten),
             } });
             q = rewritten;
-            chunks = await runRetrieveAttempt(retry + 1);
+            activeParentId = `${toolCallId}:retry-${retry + 1}:retrieve`;
+            activeParentStarted = Date.now();
+            bus.push({ type: "step", step: {
+              id: activeParentId, name: "retrieve", label: prompts.toolLabels.retrieve,
+              status: "running", durationMs: 0,
+              input: { query: q }, output: null, summary: prompts.runningSummaries.retrieve,
+            } });
+            chunks = await runRetrieveAttempt(retry + 1, activeParentId);
           }
         }
 
@@ -175,8 +193,8 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
           // そのまま描画可能（相対パスのままだと描画されない／壊れる）になるため。
           return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${body}`;
         });
-        meta.set(toolCallId, { name: "retrieve", input: { query: q },
-          summary: prompts.retrieveMetaSummary(q, chunks.length) });
+        meta.set(toolCallId, { name: "retrieve", input: { query: originalQuery },
+          summary: prompts.retrieveMetaSummary(originalQuery, chunks.length) });
         return lines.length ? lines.join("\n\n") : prompts.fallback.retrieveNoHits;
       }),
     }),

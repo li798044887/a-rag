@@ -584,6 +584,9 @@ function SubStepRow({ step, expanded, onToggle, t }: { step: ToolCall; expanded:
           <svg viewBox="0 0 16 16" width="12" height="12">{TOOL_ICONS[step.name]}</svg>
         </span>
         <span className="font-mono text-[11px] font-semibold text-fg-2">{step.name}</span>
+        <span className="max-w-[150px] shrink-0 truncate rounded-full bg-divider px-[6px] py-px text-[10.5px] text-muted max-md:hidden">
+          {step.label}
+        </span>
         <span className="min-w-0 flex-1 truncate text-muted">{step.summary}</span>
         <span className="font-mono text-[10.5px] tabular-nums text-muted-2">{formatMs(step.durationMs)}</span>
         {expandable ? (

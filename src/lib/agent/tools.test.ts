@@ -237,8 +237,9 @@ test("grade が不足判定なら rewrite して再検索する", async () => {
   const bus = new StepBus();
   const events: AgentEvent[] = [];
   const drain = (async () => { for await (const e of bus) events.push(e); })();
+  const meta = new Map();
   const tools = buildTools({
-    registry: reg, ownerUserId: "u1", meta: new Map(), bus, prompts: getAgentPrompts("ja"),
+    registry: reg, ownerUserId: "u1", meta, bus, prompts: getAgentPrompts("ja"),
     gradeModel: "m" as never, gradeThreshold: 0.5, maxRetrieveRetries: 1,
   });
   const out = await tools.retrieve.execute!({ query: "q" }, { toolCallId: "call-1", messages: [] } as never);
@@ -247,8 +248,19 @@ test("grade が不足判定なら rewrite して再検索する", async () => {
 
   expect(vi.mocked(retrieveChunksStream)).toHaveBeenCalledTimes(2);
   expect(String(out)).toContain("強");
+  expect(meta.get("call-1")).toMatchObject({
+    input: { query: "q" },
+    summary: expect.stringContaining("q"),
+  });
+  expect(meta.get("call-1")?.summary).not.toContain("改善クエリ");
   expect(events.some((e) => e.type === "step" && e.step.name === "grade")).toBe(true);
-  expect(events.some((e) => e.type === "step" && e.step.name === "rewrite_query" && e.step.parentId === "call-1")).toBe(true);
+  const retryRewrite = events.find((e) => e.type === "step" && e.step.name === "rewrite_query" && e.step.id === "call-1:rewrite-retry-0");
+  expect(retryRewrite).toBeDefined();
+  expect((retryRewrite as Extract<AgentEvent, { type: "step" }>).step.parentId).toBeUndefined();
+  const retryRetrieve = events.find((e) => e.type === "step" && e.step.name === "retrieve" && e.step.id === "call-1:retry-1:retrieve" && e.step.status === "done");
+  expect(retryRetrieve).toBeDefined();
+  expect((retryRetrieve as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ query: "改善クエリ" });
+  expect(events.some((e) => e.type === "step" && e.step.name === "grade" && e.step.parentId === "call-1:retry-1:retrieve")).toBe(true);
 });
 
 test("再検索時の retrieve サブステップは前回試行を上書きしない", async () => {
