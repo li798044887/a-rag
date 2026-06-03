@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn } from "storybook/test";
+import { http, HttpResponse } from "msw";
+import { expect, fn, waitFor } from "storybook/test";
 import { RightPanel } from "@/components/sources/right-panel";
 import { SAMPLE_SOURCES, CITATION_MAP } from "@/lib/data";
 
@@ -121,11 +122,115 @@ export const EquationModes: Story = {
   play: async ({ canvas, canvasElement, userEvent }) => {
     await expect(canvas.getByRole("button", { name: "HTML整形" })).toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "解析テキスト" })).toBeInTheDocument();
-    await expect(canvas.getByRole("button", { name: "元PDF" })).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "原本" })).toBeInTheDocument();
     await expect(canvasElement.querySelector(".katex-display")).not.toBeNull();
 
     await userEvent.click(canvas.getByRole("button", { name: "解析テキスト" }));
     await expect(canvasElement.querySelector(".katex-display")).toBeNull();
     await expect(canvasElement.textContent).toContain("\\frac{Q}{A}");
+  },
+};
+
+// 原本タブ検証用の最小ソース。1 セクションだけ持つ doc。
+const sourceWith = (id: string, title: string) => ({
+  id,
+  type: "doc" as const,
+  title,
+  path: title,
+  author: "",
+  date: "",
+  sections: [
+    { id: `${id}-s1`, heading: "セクション", body: "本文サンプル。", highlight: true, blockType: "paragraph", page: 0 },
+  ],
+});
+
+const baseArgs = (id: string, title: string) => ({
+  sources: [sourceWith(id, title)],
+  citationMap: { 1: { sourceId: id, sectionId: `${id}-s1` } },
+  activeSourceId: id,
+  highlightSectionId: `${id}-s1`,
+});
+
+/** 原本タブ（PDF）: HEAD で存在確認 → iframe 表示。 */
+export const OriginalPdf: Story = {
+  args: baseArgs("doc-pdf", "10-report.pdf"),
+  parameters: {
+    msw: {
+      handlers: [
+        http.head("/api/documents/:id/raw", () => new HttpResponse(null, { status: 200 })),
+        http.get("/api/documents/:id/raw", () => new HttpResponse("%PDF-1.4 fake", { headers: { "content-type": "application/pdf" } })),
+      ],
+    },
+  },
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "原本" }));
+    await waitFor(() => expect(canvasElement.querySelector("iframe")).not.toBeNull());
+  },
+};
+
+/** 原本タブ（テキスト）: 生テキストを表示。 */
+export const OriginalText: Story = {
+  args: baseArgs("doc-txt", "notes.txt"),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get("/api/documents/:id/raw", () => new HttpResponse("これは原本テキストです。", { headers: { "content-type": "text/plain" } })),
+      ],
+    },
+  },
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "原本" }));
+    await waitFor(() => expect(canvasElement.textContent).toContain("これは原本テキストです。"));
+  },
+};
+
+/** 原本タブ（表計算）: タブラベルが「スプレッドシート」になる。 */
+export const OriginalSpreadsheet: Story = {
+  args: baseArgs("doc-xlsx", "data.xlsx"),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get("/api/documents/:id/raw", () => new HttpResponse(new Uint8Array([0x50, 0x4b]), { headers: { "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } })),
+      ],
+    },
+  },
+  play: async ({ canvas, userEvent }) => {
+    const btn = canvas.getByRole("button", { name: "スプレッドシート" });
+    await expect(btn).toBeInTheDocument();
+    await userEvent.click(btn);
+  },
+};
+
+/** 原本タブ（Office 変換）: タブラベルが「原本PDF変換」になり /rendered を取得。 */
+export const OriginalConvertedPdf: Story = {
+  args: baseArgs("doc-docx", "spec.docx"),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get("/api/documents/:id/rendered", () => new HttpResponse("%PDF-1.4 fake", { headers: { "content-type": "application/pdf" } })),
+      ],
+    },
+  },
+  play: async ({ canvas, userEvent }) => {
+    const btn = canvas.getByRole("button", { name: "原本PDF変換" });
+    await expect(btn).toBeInTheDocument();
+    await userEvent.click(btn);
+  },
+};
+
+/** 原本タブ（削除済み PDF）: HEAD が 404 → 非対応フォールバック（DL/引用テキスト）に退避。 */
+export const OriginalDeletedPdf: Story = {
+  args: baseArgs("doc-gone", "missing.pdf"),
+  parameters: {
+    msw: {
+      handlers: [
+        http.head("/api/documents/:id/raw", () => new HttpResponse(null, { status: 404 })),
+        http.get("/api/documents/:id/raw", () => new HttpResponse(null, { status: 404 })),
+      ],
+    },
+  },
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "原本" }));
+    await waitFor(() => expect(canvas.getByText("この形式はブラウザでプレビューできません")).toBeInTheDocument());
   },
 };
