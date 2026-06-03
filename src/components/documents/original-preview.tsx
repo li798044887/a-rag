@@ -99,6 +99,24 @@ export function RawTextContent({
   );
 }
 
+/** raw 原本（PDF/画像）を表示しつつ、HEAD で存在を確認する。404（削除済み）が判明したら
+ *  フォールバック（ダウンロード/引用テキスト）へ差し替える。存在判明までは楽観表示し、
+ *  正常な原本のストリーミング表示を妨げない。 */
+function RawObjectPreview({ docId, onShowParsed, children }: { docId: string; onShowParsed?: () => void; children: ReactNode }) {
+  // docId が変わった時点で欠落判定を破棄するため、判定対象の docId を併記する。
+  // （effect 内での同期 setState を避け、レンダー中に派生値として再計算する。）
+  const [missingFor, setMissingFor] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/documents/${encodeURIComponent(docId)}/raw`, { method: "HEAD" })
+      .then((r) => { if (!cancelled && !r.ok) setMissingFor(docId); })
+      .catch(() => { if (!cancelled) setMissingFor(docId); });
+    return () => { cancelled = true; };
+  }, [docId]);
+  if (missingFor === docId) return <UnsupportedPreview docId={docId} onShowParsed={onShowParsed} />;
+  return <>{children}</>;
+}
+
 interface OriginalPreviewProps {
   docId: string;
   filename: string;
@@ -128,14 +146,20 @@ export function OriginalPreview({ docId, filename, pdfPage, framed, onShowParsed
   if (isPdf(filename)) {
     const base = `/api/documents/${encodeURIComponent(docId)}/raw`;
     const src = pdfPage ? `${base}#page=${pdfPage}&toolbar=0&navpanes=0&statusbar=0&view=FitH` : `${base}${PDF_VIEW_PARAMS}`;
-    return card(<iframe key={pdfPage ?? 0} title={filename} src={src} className="h-full w-full border-0" />);
+    return (
+      <RawObjectPreview docId={docId} onShowParsed={onShowParsed}>
+        {card(<iframe key={pdfPage ?? 0} title={filename} src={src} className="h-full w-full border-0" />)}
+      </RawObjectPreview>
+    );
   }
   if (isImage(filename)) {
     return (
-      <div className="grid h-full place-items-center p-5">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/api/documents/${encodeURIComponent(docId)}/raw`} alt={filename} className="max-h-full max-w-full rounded-lg border-[0.5px] border-divider" />
-      </div>
+      <RawObjectPreview docId={docId} onShowParsed={onShowParsed}>
+        <div className="grid h-full place-items-center p-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/api/documents/${encodeURIComponent(docId)}/raw`} alt={filename} className="max-h-full max-w-full rounded-lg border-[0.5px] border-divider" />
+        </div>
+      </RawObjectPreview>
     );
   }
   if (isSpreadsheet(filename)) {
