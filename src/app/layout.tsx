@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Sans_JP, IBM_Plex_Mono } from "next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import { THEME_STORAGE_KEY } from "@/lib/constants";
 import { getLocale } from "@/i18n/server";
@@ -17,15 +17,6 @@ const plexSans = IBM_Plex_Sans({
   display: "swap",
 });
 
-// IBM Plex Sans JP（日本語）— 仮名・漢字を日本語字形で描画する既定 CJK 書体。
-// 日本語グリフは unicode-range で必要分のみ遅延配信される（latin のみプリロード）。
-const plexJp = IBM_Plex_Sans_JP({
-  variable: "--font-plex-jp",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-
 // IBM Plex Mono（等幅）— コードブロック・kbd 用。Plex ファミリーで見た目を統一。
 const plexMono = IBM_Plex_Mono({
   variable: "--font-plex-mono",
@@ -34,18 +25,15 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-// IBM Plex Sans SC（簡体中国語）— 簡体字形を woff2 で自前ホスト。lang=zh の CJK に使う。
-// next/font/google のカタログに SC 版が無いため自前配信する。実ウェイト 400/500/600/700 を
-// 揃え、font-synthesis:none のまま合成太字による字重ムラを避ける。
-const plexSc = localFont({
-  variable: "--font-plex-sc",
+// Noto Sans CJK JP（= 思源黑体）の可変フル版を自前ホスト。日中韓の全グリフを 1 ファイルに
+// 内蔵し、OpenType の locl 機能が <html lang> に応じて地域字形（ja=日本語字形 / zh=簡体字形）を
+// 自動選択する。単一フォントなので簡体専用字（电/资/库 等）も別フォントへ脱落せず、
+// クロスフォントの字重ムラが原理的に起きない。wght 軸 100–900 を持ち 600 も実ウェイトで出せる。
+const notoCjk = localFont({
+  variable: "--font-noto-cjk",
   display: "swap",
-  src: [
-    { path: "./fonts/IBMPlexSansSC-Regular.woff2", weight: "400", style: "normal" },
-    { path: "./fonts/IBMPlexSansSC-Medium.woff2", weight: "500", style: "normal" },
-    { path: "./fonts/IBMPlexSansSC-SemiBold.woff2", weight: "600", style: "normal" },
-    { path: "./fonts/IBMPlexSansSC-Bold.woff2", weight: "700", style: "normal" },
-  ],
+  src: "./fonts/NotoSansCJKjp-VF.woff2",
+  weight: "100 900",
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -85,7 +73,7 @@ export default async function RootLayout({
   return (
     <html
       lang={htmlLang(locale)}
-      className={`${plexSans.variable} ${plexJp.variable} ${plexSc.variable} ${plexMono.variable}`}
+      className={`${plexSans.variable} ${notoCjk.variable} ${plexMono.variable}`}
       suppressHydrationWarning
     >
       <head>
