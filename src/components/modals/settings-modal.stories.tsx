@@ -52,6 +52,7 @@ const meta = {
     setAgentCfg: fn(),
     onSetRemember: fn(),
     onRevokeAllSessions: fn(),
+    onSaveName: fn(),
   },
 } satisfies Meta<typeof SettingsModal>;
 

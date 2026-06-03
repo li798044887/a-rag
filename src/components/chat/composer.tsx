@@ -7,6 +7,7 @@ import { AttachmentTray } from "@/components/uploads/uploads";
 import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { ModelOption, ScopeValue, StagedFile } from "@/lib/types";
+import { useT } from "@/i18n/context";
 
 /** 送信可否判定。添付が1件でも処理中(pending)なら送信不可。空入力かつ ready 添付なしも不可。 */
 export function composerSubmitState(
@@ -53,6 +54,7 @@ export function Composer({
   const fileRef = useRef<HTMLInputElement>(null);
   const scopeRef = useRef<HTMLButtonElement>(null);
   const [scopeOpen, setScopeOpen] = useState(false);
+  const { t } = useT();
 
   useEffect(() => {
     const ta = taRef.current;
@@ -95,7 +97,7 @@ export function Composer({
           value={value}
           disabled={running}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={running ? "エージェントが実行中です…" : "質問するか、ファイルをドロップして訪ねてください…"}
+          placeholder={running ? t.chat.placeholderRunning : t.chat.placeholderIdle}
           onKeyDown={(e) => {
             // IME 変換確定の Enter（isComposing / keyCode 229）は送信しない
             if (e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -110,14 +112,14 @@ export function Composer({
           )}
         />
         <div className="flex items-center gap-1 px-2 pb-2 pt-1 max-md:gap-0.5 max-md:px-1.5">
-          <button type="button" className={toolBtn} title="ファイルを添付 (PDF/Word/Excelなど)" disabled={running} onClick={() => fileRef.current?.click()}>
+          <button type="button" className={toolBtn} title={t.chat.attachTitle} disabled={running} onClick={() => fileRef.current?.click()}>
             <Icon name="paperclip" size={13} />
           </button>
           <button
             ref={scopeRef}
             type="button"
             className={cn(toolBtn, scopeOpen && "bg-divider text-fg")}
-            title="検索範囲を選択"
+            title={t.chat.scopeTitle}
             disabled={running}
             onClick={() => setScopeOpen((o) => !o)}
           >
@@ -154,7 +156,7 @@ export function Composer({
             <button
               type="button"
               onClick={onStop}
-              title="実行を停止"
+              title={t.chat.stopTitle}
               className="grid h-8 w-8 shrink-0 animate-[ar-hl-pulse_1.6s_ease-in-out_infinite] place-items-center rounded-lg border-0 bg-accent text-white max-md:h-[34px] max-md:w-[34px]"
             >
               <svg viewBox="0 0 16 16" width="10" height="10">
@@ -165,7 +167,7 @@ export function Composer({
             <button
               type="submit"
               disabled={!canSubmit}
-              title={pending ? "アップロード完了までお待ちください" : undefined}
+              title={pending ? t.chat.pendingSubmitTitle : undefined}
               className={cn(
                 "grid h-8 w-8 shrink-0 place-items-center rounded-lg border-0 text-white transition-[background,filter] max-md:h-[34px] max-md:w-[34px]",
                 canSubmit ? "bg-accent hover:brightness-105" : "cursor-not-allowed bg-divider text-muted-2",
@@ -178,14 +180,20 @@ export function Composer({
           )}
         </div>
       </div>
-      <div className="pt-2 text-center font-mono text-[10.5px] text-muted-2 max-md:hidden">
+      <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 pt-2 text-center text-[11px] text-muted-2 max-md:hidden">
         {running ? (
-          "⌘+⌫ で実行をキャンセル"
+          <span><kbd>⌘+⌫</kbd>{t.chat.cancelHintText}</span>
         ) : pending ? (
-          "アップロード完了までお待ちください…"
+          t.chat.pendingHint
         ) : (
           <>
-            Enterで送信 · Shift+Enterで改行 · ファイルをドラッグ&ドロップ · <kbd>⌘N</kbd> で新規スレッド
+            <span><kbd>Enter</kbd>{t.chat.hintSend}</span>
+            <span className="text-divider-strong">·</span>
+            <span><kbd>Shift+Enter</kbd>{t.chat.hintNewline}</span>
+            <span className="text-divider-strong">·</span>
+            <span>{t.chat.hintDrop}</span>
+            <span className="text-divider-strong">·</span>
+            <span><kbd>⌘N</kbd>{t.chat.hintNewThread}</span>
           </>
         )}
       </div>

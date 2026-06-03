@@ -5,6 +5,8 @@ import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
 import { uid } from "@/lib/utils";
 import type { IngestStage, StagedFile, UploadStatus } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 
 const ACCEPTED = ACCEPTED_FILE_TYPES.split(",");
 
@@ -86,6 +88,7 @@ async function pickFromDataTransfer(dt: DataTransfer): Promise<PickedFile[]> {
 /** Stages files, POSTs each to /api/upload, and tracks an upload→process→ready
  * pipeline. The processing phase is driven by a single multiplexed SSE stream. */
 export function useUploads(onToast?: PushToast) {
+  const { t } = useT();
   const [files, setFiles] = useState<StagedFile[]>([]);
   // アップロード進捗アニメ用の interval、送信中POSTのAbortController を id ごとに保持。
   const timers = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -100,6 +103,8 @@ export function useUploads(onToast?: PushToast) {
   useEffect(() => { filesRef.current = files; }, [files]);
   const onToastRef = useRef(onToast);
   useEffect(() => { onToastRef.current = onToast; }, [onToast]);
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
 
   const clearTimer = useCallback((id: string) => {
     if (timers.current[id]) { clearInterval(timers.current[id]); delete timers.current[id]; }
@@ -139,8 +144,8 @@ export function useUploads(onToast?: PushToast) {
         };
       }),
     );
-    if (j.status === "ready") onToastRef.current?.(`「${target?.name ?? ""}」を索引化しました`, "success");
-    if (j.status === "error") onToastRef.current?.(j.error || "索引化に失敗しました", "error");
+    if (j.status === "ready") onToastRef.current?.(interpolate(tRef.current.uploads.toastIndexed, { name: target?.name ?? "" }), "success");
+    if (j.status === "error") onToastRef.current?.(j.error || tRef.current.uploads.toastIndexFailed, "error");
   }, []);
 
   /** POST /api/uploads/stream を購読し、jobId 付きフレームを reduce する。 */
@@ -241,19 +246,19 @@ export function useUploads(onToast?: PushToast) {
       fetch(`/api/uploads/${jobId}/cancel`, { method: "POST" })
         .then((res) => {
           if (res.status === 409) {
-            onToastRef.current?.("処理中のため取り消せません", "info");
+            onToastRef.current?.(tRef.current.uploads.toastCancelBlocked, "info");
             setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "processing" } : f)));
             return;
           }
           if (!res.ok) {
-            onToastRef.current?.("取り消しに失敗しました", "error");
+            onToastRef.current?.(tRef.current.uploads.toastCancelFailed, "error");
             return;
           }
           clearTimer(id);
           setFiles((prev) => prev.filter((f) => f.id !== id));
           scheduleSync();
         })
-        .catch(() => onToastRef.current?.("取り消しに失敗しました", "error"));
+        .catch(() => onToastRef.current?.(tRef.current.uploads.toastCancelFailed, "error"));
       return;
     }
 
@@ -278,7 +283,7 @@ export function useUploads(onToast?: PushToast) {
             id: uid("f_"), name: file.name, size: file.size, status: "skipped" as const, progress: 0, relPath,
           })),
         ]);
-        onToastRef.current?.(`未対応の形式 ${rejected.length}件をスキップしました`, "info");
+        onToastRef.current?.(interpolate(tRef.current.uploads.toastSkipped, { n: rejected.length }), "info");
       }
 
       accepted.forEach(({ file, relPath }) => {
@@ -307,7 +312,7 @@ export function useUploads(onToast?: PushToast) {
             clearTimer(id);
             delete uploads.current[id];
             if (!res.ok) {
-              const { error } = await res.json().catch(() => ({ error: "アップロードに失敗しました" }));
+              const { error } = await res.json().catch(() => ({ error: tRef.current.uploads.toastUploadFailed }));
               setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error } : f)));
               return;
             }
@@ -319,7 +324,7 @@ export function useUploads(onToast?: PushToast) {
             clearTimer(id);
             delete uploads.current[id];
             if (uploadCtrl.signal.aborted) return; // ✕ による中断はエラー表示しない
-            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: "ネットワークエラー" } : f)));
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: tRef.current.uploads.toastNetworkError } : f)));
           });
       });
     },
@@ -354,14 +359,14 @@ export function useUploads(onToast?: PushToast) {
       fetch(`/api/uploads/${jobId}/retry`, { method: "POST" })
         .then(async (res) => {
           if (!res.ok) {
-            const { error } = await res.json().catch(() => ({ error: "再試行に失敗しました" }));
+            const { error } = await res.json().catch(() => ({ error: tRef.current.uploads.toastRetryFailed }));
             setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error } : f)));
             return;
           }
           scheduleSync();
         })
         .catch(() => {
-          setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: "ネットワークエラー" } : f)));
+          setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, status: "error", error: tRef.current.uploads.toastNetworkError } : f)));
         });
     },
     [scheduleSync],

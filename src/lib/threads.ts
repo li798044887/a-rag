@@ -4,6 +4,7 @@ import { citations, messages, threads } from "@/lib/db/schema";
 import type {
   CitationMap, CompletedThread, Source, ThreadSummary, ToolCall,
 } from "@/lib/types";
+import type { Locale } from "@/i18n/config";
 import { relativeTime } from "@/lib/utils";
 
 export async function createThread(userId: string, title: string) {
@@ -11,12 +12,12 @@ export async function createThread(userId: string, title: string) {
   return row;
 }
 
-export async function listThreads(userId: string): Promise<ThreadSummary[]> {
+export async function listThreads(userId: string, locale: Locale): Promise<ThreadSummary[]> {
   const rows = await db.select().from(threads)
     .where(eq(threads.userId, userId))
     .orderBy(desc(threads.pinned), desc(threads.updatedAt));
   return rows.map((t) => ({
-    id: t.id, title: t.title, updated: relativeTime(t.updatedAt), pinned: t.pinned,
+    id: t.id, title: t.title, updated: relativeTime(t.updatedAt, locale), pinned: t.pinned,
   }));
 }
 

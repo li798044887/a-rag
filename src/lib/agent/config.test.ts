@@ -33,22 +33,29 @@ test("clampAgentCfg keeps explicit boolean values", () => {
 });
 
 test("buildSystemPrompt enforces citations when requireCitations is on", () => {
-  const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, requireCitations: true });
+  const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, requireCitations: true }, "ja");
   expect(p).toContain("必ず");
   expect(p).toContain("[1]");
 });
 
 test("buildSystemPrompt relaxes citations when off", () => {
-  const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, requireCitations: false });
+  const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, requireCitations: false }, "ja");
   expect(p).toContain("必須ではありません");
 });
 
 test("buildSystemPrompt includes the わからない clause when admitUnknown is on", () => {
-  const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, admitUnknown: true });
+  const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, admitUnknown: true }, "ja");
   expect(p).toContain("わからない");
 });
 
 test("buildSystemPrompt omits the わからない clause when off", () => {
-  const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, admitUnknown: false });
+  const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, admitUnknown: false }, "ja");
   expect(p).not.toContain("わからない");
+});
+
+test("buildSystemPrompt は locale=zh で中国語プロンプトを返す", () => {
+  const p = buildSystemPrompt(AGENT_CFG_DEFAULTS, "zh");
+  expect(p).toContain("中文");
+  expect(p).toContain("出处");
+  expect(p).not.toContain("ください");
 });

@@ -1,15 +1,17 @@
 "use client";
 
 import { BrandMark, Icon } from "@/components/icons";
-import { SUGGESTED_PROMPTS } from "@/lib/data";
+import { getSuggestedPrompts } from "@/lib/data";
 import { formatLastSynced, type WorkspaceStats } from "@/lib/workspace-stats";
 import type { AppUser } from "@/lib/types";
+import { useT } from "@/i18n/context";
+import type { Dictionary } from "@/i18n/dictionary";
 
-function greeting() {
+function greeting(t: Dictionary) {
   const h = new Date().getHours();
-  if (h < 11) return "おはようございます";
-  if (h < 18) return "こんにちは";
-  return "こんばんは";
+  if (h < 11) return t.chat.greetingMorning;
+  if (h < 18) return t.chat.greetingDay;
+  return t.chat.greetingEvening;
 }
 
 interface EmptyStateProps {
@@ -19,10 +21,13 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ user, stats, onPickPrompt }: EmptyStateProps) {
+  const { locale, t } = useT();
+  const localeStr = locale === "zh" ? "zh-CN" : "ja-JP";
+  const suggestedPrompts = getSuggestedPrompts(locale);
   const meta = [
-    [stats.indexedDocumentCount.toLocaleString("ja-JP"), "ドキュメント索引中"],
-    [stats.connectedDataSourceCount.toLocaleString("ja-JP"), "データソース接続中"],
-    ["最終同期", formatLastSynced(stats.lastSyncedAt)],
+    [stats.indexedDocumentCount.toLocaleString(localeStr), t.chat.metaIndexed],
+    [stats.connectedDataSourceCount.toLocaleString(localeStr), t.chat.metaConnected],
+    [t.chat.metaLastSync, formatLastSynced(stats.lastSyncedAt, locale)],
   ];
 
   return (
@@ -32,14 +37,14 @@ export function EmptyState({ user, stats, onPickPrompt }: EmptyStateProps) {
           <BrandMark size={24} className="max-md:h-[21px] max-md:w-[21px]" />
         </div>
         <h1 className="m-0 mb-2.5 text-[clamp(22px,3.4vw,32px)] font-bold tracking-[-0.02em] text-fg [text-wrap:balance] [word-break:keep-all] max-md:text-[clamp(20px,6.4vw,26px)]">
-          {greeting()}、<span className="text-accent">{user.firstName}</span> さん
+          {greeting(t)}{t.chat.greetingConnector}<span className="text-accent">{user.firstName}</span>{t.chat.greetingSuffix}
         </h1>
         <p className="m-0 mb-9 text-[15px] leading-[1.55] text-muted max-md:mb-[22px] max-md:text-[13.5px]">
-          社内の議事録 · Wiki · Slack · DB を横断して調べます。質問を入力するか、下から選んでください。
+          {t.chat.leadText}
         </p>
 
         <div className="mx-auto grid max-w-[820px] grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3 text-left max-md:max-w-none max-md:grid-cols-1 max-md:gap-2">
-          {SUGGESTED_PROMPTS.map((p, i) => (
+          {suggestedPrompts.map((p, i) => (
             <button
               key={i}
               onClick={() => onPickPrompt(p.label)}

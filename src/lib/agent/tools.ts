@@ -5,6 +5,7 @@ import { resolveImageUrls } from "@/lib/agent/image-urls";
 import { CitationRegistry } from "@/lib/agent/citations";
 import { StepBus } from "@/lib/agent/step-bus";
 import type { AgentEvent, ToolName } from "@/lib/types";
+import type { AgentPrompts } from "@/lib/agent/prompts";
 import { Semaphore } from "@/lib/agent/semaphore";
 import { AGENT_CFG_DEFAULTS } from "@/lib/agent/config";
 
@@ -22,6 +23,7 @@ export interface BuildToolsInput {
   bus: StepBus;
   /** 添付ありターンでは retrieve をこの文書群に排他スコープする。空/未指定なら全体検索。 */
   attachmentDocIds?: string[];
+  prompts: AgentPrompts;
   /** ツール execute の同時実行上限。未指定なら既定の並列数。 */
   concurrency?: number;
 }
@@ -29,33 +31,16 @@ export interface BuildToolsInput {
 const RETRIEVE_TOP_K = 6;
 const RETRIEVE_CANDIDATE_K = 10;
 
-const STAGE_LABEL: Record<string, string> = {
-  embed: "クエリ埋め込み",
-  vector_search: "ベクトル検索",
-  bm25_search: "キーワード検索",
-  rerank: "リランキング",
-  expand: "近傍拡張",
-};
-
-function stageRunningSummary(stage: string): string {
+/** done 時の段階別 summary を prompts から組み立てる。 */
+function stageDoneSummaryOf(prompts: AgentPrompts, stage: string, count?: number): string {
+  const c = count ?? 0;
   switch (stage) {
-    case "embed": return "クエリを埋め込み中…";
-    case "vector_search": return "密ベクトル検索中…";
-    case "bm25_search": return "キーワード検索中…";
-    case "rerank": return "再順位付け中…";
-    case "expand": return "近傍チャンクを取得中…";
-    default: return "実行中…";
-  }
-}
-
-function stageDoneSummary(stage: string, count?: number): string {
-  switch (stage) {
-    case "embed": return "クエリを埋め込み";
-    case "vector_search": return `密ベクトル ${count ?? 0} 件`;
-    case "bm25_search": return `BM25 ${count ?? 0} 件`;
-    case "rerank": return `${count ?? 0} 件に再順位付け`;
-    case "expand": return "近傍拡張";
-    default: return "完了";
+    case "embed": return prompts.stageDone.embed;
+    case "vector_search": return prompts.stageDone.vector_search(c);
+    case "bm25_search": return prompts.stageDone.bm25_search(c);
+    case "rerank": return prompts.stageDone.rerank(c);
+    case "expand": return prompts.stageDone.expand;
+    default: return prompts.stageDone.default;
   }
 }
 
@@ -83,39 +68,37 @@ function stageOutput(ev: RetrieveStageEvent): Record<string, unknown> | null {
 }
 
 /** retrieve の段階イベントを parentId 付きサブステップへ変換して bus に流す。 */
-function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string): AgentEvent {
+function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, prompts: AgentPrompts): AgentEvent {
   // start と done は同一 id を共有し、reducer が id マージで running→done に更新する（衝突ではなく意図）。
+  const stageKey = ev.stage as keyof AgentPrompts["stageLabels"];
   const base = {
     id: `${parentId}:${ev.stage}`,
     name: ev.stage as ToolName,
     parentId,
-    label: STAGE_LABEL[ev.stage] ?? ev.stage,
+    label: prompts.stageLabels[stageKey] ?? ev.stage,
   };
   if (ev.status === "start") {
-    return { type: "step", step: { ...base, status: "running", durationMs: 0, input: {}, output: null, summary: stageRunningSummary(ev.stage) } };
+    return { type: "step", step: { ...base, status: "running", durationMs: 0, input: {}, output: null, summary: prompts.stageRunning[stageKey] ?? prompts.stageDefaultRunning } };
   }
   if (ev.status === "error") {
-    return { type: "step", step: { ...base, status: "error", durationMs: ev.ms ?? 0, input: {}, output: { error: ev.message ?? "失敗" }, summary: "段階に失敗" } };
+    return { type: "step", step: { ...base, status: "error", durationMs: ev.ms ?? 0, input: {}, output: { error: ev.message ?? prompts.stageErrorSummary }, summary: prompts.stageErrorSummary } };
   }
-  return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummary(ev.stage, ev.count) } };
+  return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummaryOf(prompts, ev.stage, ev.count) } };
 }
 
-export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, concurrency }: BuildToolsInput): ToolSet {
+export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency }: BuildToolsInput): ToolSet {
   const sema = new Semaphore(concurrency ?? AGENT_CFG_DEFAULTS.parallelTools);
   return {
     retrieve: tool({
-      description:
-        "社内ナレッジから関連箇所を検索する。ユーザーの質問に答えるために必要な事実を集めるとき、" +
-        "また会話の文脈を踏まえた具体的なクエリで何度でも呼べる。" +
-        "各ヒットの先頭に付く [n] が出典番号で、深掘りしたいときはその番号を fetch_document に渡す。",
+      description: prompts.toolDescriptions.retrieve,
       inputSchema: z.object({
-        query: z.string().describe("検索クエリ（会話文脈を解決した自己完結な日本語）"),
+        query: z.string().describe(prompts.retrieveQueryDescribe),
       }),
       execute: ({ query }, { toolCallId }) => sema.run(async () => {
         const chunks = await retrieveChunksStream({
           query, ownerUserId, topK: RETRIEVE_TOP_K, candidateK: RETRIEVE_CANDIDATE_K,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
-          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, query)),
+          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, query, prompts)),
         });
         const lines = chunks.map((c) => {
           const n = registry.register({
@@ -135,23 +118,21 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
           return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${body}`;
         });
         meta.set(toolCallId, { name: "retrieve", input: { query },
-          summary: `「${query}」→ ${chunks.length} 件` });
-        return lines.length ? lines.join("\n\n") : "該当する資料は見つかりませんでした。";
+          summary: prompts.retrieveMetaSummary(query, chunks.length) });
+        return lines.length ? lines.join("\n\n") : prompts.fallback.retrieveNoHits;
       }),
     }),
     fetch_document: tool({
-      description:
-        "retrieve でヒットした文書の周辺本文を取得して深掘りする。" +
-        "retrieve 結果に付いた出典番号 [n] の数値だけを ref に渡す（UUID は不要）。",
+      description: prompts.toolDescriptions.fetch_document,
       inputSchema: z.object({
-        ref: z.number().int().describe("retrieve 結果の出典番号 [n] の数値（例: 1）"),
+        ref: z.number().int().describe(prompts.fetchRefDescribe),
       }),
       execute: ({ ref }, { toolCallId }) => sema.run(async () => {
         const hit = registry.resolve(ref);
         if (!hit) {
           meta.set(toolCallId, { name: "fetch_document", input: { ref },
-            summary: `出典 [${ref}] は未取得` });
-          return `出典 [${ref}] はまだ取得していません。先に retrieve を実行し、結果に付いた番号を指定してください。`;
+            summary: prompts.fetchUnresolvedSummary(ref) });
+          return prompts.fallback.fetchUnresolved(ref);
         }
         const doc = await fetchDocument({
           documentId: hit.documentId, ownerUserId, aroundChunkId: hit.chunkId });
@@ -167,8 +148,8 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
         });
         meta.set(toolCallId, { name: "fetch_document",
           input: { ref, document: doc.documentTitle },
-          summary: `${doc.documentTitle} → ${doc.chunks.length} 段` });
-        return lines.length ? lines.join("\n\n") : "文書の本文が取得できませんでした。";
+          summary: prompts.fetchMetaSummary(doc.documentTitle, doc.chunks.length) });
+        return lines.length ? lines.join("\n\n") : prompts.fallback.fetchEmpty;
       }),
     }),
   };

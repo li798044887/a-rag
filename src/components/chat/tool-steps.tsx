@@ -2,6 +2,9 @@
 
 import { cn, formatMs } from "@/lib/utils";
 import type { RerankHit, ToolCall, ToolName, ToolStatus, ToolView } from "@/lib/types";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
+import type { Dictionary } from "@/i18n/dictionary";
 
 const LOG_DETAIL_MAX = 8;
 
@@ -51,16 +54,16 @@ const TOOL_ICONS: Partial<Record<ToolName, React.ReactNode>> = {
   expand: <path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />,
 };
 
-function StatusIcon({ status }: { status: ToolStatus }) {
+function StatusIcon({ status, t }: { status: ToolStatus; t: Dictionary }) {
   if (status === "running")
     return (
-      <span className="grid h-4 w-4 place-items-center" aria-label="実行中">
+      <span className="grid h-4 w-4 place-items-center" aria-label={t.chat.statusRunning}>
         <span className="h-3 w-3 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />
       </span>
     );
   if (status === "done")
     return (
-      <span className="grid h-4 w-4 place-items-center text-accent" aria-label="完了">
+      <span className="grid h-4 w-4 place-items-center text-accent" aria-label={t.chat.statusDone}>
         <svg viewBox="0 0 16 16" width="11" height="11">
           <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -68,12 +71,12 @@ function StatusIcon({ status }: { status: ToolStatus }) {
     );
   if (status === "pending")
     return (
-      <span className="grid h-4 w-4 place-items-center" aria-label="待機中">
+      <span className="grid h-4 w-4 place-items-center" aria-label={t.chat.statusPending}>
         <span className="h-1.5 w-1.5 rounded-full bg-muted-2" />
       </span>
     );
   return (
-    <span className="grid h-[14px] w-[14px] place-items-center rounded-full bg-[#B83A1F] text-[9px] font-bold text-white" aria-label="エラー">
+    <span className="grid h-[14px] w-[14px] place-items-center rounded-full bg-[#B83A1F] text-[9px] font-bold text-white" aria-label={t.chat.statusError}>
       !
     </span>
   );
@@ -137,7 +140,7 @@ function formatTokenCount(n: unknown): string {
   return String(n);
 }
 
-function ToolInputBlock({ step }: { step: ToolCall }) {
+function ToolInputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
   if (step.name === "answer" && typeof step.input.model === "string") {
     return <KeyValueGrid rows={[{ k: "model", v: step.input.model }]} />;
   }
@@ -156,13 +159,13 @@ function ToolInputBlock({ step }: { step: ToolCall }) {
       <div className="space-y-[3px] rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] text-fg-2">
         {ref != null && (
           <div>
-            <span className="text-muted-2">出典: </span>
+            <span className="text-muted-2">{t.chat.sourceLabel}</span>
             <span className="text-fg">[{String(ref)}]</span>
           </div>
         )}
         {document != null && (
           <div>
-            <span className="text-muted-2">文書: </span>
+            <span className="text-muted-2">{t.chat.documentLabel}</span>
             <span className="text-fg">{String(document)}</span>
           </div>
         )}
@@ -196,18 +199,18 @@ function ToolInputBlock({ step }: { step: ToolCall }) {
   return <pre className={preCls}>{JSON.stringify(step.input, null, 2)}</pre>;
 }
 
-function ToolOutputBlock({ step }: { step: ToolCall }) {
+function ToolOutputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
   const output = step.output;
   if (!output) return null;
 
   if (step.name === "answer") {
     const rows: { k: string; v: React.ReactNode }[] = [
-      { k: "入力トークン", v: formatTokenCount(output.inputTokens) },
-      { k: "出力トークン", v: formatTokenCount(output.outputTokens) },
-      { k: "合計トークン", v: formatTokenCount(output.totalTokens) },
+      { k: t.chat.inputTokens, v: formatTokenCount(output.inputTokens) },
+      { k: t.chat.outputTokens, v: formatTokenCount(output.outputTokens) },
+      { k: t.chat.totalTokens, v: formatTokenCount(output.totalTokens) },
     ];
     if (typeof output.cachedInputTokens === "number" && output.cachedInputTokens > 0) {
-      rows.push({ k: "キャッシュ読込", v: formatTokenCount(output.cachedInputTokens) });
+      rows.push({ k: t.chat.cacheTokens, v: formatTokenCount(output.cachedInputTokens) });
     }
     return <KeyValueGrid rows={rows} />;
   }
@@ -233,7 +236,7 @@ function ToolOutputBlock({ step }: { step: ToolCall }) {
   if ((step.name === "vector_search" || step.name === "bm25_search") && Array.isArray(output.hits)) {
     const hits = output.hits as CandidateHit[];
     if (hits.length === 0) {
-      return <div className="px-1 py-1 text-[11.5px] text-muted">候補なし</div>;
+      return <div className="px-1 py-1 text-[11.5px] text-muted">{t.chat.noCandidates}</div>;
     }
     // スコアは非負前提（dense=cosine, sparse=BM25/dot）。リスト内最大値でバー幅を正規化。
     const max = Math.max(...hits.map((h) => h.score), 1e-9);
@@ -261,7 +264,7 @@ function ToolOutputBlock({ step }: { step: ToolCall }) {
     return <KeyValueGrid rows={[{ k: "dims", v: String(output.dims ?? "—") }]} />;
   }
   if (step.name === "expand") {
-    return <KeyValueGrid rows={[{ k: "拡張件数", v: String(output.count ?? 0) }]} />;
+    return <KeyValueGrid rows={[{ k: t.chat.expandCount, v: String(output.count ?? 0) }]} />;
   }
 
   if ((step.name === "retrieve" || step.name === "fetch_document") && typeof output.result === "string") {
@@ -303,7 +306,7 @@ function ToolOutputBlock({ step }: { step: ToolCall }) {
   return <pre className={preCls}>{JSON.stringify(output, null, 2)}</pre>;
 }
 
-function ToolStepCard({ step, expanded, onToggle }: { step: ToolCall; expanded: boolean; onToggle: () => void }) {
+function ToolStepCard({ step, expanded, onToggle, t }: { step: ToolCall; expanded: boolean; onToggle: () => void; t: Dictionary }) {
   const expandable = isExpandable(step);
   const showInput = hasInputData(step.input);
   const showOutput = step.output != null;
@@ -320,7 +323,7 @@ function ToolStepCard({ step, expanded, onToggle }: { step: ToolCall; expanded: 
           step.status === "running" && "bg-accent-soft",
         )}
       >
-        <StatusIcon status={step.status} />
+        <StatusIcon status={step.status} t={t} />
         <span className="grid place-items-center text-accent">
           <svg viewBox="0 0 16 16" width="13" height="13">
             {TOOL_ICONS[step.name]}
@@ -346,14 +349,14 @@ function ToolStepCard({ step, expanded, onToggle }: { step: ToolCall; expanded: 
         <div className="flex flex-col gap-2.5 border-t-[0.5px] border-dashed border-divider bg-surface px-3.5 pb-3.5 pl-10 pt-2 max-md:pl-3.5">
           {showInput && (
             <div>
-              <div className={sectionLabelCls}>{step.name === "answer" ? "モデル" : "入力"}</div>
-              <ToolInputBlock step={step} />
+              <div className={sectionLabelCls}>{step.name === "answer" ? t.chat.sectionModel : t.chat.sectionInput}</div>
+              <ToolInputBlock step={step} t={t} />
             </div>
           )}
           {showOutput && (
             <div>
-              <div className={sectionLabelCls}>{step.name === "answer" ? "使用トークン" : "出力"}</div>
-              <ToolOutputBlock step={step} />
+              <div className={sectionLabelCls}>{step.name === "answer" ? t.chat.sectionUsedTokens : t.chat.sectionOutput}</div>
+              <ToolOutputBlock step={step} t={t} />
             </div>
           )}
         </div>
@@ -362,7 +365,7 @@ function ToolStepCard({ step, expanded, onToggle }: { step: ToolCall; expanded: 
   );
 }
 
-function ToolStepTimeline({ step, expanded, onToggle, isLast }: { step: ToolCall; expanded: boolean; onToggle: () => void; isLast: boolean }) {
+function ToolStepTimeline({ step, expanded, onToggle, isLast, t }: { step: ToolCall; expanded: boolean; onToggle: () => void; isLast: boolean; t: Dictionary }) {
   const expandable = isExpandable(step);
   const showInput = hasInputData(step.input);
   const showOutput = step.output != null;
@@ -370,7 +373,7 @@ function ToolStepTimeline({ step, expanded, onToggle, isLast }: { step: ToolCall
     <div className="grid grid-cols-[22px_1fr]">
       <div className="grid grid-rows-[auto_1fr] items-start justify-items-center pt-0.5">
         <div className="grid h-[22px] w-[22px] place-items-center bg-surface-2">
-          <StatusIcon status={step.status} />
+          <StatusIcon status={step.status} t={t} />
         </div>
         {!isLast && <div className="min-h-4 w-[1.5px] flex-1 bg-divider-strong" />}
       </div>
@@ -392,14 +395,14 @@ function ToolStepTimeline({ step, expanded, onToggle, isLast }: { step: ToolCall
           <div className="flex flex-col gap-2 pt-2">
             {showInput && (
               <div>
-                <div className={sectionLabelCls}>{step.name === "answer" ? "モデル" : "入力"}</div>
-                <ToolInputBlock step={step} />
+                <div className={sectionLabelCls}>{step.name === "answer" ? t.chat.sectionModel : t.chat.sectionInput}</div>
+                <ToolInputBlock step={step} t={t} />
               </div>
             )}
             {showOutput && (
               <div>
-                <div className={sectionLabelCls}>{step.name === "answer" ? "使用トークン" : "出力"}</div>
-                <ToolOutputBlock step={step} />
+                <div className={sectionLabelCls}>{step.name === "answer" ? t.chat.sectionUsedTokens : t.chat.sectionOutput}</div>
+                <ToolOutputBlock step={step} t={t} />
               </div>
             )}
           </div>
@@ -409,7 +412,7 @@ function ToolStepTimeline({ step, expanded, onToggle, isLast }: { step: ToolCall
   );
 }
 
-function ToolStepLog({ steps }: { steps: ToolCall[] }) {
+function ToolStepLog({ steps, dict }: { steps: ToolCall[]; dict: Dictionary }) {
   const lines: { t: number; name: string; msg: string; kind: string }[] = [];
   let t = 0;
   steps.forEach((s) => {
@@ -431,13 +434,13 @@ function ToolStepLog({ steps }: { steps: ToolCall[] }) {
         hits.slice(0, LOG_DETAIL_MAX).forEach((h) =>
           lines.push({ t: dt, name: "", msg: `${h.score.toFixed(2)}  ${h.title}${h.heading ? ` — ${h.heading}` : ""}`, kind: "detail" }));
         if (hits.length > LOG_DETAIL_MAX)
-          lines.push({ t: dt, name: "", msg: `… 他 ${hits.length - LOG_DETAIL_MAX} 件`, kind: "detail" });
+          lines.push({ t: dt, name: "", msg: interpolate(dict.chat.moreItems, { n: hits.length - LOG_DETAIL_MAX }), kind: "detail" });
       } else if (s.name === "rerank" && Array.isArray(out.selected)) {
         const sel = out.selected as { score: number; title: string }[];
         sel.slice(0, LOG_DETAIL_MAX).forEach((h) =>
           lines.push({ t: dt, name: "", msg: `${h.score.toFixed(2)}  ${h.title}`, kind: "detail" }));
         if (sel.length > LOG_DETAIL_MAX)
-          lines.push({ t: dt, name: "", msg: `… 他 ${sel.length - LOG_DETAIL_MAX} 件`, kind: "detail" });
+          lines.push({ t: dt, name: "", msg: interpolate(dict.chat.moreItems, { n: sel.length - LOG_DETAIL_MAX }), kind: "detail" });
       }
       t = start + s.durationMs;
     } else if (s.status === "running") {
@@ -490,7 +493,7 @@ function groupSteps(steps: ToolCall[]): { roots: ToolCall[]; childrenOf: Map<str
 }
 
 /** 子サブステップの行。詳細があれば展開可能。card / timeline 共通。 */
-function SubStepRow({ step, expanded, onToggle }: { step: ToolCall; expanded: boolean; onToggle: () => void }) {
+function SubStepRow({ step, expanded, onToggle, t }: { step: ToolCall; expanded: boolean; onToggle: () => void; t: Dictionary }) {
   const expandable = isExpandable(step);
   const showInput = hasInputData(step.input);
   const showOutput = step.output != null;
@@ -505,7 +508,7 @@ function SubStepRow({ step, expanded, onToggle }: { step: ToolCall; expanded: bo
           expandable ? "cursor-pointer hover:text-fg" : "cursor-default",
         )}
       >
-        <StatusIcon status={step.status} />
+        <StatusIcon status={step.status} t={t} />
         <span className="grid place-items-center text-muted-2">
           <svg viewBox="0 0 16 16" width="12" height="12">{TOOL_ICONS[step.name]}</svg>
         </span>
@@ -526,14 +529,14 @@ function SubStepRow({ step, expanded, onToggle }: { step: ToolCall; expanded: bo
         <div className="flex flex-col gap-2 pb-2 pl-[26px] pt-1">
           {showInput && (
             <div>
-              <div className={sectionLabelCls}>入力</div>
-              <ToolInputBlock step={step} />
+              <div className={sectionLabelCls}>{t.chat.sectionInput}</div>
+              <ToolInputBlock step={step} t={t} />
             </div>
           )}
           {showOutput && (
             <div>
-              <div className={sectionLabelCls}>出力</div>
-              <ToolOutputBlock step={step} />
+              <div className={sectionLabelCls}>{t.chat.sectionOutput}</div>
+              <ToolOutputBlock step={step} t={t} />
             </div>
           )}
         </div>
@@ -542,23 +545,25 @@ function SubStepRow({ step, expanded, onToggle }: { step: ToolCall; expanded: bo
   );
 }
 
-function SubSteps({ steps, expandedMap, onToggleStep }: {
+function SubSteps({ steps, expandedMap, onToggleStep, t }: {
   steps: ToolCall[] | undefined;
   expandedMap: Record<string, boolean>;
   onToggleStep: (id: string) => void;
+  t: Dictionary;
 }) {
   if (!steps || steps.length === 0) return null;
   return (
     <div className="flex flex-col gap-px border-l-[1.5px] border-divider pl-3 ml-[7px]">
       {steps.map((s) => (
-        <SubStepRow key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} />
+        <SubStepRow key={s.id} step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} t={t} />
       ))}
     </div>
   );
 }
 
 export function ToolSteps({ steps, variant, expandedMap, onToggleStep }: Props) {
-  if (variant === "log") return <ToolStepLog steps={steps} />;
+  const { t } = useT();
+  if (variant === "log") return <ToolStepLog steps={steps} dict={t} />;
 
   const { roots, childrenOf } = groupSteps(steps);
 
@@ -567,10 +572,10 @@ export function ToolSteps({ steps, variant, expandedMap, onToggleStep }: Props) 
       <div className="px-3.5 pb-3 pt-2 max-md:px-3">
         {roots.map((s, i) => (
           <div key={s.id}>
-            <ToolStepTimeline step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} isLast={i === roots.length - 1} />
+            <ToolStepTimeline step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} isLast={i === roots.length - 1} t={t} />
             {childrenOf.has(s.id) && (
               <div className="mb-2 ml-[22px] pl-1">
-                <SubSteps steps={childrenOf.get(s.id)} expandedMap={expandedMap} onToggleStep={onToggleStep} />
+                <SubSteps steps={childrenOf.get(s.id)} expandedMap={expandedMap} onToggleStep={onToggleStep} t={t} />
               </div>
             )}
           </div>
@@ -582,10 +587,10 @@ export function ToolSteps({ steps, variant, expandedMap, onToggleStep }: Props) 
     <div className="flex flex-col">
       {roots.map((s) => (
         <div key={s.id}>
-          <ToolStepCard step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} />
+          <ToolStepCard step={s} expanded={!!expandedMap[s.id]} onToggle={() => onToggleStep(s.id)} t={t} />
           {childrenOf.has(s.id) && (
             <div className="border-b-[0.5px] border-divider bg-surface px-3.5 py-2 pl-10 max-md:pl-6">
-              <SubSteps steps={childrenOf.get(s.id)} expandedMap={expandedMap} onToggleStep={onToggleStep} />
+              <SubSteps steps={childrenOf.get(s.id)} expandedMap={expandedMap} onToggleStep={onToggleStep} t={t} />
             </div>
           )}
         </div>

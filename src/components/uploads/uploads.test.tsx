@@ -1,6 +1,9 @@
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import { DocumentsUploadQueue } from "@/components/uploads/uploads";
+import { LocaleProvider } from "@/i18n/context";
+import { ja } from "@/i18n/locales/ja";
 import type { StagedFile } from "@/lib/types";
 
 function uploadingFile(id: number): StagedFile {
@@ -15,13 +18,14 @@ function uploadingFile(id: number): StagedFile {
 }
 
 test("documents upload queue keeps the scroll container inside the bounded queue shell", () => {
+  const queue = createElement(DocumentsUploadQueue, {
+    files: Array.from({ length: 12 }, (_, i) => uploadingFile(i)),
+    onRemove: () => {},
+    onRetry: () => {},
+    onClear: () => {},
+  });
   const html = renderToStaticMarkup(
-    <DocumentsUploadQueue
-      files={Array.from({ length: 12 }, (_, i) => uploadingFile(i))}
-      onRemove={() => {}}
-      onRetry={() => {}}
-      onClear={() => {}}
-    />,
+    createElement(LocaleProvider, { locale: "ja", dict: ja }, queue),
   );
 
   expect(html).toContain("max-h-[50vh]");

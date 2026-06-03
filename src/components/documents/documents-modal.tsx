@@ -12,6 +12,9 @@ import { useRawText, type RawTextState } from "@/hooks/use-raw-text";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
 import { useUploads } from "@/hooks/use-uploads";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
+import type { Dictionary } from "@/i18n/dictionary";
 import { ACCEPTED_FILE_TYPES } from "@/lib/constants";
 import { getFileMeta, getTextPreviewKind, isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
 import { cn, formatFileSize } from "@/lib/utils";
@@ -24,19 +27,28 @@ const PDF_VIEW_PARAMS = "#toolbar=0&navpanes=0&statusbar=0&view=FitH";
 type Tab = "pdf" | "layout" | "span" | "text" | "html" | "rich" | "images";
 const IMG_RE = /!\[[^\]]*\]\((\/api\/documents\/[^)\s]+)\)/g;
 
-const STATUS_LABEL: Record<string, string> = {
-  ready: "索引済み", error: "エラー", queued: "待機中", processing: "処理中",
-  parsing: "解析中", chunking: "チャンク化", embedding: "埋め込み", indexing: "索引化",
-};
+function statusLabels(t: Dictionary): Record<string, string> {
+  return {
+    ready: t.documents.statusReady,
+    error: t.documents.statusError,
+    queued: t.documents.statusQueued,
+    processing: t.documents.statusProcessing,
+    parsing: t.documents.statusParsing,
+    chunking: t.documents.statusChunking,
+    embedding: t.documents.statusEmbedding,
+    indexing: t.documents.statusIndexing,
+  };
+}
 
 /** プレビュー不可フォールバック（原本ダウンロード導線）。 */
 function UnsupportedPreview({ docId }: { docId: string }) {
+  const { t } = useT();
   return (
     <div className="grid h-full place-items-center p-8 text-center">
       <div className="max-w-[380px]">
-        <div className="mb-1.5 text-[13px] font-semibold text-fg">この形式はブラウザでプレビューできません</div>
-        <div className="mb-4 text-[12px] leading-[1.6] text-muted">「解析テキスト」タブで抽出済みの内容を確認するか、原本をダウンロードしてください。</div>
-        <a href={`/api/documents/${encodeURIComponent(docId)}/raw?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2">原本をダウンロード</a>
+        <div className="mb-1.5 text-[13px] font-semibold text-fg">{t.documents.unsupportedTitle}</div>
+        <div className="mb-4 text-[12px] leading-[1.6] text-muted">{t.documents.unsupportedDescription}</div>
+        <a href={`/api/documents/${encodeURIComponent(docId)}/raw?download=1`} className="inline-flex items-center gap-1.5 rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2">{t.documents.unsupportedDownload}</a>
       </div>
     </div>
   );
@@ -71,9 +83,10 @@ function RenderedPdfPreview({ docId, filename }: { docId: string; filename: stri
     };
   }, [docId]);
 
+  const { t } = useT();
   if (state === "error") return <UnsupportedPreview docId={docId} />;
   if (state === "loading" || !url) {
-    return <div className="grid h-full place-items-center text-[12px] text-muted">変換中…</div>;
+    return <div className="grid h-full place-items-center text-[12px] text-muted">{t.documents.pdfConverting}</div>;
   }
   return <iframe title={filename} src={url + PDF_VIEW_PARAMS} className="h-full w-full border-0" />;
 }
@@ -95,15 +108,16 @@ function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
  *  children 無し（原本タブ）のときは生テキストを PlainTextView で表示する。
  *  loading/error と truncate 注記もここで一元的に出す。 */
 function RawTextContent({ raw, docId, children }: { raw: RawTextState; docId: string; children?: ReactNode }) {
+  const { t } = useT();
   if (raw.status === "loading" || raw.status === "idle") {
-    return <div className="grid h-full place-items-center text-[12px] text-muted">読み込み中…</div>;
+    return <div className="grid h-full place-items-center text-[12px] text-muted">{t.common.loading}</div>;
   }
   if (raw.status === "error") return <UnsupportedPreview docId={docId} />;
   return (
     <div>
       {raw.truncated && (
         <div className="border-b-[0.5px] border-divider bg-accent-soft px-5 py-2 text-[11.5px] text-fg-2">
-          ファイルが大きいため冒頭のみ表示しています。全文は「原本ダウンロード」から取得してください。
+          {t.documents.rawTruncated}
         </div>
       )}
       {children ?? <PlainTextView text={raw.text} />}
@@ -117,6 +131,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   onChanged?: () => void;
   onToast?: PushToast;
 }) {
+  const { t } = useT();
   const docs = useDocuments(open, onToast);
   const uploads = useUploads(onToast);
   const { confirm, dialog } = useConfirm();
@@ -194,9 +209,9 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
 
   const onDelete = async (d: DocumentSummary) => {
     const ok = await confirm({
-      title: "この文書を削除しますか？",
-      description: `「${d.filename}」と抽出データ・索引を完全に削除します。元に戻せません。`,
-      confirmLabel: "削除する",
+      title: t.documents.confirmDeleteTitle,
+      description: interpolate(t.documents.confirmDeleteDescription, { filename: d.filename }),
+      confirmLabel: t.documents.confirmDeleteLabel,
       tone: "danger",
     });
     if (!ok) return;
@@ -209,9 +224,9 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
     const ids = [...docs.selectedIds];
     if (!ids.length) return;
     const ok = await confirm({
-      title: `選択した ${ids.length}件の文書を削除しますか？`,
-      description: `選択した ${ids.length}件の文書と抽出データ・索引を完全に削除します。元に戻せません。`,
-      confirmLabel: "削除する",
+      title: interpolate(t.documents.confirmBulkDeleteTitle, { n: ids.length }),
+      description: interpolate(t.documents.confirmBulkDeleteDescription, { n: ids.length }),
+      confirmLabel: t.documents.confirmBulkDeleteLabel,
       tone: "danger",
     });
     if (!ok) return;
@@ -233,8 +248,8 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
         <div className="flex items-center justify-between border-b-[0.5px] border-divider px-4 py-3">
           <div className="flex items-center gap-2 text-[14px] font-bold text-fg">
             <Icon name="database" size={15} />
-            <span id="documents-modal-title">アップロード文書</span>
-            <span className="font-mono text-[11px] font-normal text-muted">{docs.total}件</span>
+            <span id="documents-modal-title">{t.documents.title}</span>
+            <span className="font-mono text-[11px] font-normal text-muted">{interpolate(t.documents.itemCount, { count: docs.total })}</span>
           </div>
           <div className="flex items-center gap-2">
             {/* アップロード（スプリットボタン）: 本体=ファイル選択 / ▾=フォルダ選択 */}
@@ -244,11 +259,11 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                 className="flex h-7 items-center gap-1.5 rounded-l-[7px] bg-accent pl-2.5 pr-2 text-[12.5px] font-semibold text-white transition-[filter] hover:brightness-105"
               >
                 <Icon name="plus" size={13} />
-                アップロード
+                {t.documents.uploadButton}
               </button>
               <button
                 onClick={() => setUploadMenuOpen((v) => !v)}
-                aria-label="アップロード方法"
+                aria-label={t.documents.uploadMethodAriaLabel}
                 className="grid h-7 w-6 place-items-center rounded-r-[7px] border-l border-[rgba(255,255,255,0.25)] bg-accent text-white transition-[filter] hover:brightness-105"
               >
                 <Icon name="chevronDown" size={12} />
@@ -263,19 +278,19 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       onClick={() => { setUploadMenuOpen(false); fileInputRef.current?.click(); }}
                       className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-fg hover:bg-divider"
                     >
-                      <Icon name="doc" size={13} /> ファイルを選択
+                      <Icon name="doc" size={13} /> {t.documents.selectFile}
                     </button>
                     <button
                       onClick={() => { setUploadMenuOpen(false); folderInputRef.current?.click(); }}
                       className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] font-medium text-fg hover:bg-divider"
                     >
-                      <Icon name="folders" size={13} /> フォルダを選択
+                      <Icon name="folders" size={13} /> {t.documents.selectFolder}
                     </button>
                   </div>
                 </>
               )}
             </div>
-            <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
+            <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label={t.documents.closeAriaLabel}>
               <svg viewBox="0 0 12 12" width="12" height="12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
             </button>
           </div>
@@ -316,8 +331,8 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
               <div className="pointer-events-none absolute inset-1.5 z-20 grid place-items-center rounded-[12px] border-2 border-dashed border-accent bg-accent-soft backdrop-blur-[2px]">
                 <div className="text-center">
                   <span className="inline-flex text-accent"><Icon name="folders" size={26} /></span>
-                  <div className="mt-1.5 text-[12.5px] font-bold text-fg">ファイル / フォルダをドロップ</div>
-                  <div className="text-[11px] text-muted">そのまま索引化されます</div>
+                  <div className="mt-1.5 text-[12.5px] font-bold text-fg">{t.documents.dragTitle}</div>
+                  <div className="text-[11px] text-muted">{t.documents.dragSubtitle}</div>
                 </div>
               </div>
             )}
@@ -328,7 +343,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                 <input
                   value={docs.query}
                   onChange={(e) => docs.setQuery(e.target.value)}
-                  placeholder="ファイル名で検索…"
+                  placeholder={t.documents.searchPlaceholder}
                   className="h-[30px] w-full rounded-lg border-[0.5px] border-divider-strong bg-bg-2 pl-[30px] pr-2.5 text-[12.5px] text-fg outline-none placeholder:text-muted-2 focus:bg-surface"
                 />
               </div>
@@ -342,7 +357,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       onChange={(e) => (e.target.checked ? docs.selectAllVisible() : docs.clearSelection())}
                       className="accent-accent disabled:opacity-40"
                     />
-                    {docs.selectedIds.size}件選択中
+                    {interpolate(t.documents.selectedCount, { n: docs.selectedIds.size })}
                   </label>
                   <div className="ml-auto flex items-center gap-1">
                     <button
@@ -351,19 +366,19 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-[#B83A1F] hover:bg-[rgba(184,58,31,0.12)] disabled:opacity-40 disabled:hover:bg-transparent"
                     >
                       {docs.deleting && <span className="h-3 w-3 animate-spin-fast rounded-full border-[1.5px] border-divider-strong border-t-accent" />}
-                      {docs.deleting ? "削除中…" : "削除"}
+                      {docs.deleting ? t.documents.deleting : t.documents.deleteButton}
                     </button>
                     <button
                       onClick={docs.exitSelection}
                       disabled={docs.deleting}
                       className="rounded-md px-2 py-1 text-[12px] font-medium text-muted hover:bg-divider hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent"
-                    >キャンセル</button>
+                    >{t.documents.cancelButton}</button>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-1">
                   <div className="flex flex-wrap gap-1">
-                    {[["", "すべて"], ["ready", "索引済み"], ["error", "エラー"], ["processing", "処理中"]].map(([v, label]) => (
+                    {([["", t.documents.filterAll], ["ready", t.documents.filterReady], ["error", t.documents.filterError], ["processing", t.documents.filterProcessing]] as [string, string][]).map(([v, label]) => (
                       <button
                         key={v}
                         onClick={() => docs.setStatusFilter(v || null)}
@@ -378,7 +393,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                     onClick={docs.enterSelection}
                     disabled={!docs.items.length}
                     className="ml-auto rounded-md px-2 py-0.5 text-[11px] font-medium text-muted hover:bg-divider hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent"
-                  >選択</button>
+                  >{t.documents.selectModeButton}</button>
                 </div>
               )}
             </div>
@@ -416,17 +431,17 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                       d.status === "ready" && "bg-accent-soft text-accent",
                       d.status === "error" && "bg-[rgba(184,58,31,0.12)] text-[#B83A1F]",
                       d.status !== "ready" && d.status !== "error" && "bg-divider text-muted",
-                    )}>{STATUS_LABEL[d.status] ?? d.status}</span>
+                    )}>{statusLabels(t)[d.status] ?? d.status}</span>
                   </button>
                 );
               })}
               {docs.nextCursor && (
                 <button onClick={docs.loadMore} className="mx-auto my-2 block rounded-lg border-[0.5px] border-divider-strong bg-transparent px-3 py-1.5 text-[12px] font-medium text-fg-2 hover:bg-divider">
-                  さらに読み込む
+                  {t.documents.loadMore}
                 </button>
               )}
               {!docs.loading && !docs.items.length && (
-                <div className="px-3 py-8 text-center text-[12px] text-muted">該当する文書がありません</div>
+                <div className="px-3 py-8 text-center text-[12px] text-muted">{t.documents.emptyList}</div>
               )}
             </div>
           </div>
@@ -434,35 +449,35 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
           {/* Right: preview */}
           <div className={cn("flex min-w-0 flex-1 flex-col", !selected && "max-md:hidden")}>
             {!selected ? (
-              <div className="grid flex-1 place-items-center text-[12.5px] text-muted">左から文書を選択してください</div>
+              <div className="grid flex-1 place-items-center text-[12.5px] text-muted">{t.documents.noSelection}</div>
             ) : (
               <>
                 <div className="flex items-center gap-2 border-b-[0.5px] border-divider px-3 py-2 max-md:px-2.5">
                   {/* モバイル: プレビューから一覧へ戻る */}
                   <button
                     onClick={() => setSelectedId(null)}
-                    aria-label="一覧へ戻る"
+                    aria-label={t.documents.backToListAriaLabel}
                     className="hidden h-7 w-7 shrink-0 place-items-center rounded-[7px] text-muted hover:bg-divider hover:text-fg max-md:grid"
                   >
                     <Icon name="chevronLeft" size={15} />
                   </button>
                   <div className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
                     {(textKind
-                      ? ([["pdf", "原本"], ["text", "解析テキスト"], ["rich", "整形表示"]] as [Tab, string][])
-                      : ([["pdf", isSheet ? "スプレッドシート" : isConvertible ? "PDF変換原本" : "原本"], ...(isPdf ? [["layout", "レイアウト"], ["span", "Span"]] as [Tab, string][] : []), ["text", "解析テキスト"], ["html", "HTML整形"], ["images", `画像${images.length ? ` (${images.length})` : ""}`]] as [Tab, string][])
-                    ).map(([t, label]) => (
-                      <button key={t} onClick={() => setTab(t)} className={cn(
+                      ? ([["pdf", t.documents.tabOriginal], ["text", t.documents.tabText], ["rich", t.documents.tabRich]] as [Tab, string][])
+                      : ([["pdf", isSheet ? t.documents.tabSpreadsheet : isConvertible ? t.documents.tabConvertedPdf : t.documents.tabOriginal], ...(isPdf ? [["layout", t.documents.tabLayout], ["span", t.documents.tabSpan]] as [Tab, string][] : []), ["text", t.documents.tabText], ["html", t.documents.tabHtml], ["images", images.length ? interpolate(t.documents.tabImagesCount, { n: images.length }) : t.documents.tabImages]] as [Tab, string][])
+                    ).map(([tabKey, label]) => (
+                      <button key={tabKey} onClick={() => setTab(tabKey)} className={cn(
                         "shrink-0 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
-                        tab === t ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
+                        tab === tabKey ? "bg-surface-2 text-fg shadow-e1" : "text-muted hover:text-fg",
                       )}>{label}</button>
                     ))}
                   </div>
                   <div className="ml-auto flex shrink-0 items-center gap-1">
                     {(selected.status === "error" || selected.status === "ready") && selected.latest_job_id && (
-                      <button onClick={() => docs.retry(selected.latest_job_id!, selected.id)} className="rounded-md border-0 bg-transparent px-2 py-1 text-[12px] font-medium text-fg-2 hover:bg-divider" title="再索引">再索引</button>
+                      <button onClick={() => docs.retry(selected.latest_job_id!, selected.id)} className="rounded-md border-0 bg-transparent px-2 py-1 text-[12px] font-medium text-fg-2 hover:bg-divider" title={t.documents.reindex}>{t.documents.reindex}</button>
                     )}
-                    <a href={`/api/documents/${encodeURIComponent(selected.id)}/raw?download=1`} className="rounded-md border-0 bg-transparent px-2 py-1 text-[12px] font-medium text-fg-2 hover:bg-divider">原本ダウンロード</a>
-                    <button onClick={() => onDelete(selected)} className="rounded-md border-0 bg-transparent px-2 py-1 text-[12px] font-medium text-[#B83A1F] hover:bg-[rgba(184,58,31,0.12)]">削除</button>
+                    <a href={`/api/documents/${encodeURIComponent(selected.id)}/raw?download=1`} className="rounded-md border-0 bg-transparent px-2 py-1 text-[12px] font-medium text-fg-2 hover:bg-divider">{t.documents.downloadOriginal}</a>
+                    <button onClick={() => onDelete(selected)} className="rounded-md border-0 bg-transparent px-2 py-1 text-[12px] font-medium text-[#B83A1F] hover:bg-[rgba(184,58,31,0.12)]">{t.documents.deleteDocument}</button>
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto bg-bg-2">
@@ -498,16 +513,16 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                     <UnsupportedPreview docId={selected.id} />
                   )}
                   {tab === "layout" && isPdf && (
-                    <iframe title={`${selected.filename} レイアウト`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />
+                    <iframe title={`${selected.filename} ${t.documents.tabLayout}`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />
                   )}
                   {tab === "span" && isPdf && (
-                    <iframe title={`${selected.filename} Span`} src={`/api/documents/${encodeURIComponent(selected.id)}/span`} className="h-full w-full border-0" />
+                    <iframe title={`${selected.filename} ${t.documents.tabSpan}`} src={`/api/documents/${encodeURIComponent(selected.id)}/span`} className="h-full w-full border-0" />
                   )}
                   {tab === "html" && (
                     <div className="mx-auto max-w-[820px] p-5">
-                      {previewLoading && <div className="text-[12px] text-muted">読み込み中…</div>}
+                      {previewLoading && <div className="text-[12px] text-muted">{t.documents.loading}</div>}
                       {preview?.chunks.map((c) => <RenderedChunk key={c.chunk_id} chunk={c} />)}
-                      {!previewLoading && !preview?.chunks.length && <div className="text-[12px] text-muted">表示できる内容がありません</div>}
+                      {!previewLoading && !preview?.chunks.length && <div className="text-[12px] text-muted">{t.documents.noContent}</div>}
                     </div>
                   )}
                   {tab === "rich" && (
@@ -520,7 +535,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   )}
                   {tab === "text" && (
                     <div className="mx-auto max-w-[760px] p-5">
-                      {previewLoading && <div className="text-[12px] text-muted">読み込み中…</div>}
+                      {previewLoading && <div className="text-[12px] text-muted">{t.documents.loading}</div>}
                       {preview?.chunks.map((c) => (
                         <div key={c.chunk_id} className="mb-4">
                           {c.heading_path && <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">{c.heading_path}</div>}
@@ -531,12 +546,12 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   )}
                   {tab === "images" && (
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 p-5">
-                      {previewLoading && <div className="text-[12px] text-muted">読み込み中…</div>}
+                      {previewLoading && <div className="text-[12px] text-muted">{t.documents.loading}</div>}
                       {images.map((src) => (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img key={src} src={src} alt="" className="w-full rounded-lg border-[0.5px] border-divider" />
                       ))}
-                      {!previewLoading && !images.length && <div className="text-[12px] text-muted">抽出画像はありません</div>}
+                      {!previewLoading && !images.length && <div className="text-[12px] text-muted">{t.documents.noImages}</div>}
                     </div>
                   )}
                 </div>

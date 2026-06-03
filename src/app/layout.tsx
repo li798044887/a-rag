@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import { THEME_STORAGE_KEY } from "@/lib/constants";
+import { getLocale } from "@/i18n/server";
+import { htmlLang } from "@/i18n/config";
+import { getDictionary } from "@/i18n/dictionary";
+import { LocaleProvider } from "@/i18n/context";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -18,11 +22,13 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "ARag — Agentic RAG",
-  description:
-    "社内ナレッジ（議事録・Wiki・Slack・DB）を横断するエージェント型 RAG アシスタント。",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = getDictionary(await getLocale());
+  return {
+    title: t.api.metaTitle,
+    description: t.api.metaDescription,
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -45,15 +51,21 @@ const themeBootstrap = `
 })();
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getLocale();
+  const dict = getDictionary(locale);
   return (
-    <html lang="ja" className={`${jakarta.variable} ${jetbrains.variable}`} suppressHydrationWarning>
+    <html lang={htmlLang(locale)} className={`${jakarta.variable} ${jetbrains.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <LocaleProvider locale={locale} dict={dict}>
+          {children}
+        </LocaleProvider>
+      </body>
     </html>
   );
 }

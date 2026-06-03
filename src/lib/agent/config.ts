@@ -2,6 +2,8 @@
  *  client（フック）と server（chat route / runAgent）で共用するため、
  *  "use client" 依存を一切持たない純モジュールにする。 */
 import type { AgentCfg } from "@/lib/types";
+import type { Locale } from "@/i18n/config";
+import { getAgentPrompts } from "@/lib/agent/prompts";
 
 export const AGENT_CFG_DEFAULTS: AgentCfg = {
   maxSteps: 12,
@@ -39,20 +41,11 @@ export function clampAgentCfg(raw: unknown): AgentCfg {
   };
 }
 
-/** 設定に応じてエージェントのシステムプロンプトを組み立てる。 */
-export function buildSystemPrompt(cfg: AgentCfg): string {
-  const citation = cfg.requireCitations
-    ? "重要な事実には必ずツール結果に付いた [1] [2] の出典番号を付けてください。"
-    : "可能であればツール結果に付いた [1] [2] の出典番号を付けてください（必須ではありません）。";
-  const unknown = cfg.admitUnknown
-    ? "資料に無いことは推測せず、判断できない場合は「わからない」と明確に答えてください。"
-    : "資料に直接の記載が無い場合は、一般的な知識で補って回答してもかまいません。";
-  return (
-    "あなたは社内ナレッジ検索アシスタントです。必要に応じて retrieve / fetch_document ツールを使い、" +
-    "会話の文脈を踏まえて自己完結した検索クエリを組み立ててください。" +
-    "回答は提供された一次資料に基づき日本語で簡潔に行い、" +
-    "Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。" +
-    citation +
-    unknown
-  );
+/** 設定と言語に応じてエージェントのシステムプロンプトを組み立てる。
+ *  プロンプト断片は言語別に prompts.ts が保持する（zh は RAG 専門家視点で最適化）。 */
+export function buildSystemPrompt(cfg: AgentCfg, locale: Locale): string {
+  const p = getAgentPrompts(locale);
+  const citation = cfg.requireCitations ? p.citationRequired : p.citationOptional;
+  const unknown = cfg.admitUnknown ? p.unknownAdmit : p.unknownFill;
+  return p.systemIntro + citation + unknown;
 }

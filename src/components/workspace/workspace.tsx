@@ -14,13 +14,15 @@ import { RightPanel, type RightPanelAction } from "@/components/sources/right-pa
 import { usePanelWidth } from "@/components/workspace/use-panel-width";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { DropOverlay } from "@/components/uploads/uploads";
-import { MODELS, SCOPE_PRESETS } from "@/lib/data";
+import { getModels, getScopePresets } from "@/lib/data";
 import { LIVE_KEY, isPendingThreadId, useAgent } from "@/hooks/use-agent";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useToasts } from "@/hooks/use-toasts";
 import { useTweaks } from "@/hooks/use-tweaks";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 import { useAgentCfg } from "@/hooks/use-agent-cfg";
 import { useUploads } from "@/hooks/use-uploads";
 import { useWorkspaceStats } from "@/hooks/use-workspace-stats";
@@ -37,8 +39,9 @@ const NO_TURNS: Turn[] = [];
 
 export function Workspace() {
   const { tweaks, setTweak } = useTweaks();
+  const { t, locale } = useT();
   const { agentCfg, setAgentCfg } = useAgentCfg();
-  const { user, claims, status, signIn, register, signOut, setRemember, revokeAllSessions } = useAuth();
+  const { user, claims, status, signIn, register, signOut, updateName, setRemember, revokeAllSessions } = useAuth();
   const { toasts, push, dismiss } = useToasts();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const uploads = useUploads(push);
@@ -56,11 +59,14 @@ export function Workspace() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
-  // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。
+  const models = getModels(locale);
+  const scopePresets = getScopePresets(locale);
+  // localStorage から選択モデルを復元（SSR 安全に遅延初期化）。id は不変なので
+  // ロケール非依存。表示用の label/desc/tag は下の useEffect で現在ロケールへ再解決する。
   const [model, setModel] = useState<ModelOption>(() => {
-    if (typeof window === "undefined") return MODELS[0];
+    if (typeof window === "undefined") return models[0];
     const saved = localStorage.getItem(MODEL_STORAGE_KEY);
-    return MODELS.find((m) => m.id === saved) ?? MODELS[0];
+    return models.find((m) => m.id === saved) ?? models[0];
   });
 
   // 設定モーダルを指定セクションで開く（section 省略時は既定セクション）。
@@ -83,7 +89,7 @@ export function Workspace() {
   // 導入する場合は安定 ID キーへ移行すること。
   const [feedback, setFeedback] = useState<Record<number, "up" | "down">>({});
   const [userAttachments, setUserAttachments] = useState<typeof uploads.files>([]);
-  const [scope, setScope] = useState<ScopeValue>(SCOPE_PRESETS[0]);
+  const [scope, setScope] = useState<ScopeValue>(scopePresets[0]);
   const [shareTarget, setShareTarget] = useState<{ item: Source | null } | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
 
@@ -172,7 +178,7 @@ export function Workspace() {
       const regenTurn = regen != null ? turns[regen] : undefined;
       const finalQuery = regen != null
         ? (regenTurn?.query ?? "")
-        : query || (ready.length ? "添付ファイルについて要点をまとめて" : "");
+        : query || (ready.length ? t.workspace.attachmentDefaultQuery : "");
       if (!finalQuery) return;
       const attachNames = regen != null ? (regenTurn?.attachments ?? []) : ready.map((f) => f.name);
       const attachDocIds = regen != null
@@ -222,38 +228,38 @@ export function Workspace() {
           ));
         },
         onDone: (id, status) => {
-          if (status === "error") push("実行に失敗しました", "error");
+          if (status === "error") push(t.feedback.runFailed, "error");
           refreshThreads();
         },
       });
     },
-    [agent, uploads, push, activeThreadId, refreshThreads, model, turns, agentCfg],
+    [agent, uploads, push, activeThreadId, refreshThreads, model, turns, t, agentCfg],
   );
 
   const stopRun = () => {
     agent.cancel(activeThreadId);
     setPhase("cancelled");
-    push("実行を停止しました", "info");
+    push(t.feedback.runStopped, "info");
   };
 
   const regenerate = (turnIdx: number) => {
     // 実行中の再生成は禁止。許すと truncateFrom が進行中ターンを state から切り落とす一方、
     // その fetch は中断されず、孤立したストリームが再生成ターンへ書き込んで破損する。
     if (phase === "running") {
-      push("実行中は再生成できません", "info");
+      push(t.feedback.regenerateBlocked, "info");
       return;
     }
     startRun("", { regenerateFrom: turnIdx });
-    push("回答を再生成しています", "info");
+    push(t.feedback.regenerating, "info");
   };
 
   const copyAnswer = async (turnIdx: number) => {
     try {
       const text = (turns[turnIdx]?.answer ?? "").replace(/\*\*/g, "").replace(/\[\d+\]/g, "");
       await navigator.clipboard.writeText(text);
-      push("回答をコピーしました", "success");
+      push(t.feedback.answerCopied, "success");
     } catch {
-      push("コピーに失敗しました", "error");
+      push(t.feedback.copyFailed, "error");
     }
   };
 
@@ -299,13 +305,13 @@ export function Workspace() {
           body: JSON.stringify({ title }),
         });
         if (!res.ok) throw new Error("failed");
-        push("スレッド名を変更しました", "success");
+        push(t.feedback.threadRenamed, "success");
       } catch {
         setThreads(prev);
-        push("名前の変更に失敗しました", "error");
+        push(t.feedback.threadRenameFailed, "error");
       }
     },
-    [threads, push],
+    [threads, push, t],
   );
 
   const toggleStar = useCallback(
@@ -319,23 +325,25 @@ export function Workspace() {
           body: JSON.stringify({ pinned }),
         });
         if (!res.ok) throw new Error("failed");
-        push(pinned ? "スターを付けました" : "スターを外しました", "success");
+        push(pinned ? t.feedback.starAdded : t.feedback.starRemoved, "success");
       } catch {
         setThreads(prev);
-        push("スターの更新に失敗しました", "error");
+        push(t.feedback.starUpdateFailed, "error");
       }
     },
-    [threads, push],
+    [threads, push, t],
   );
 
   const deleteThread = useCallback(
     async (id: string) => {
       const target = threads.find((t) => t.id === id);
       const ok = await confirm({
-        title: "スレッドを削除しますか？",
-        description: target ? `「${target.title}」は元に戻せません。` : "この操作は元に戻せません。",
-        confirmLabel: "削除",
-        cancelLabel: "キャンセル",
+        title: t.workspace.deleteThreadTitle,
+        description: target
+          ? interpolate(t.workspace.deleteThreadDescWithTitle, { title: target.title })
+          : t.workspace.deleteThreadDescGeneric,
+        confirmLabel: t.workspace.deleteThreadConfirm,
+        cancelLabel: t.workspace.deleteThreadCancel,
         tone: "danger",
       });
       if (!ok) return;
@@ -358,18 +366,18 @@ export function Workspace() {
       try {
         const res = await fetch(`/api/threads/${id}`, { method: "DELETE" });
         if (!res.ok) throw new Error("failed");
-        push("スレッドを削除しました", "success");
+        push(t.feedback.threadDeleted, "success");
       } catch {
         setThreads(prev);
-        push("削除に失敗しました", "error");
+        push(t.feedback.threadDeleteFailed, "error");
       }
     },
-    [threads, activeThreadId, liveId, agent, push, confirm],
+    [threads, activeThreadId, liveId, agent, push, confirm, t],
   );
 
   const addToProject = useCallback(() => {
-    push("プロジェクト機能は近日公開予定です", "info");
-  }, [push]);
+    push(t.feedback.projectComingSoon, "info");
+  }, [push, t]);
 
   const selectThread = (id: string) => {
     if (id === activeThreadId) {
@@ -426,12 +434,12 @@ export function Workspace() {
     const filename = src.path.split("/").pop() || `${src.id}.md`;
     const body = `# ${src.title}\n${src.author}\n\n` + src.sections.map((s) => `## ${s.heading}\n\n${s.body}\n`).join("\n");
     triggerDownload(new Blob([body], { type: "text/markdown" }), filename);
-    push(`「${filename}」をダウンロードしました`, "success");
+    push(interpolate(t.feedback.sourceDownloaded, { filename }), "success");
   };
 
   const openSourceTab = (src: Source) => {
     const win = window.open(`/api/documents/${encodeURIComponent(src.id)}/raw`, "_blank");
-    if (!win) push("ポップアップがブロックされています", "error");
+    if (!win) push(t.feedback.popupBlocked, "error");
   };
 
   const handleRPAction = (kind: RightPanelAction, src: Source) => {
@@ -442,12 +450,12 @@ export function Workspace() {
 
   const exportThread = () => {
     if (turns.length === 0) {
-      push("エクスポートするスレッドがありません", "info");
+      push(t.feedback.exportEmpty, "info");
       return;
     }
     const md = buildThreadMarkdown(turns);
     triggerDownload(new Blob([md], { type: "text/markdown" }), `arag-thread-${activeThreadId}.md`);
-    push("スレッドをMarkdownでエクスポートしました", "success");
+    push(t.feedback.exported, "success");
   };
 
   // ── Drag & drop ───────────────────────────────────────────────────────
@@ -535,7 +543,7 @@ export function Workspace() {
   const liveConv = liveId ? agent.get(liveId) : undefined;
   const liveEntry: ThreadSummary | null =
     liveId && liveConv && !threads.some((t) => t.id === liveId)
-      ? { id: liveId, title: liveConv.turns[0]?.query || userQuery || "新しいスレッド", updated: "たった今" }
+      ? { id: liveId, title: liveConv.turns[0]?.query || userQuery || t.workspace.liveThreadTitle, updated: t.workspace.liveThreadUpdated }
       : null;
   const threadList = [
     ...(liveEntry ? [{ ...liveEntry, active: liveEntry.id === activeThreadId }] : []),
@@ -584,7 +592,7 @@ export function Workspace() {
           <button
             className="hidden h-[34px] w-[34px] shrink-0 -ml-1 place-items-center rounded-lg border-0 bg-transparent text-fg hover:bg-divider max-md:grid"
             onClick={() => setSidebarCollapsed(false)}
-            aria-label="メニューを開く"
+            aria-label={t.workspace.openMenuAriaLabel}
           >
             <svg viewBox="0 0 16 16" width="15" height="15">
               <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -592,19 +600,19 @@ export function Workspace() {
           </button>
           <div className="flex min-w-0 flex-1 items-center gap-2 text-[13.5px] font-semibold text-fg max-md:gap-1.5 max-md:text-[13px]">
             {phase === "empty" ? (
-              <span className="font-medium text-muted">新規スレッド</span>
+              <span className="font-medium text-muted">{t.workspace.headerNewThread}</span>
             ) : (
               <>
-                <span className="min-w-0 flex-1 truncate">{userQuery.slice(0, 56) || "スレッド"}</span>
+                <span className="min-w-0 flex-1 truncate">{userQuery.slice(0, 56) || t.workspace.headerThreadFallback}</span>
                 <span className="shrink-0 whitespace-nowrap font-normal text-[12px] text-muted max-md:hidden">·  {(citeTurn?.sources ?? []).length} sources</span>
                 {phase === "cancelled" && (
                   <span className="ml-1.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[#FDEFEA] px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-[#B83A1F] dark:bg-[rgba(184,58,31,0.18)]">
-                    キャンセル済
+                    {t.workspace.badgeCancelled}
                   </span>
                 )}
                 {phase === "running" && (
                   <span className="ml-1.5 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-accent-soft px-[7px] py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] text-accent before:h-[5px] before:w-[5px] before:rounded-full before:bg-accent before:[animation:ar-pulse_1.2s_ease-in-out_infinite]">
-                    実行中
+                    {t.workspace.badgeRunning}
                   </span>
                 )}
               </>
@@ -613,16 +621,16 @@ export function Workspace() {
           <div className="flex items-center gap-1.5 max-md:gap-0.5">
             {phase !== "empty" && (
               <>
-                <HeaderBtn title="共有" onClick={() => setShareTarget({ item: null })} iconOnly>
+                <HeaderBtn title={t.workspace.btnShare} onClick={() => setShareTarget({ item: null })} iconOnly>
                   <svg viewBox="0 0 16 16" width="13" height="13">
                     <circle cx="4" cy="8" r="1.5" fill="currentColor" />
                     <circle cx="12" cy="4" r="1.5" fill="currentColor" />
                     <circle cx="12" cy="12" r="1.5" fill="currentColor" />
                     <path d="M5.3 7.3 10.7 4.7M5.3 8.7l5.4 2.6" stroke="currentColor" strokeWidth="1.4" />
                   </svg>
-                  共有
+                  {t.workspace.btnShare}
                 </HeaderBtn>
-                <HeaderBtn title="Markdownでエクスポート" onClick={exportThread} iconOnly>
+                <HeaderBtn title={t.workspace.btnExport} onClick={exportThread} iconOnly>
                   <svg viewBox="0 0 16 16" width="13" height="13">
                     <path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -636,7 +644,7 @@ export function Workspace() {
                       <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
                       <path d="M10 3v10" stroke="currentColor" strokeWidth="1.4" />
                     </svg>
-                    一次資料 ({(citeTurn?.sources ?? []).length})
+                    {interpolate(t.workspace.btnSources, { n: String((citeTurn?.sources ?? []).length) })}
                   </button>
                 )}
               </>
@@ -644,8 +652,8 @@ export function Workspace() {
             <button
               className="grid h-[30px] w-[30px] place-items-center rounded-lg border-0 bg-transparent text-muted hover:bg-divider hover:text-fg"
               onClick={() => setTweak("dark", !tweaks.dark)}
-              title={tweaks.dark ? "ライトモードへ" : "ダークモードへ"}
-              aria-label="テーマ切替"
+              title={tweaks.dark ? t.workspace.toLight : t.workspace.toDark}
+              aria-label={t.workspace.themeToggleAriaLabel}
             >
               {tweaks.dark ? (
                 <svg viewBox="0 0 16 16" width="14" height="14">
@@ -690,7 +698,7 @@ export function Workspace() {
                       else next[idx] = v;
                       return next;
                     });
-                    if (feedback[idx] !== v) push(v === "up" ? "フィードバックを送信しました" : "改善要望を受け付けました", "success");
+                    if (feedback[idx] !== v) push(v === "up" ? t.feedback.feedbackSent : t.feedback.feedbackImprovement, "success");
                   }}
                   feedback={feedback}
                   activeCiteTurn={activeCiteTurn}
@@ -717,7 +725,7 @@ export function Workspace() {
             scope={scope}
             onChangeScope={(s) => {
               setScope(s);
-              push(`検索範囲: ${s.label}`, "info");
+              push(interpolate(t.feedback.scopeChanged, { label: s.label }), "info");
             }}
           />
         </div>
@@ -764,7 +772,7 @@ export function Workspace() {
         open={!!shareTarget}
         item={shareTarget?.item ?? null}
         onClose={() => setShareTarget(null)}
-        onCopyLink={(err) => push(err ? "コピーに失敗しました" : "共有リンクをコピーしました", err ? "error" : "success")}
+        onCopyLink={(err) => push(err ? t.feedback.linkCopyFailed : t.feedback.linkCopied, err ? "error" : "success")}
       />
       <DropOverlay visible={dragging} />
       <SettingsModal
@@ -776,7 +784,7 @@ export function Workspace() {
           setModel(m);
           localStorage.setItem(MODEL_STORAGE_KEY, m.id);
           setSettingsOpen(false);
-          push(`${m.label} に切り替えました`, "success");
+          push(interpolate(t.feedback.modelSwitched, { label: m.label }), "success");
         }}
         tweaks={tweaks}
         setTweak={setTweak}
@@ -787,26 +795,35 @@ export function Workspace() {
         onSetRemember={async (v) => {
           try {
             await setRemember(v);
-            push(v ? "セッションを保存します" : "セッション保存を解除しました", "success");
+            push(v ? t.feedback.sessionSaved : t.feedback.sessionSaveDisabled, "success");
           } catch {
-            push("セッション設定の更新に失敗しました", "error");
+            push(t.feedback.sessionUpdateFailed, "error");
           }
         }}
         onRevokeAllSessions={async () => {
           const ok = await confirm({
-            title: "すべてのデバイスからサインアウトしますか？",
-            description: "現在のデバイスを含むすべてのセッションが失効します。",
-            confirmLabel: "サインアウト",
-            cancelLabel: "キャンセル",
+            title: t.workspace.revokeAllTitle,
+            description: t.workspace.revokeAllDesc,
+            confirmLabel: t.workspace.revokeAllConfirm,
+            cancelLabel: t.workspace.revokeAllCancel,
             tone: "danger",
           });
           if (!ok) return;
           try {
             await revokeAllSessions();
-            push("全デバイスからサインアウトしました", "success");
+            push(t.feedback.signedOutAll, "success");
             setSettingsOpen(false);
           } catch {
-            push("サインアウトに失敗しました", "error");
+            push(t.feedback.signOutFailed, "error");
+          }
+        }}
+        onSaveName={async (name) => {
+          try {
+            await updateName(name);
+            push(t.feedback.nameUpdated, "success");
+          } catch (e) {
+            push(t.feedback.nameUpdateFailed, "error");
+            throw e;
           }
         }}
       />

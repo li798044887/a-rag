@@ -28,7 +28,7 @@ test("create, save message+citations, list, and reconstruct", async () => {
       blockType: "table", page: 2, score: 0.88 }],
   });
 
-  const list = await listThreads(userId);
+  const list = await listThreads(userId, "ja");
   expect(list.find((x) => x.id === t.id)?.title).toBe("認証について");
 
   const detail = await getThreadDetail(t.id, userId);

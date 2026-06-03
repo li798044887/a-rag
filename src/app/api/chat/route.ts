@@ -5,6 +5,8 @@ import { runAgent } from "@/lib/agent/run";
 import { clampAgentCfg } from "@/lib/agent/config";
 import { createThread, saveCompletedMessage, getThreadMessages, deleteMessagesFrom } from "@/lib/threads";
 import { toModelHistory } from "@/lib/agent/history";
+import { getLocale } from "@/i18n/server";
+import { getDictionary } from "@/i18n/dictionary";
 import type { AgentEvent, ToolCall } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -22,8 +24,12 @@ export async function POST(req: Request) {
   const q = query || "";
   const cfg = clampAgentCfg(agentCfg);
 
+  // リクエストの Cookie から言語を解決し、システムプロンプト/フォールバックを言語別に切り替える。
+  const locale = await getLocale();
+  const dict = getDictionary(locale);
+
   // スレッドを確定（無ければ作成、タイトルは query から）
-  const tid = threadId || (await createThread(claims.sub, q || "新しいスレッド")).id;
+  const tid = threadId || (await createThread(claims.sub, q || dict.api.newThread)).id;
 
   // 既存スレッドへの追記なら過去ターンを履歴として読み込む（直近8ターン窓）。
   // 再生成（regenerateFrom 指定）時は、履歴読込の前に当該index以降を削除し DB を整合させる。
@@ -54,7 +60,7 @@ export async function POST(req: Request) {
       let done: Extract<AgentEvent, { type: "done" }> | null = null;
 
       try {
-        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history, attachments, attachmentDocIds, agentCfg: cfg })) {
+        for await (const event of runAgent({ query: q, ownerUserId: claims.sub, threadId: tid, modelId: model, history, attachments, attachmentDocIds, locale, agentCfg: cfg })) {
           if (event.type === "answer-delta") answer += event.text;
           if (event.type === "step") {
             const idx = steps.findIndex((s) => s.id === event.step.id);

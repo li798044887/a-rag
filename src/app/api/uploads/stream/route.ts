@@ -1,5 +1,7 @@
 import { getSessionClaims } from "@/lib/auth";
 import { ragFetch } from "@/lib/rag-client";
+import { getLocale } from "@/i18n/server";
+import { getDictionary } from "@/i18n/dictionary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +45,7 @@ export async function POST(req: Request) {
     return new Response("bad request", { status: 400 });
   }
 
+  const dict = getDictionary(await getLocale());
   const owner = encodeURIComponent(claims.sub);
   const encoder = new TextEncoder();
 
@@ -76,13 +79,13 @@ export async function POST(req: Request) {
                 `/jobs/${encodeURIComponent(jobId)}?owner_user_id=${owner}`,
               ).catch(() => null);
               if (!r || !r.ok) {
-                send(formatFrame(jobId, { status: "error", progress: 0, stage_detail: "", error: "ジョブが見つかりません" }));
+                send(formatFrame(jobId, { status: "error", progress: 0, stage_detail: "", error: dict.api.jobNotFound }));
                 pending.delete(jobId);
                 return;
               }
               const job = (await r.json().catch(() => null)) as JobSnapshot | null;
               if (!job) {
-                send(formatFrame(jobId, { status: "error", progress: 0, stage_detail: "", error: "レスポンス解析エラー" }));
+                send(formatFrame(jobId, { status: "error", progress: 0, stage_detail: "", error: dict.api.responseParseError }));
                 pending.delete(jobId);
                 return;
               }

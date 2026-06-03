@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { SectionImage } from "@/components/sources/rendered-section-body";
+import { useT } from "@/i18n/context";
 
 // 見出し/段落/リスト/コード/表/区切り/画像をデザイントークンに合わせて装飾。
 // 子孫セレクタで一括指定し、react-markdown の components は再利用が要る a/img のみ上書きする。
@@ -30,8 +31,9 @@ const MD_PROSE = [
 /** Markdown 原文を整形描画する。GFM(表・取消線・タスクリスト)と数式($…$/$$…$$)に対応。
  *  セキュリティ上、生 HTML は描画しない（rehype-raw 不使用）。 */
 export function MarkdownView({ text }: { text: string }) {
+  const { t } = useT();
   if (!text.trim()) {
-    return <div className="p-5 text-[12px] text-muted">表示できる内容がありません</div>;
+    return <div className="p-5 text-[12px] text-muted">{t.documents.previewEmpty}</div>;
   }
   return (
     <div className={`mx-auto max-w-[820px] p-5 ${MD_PROSE}`}>

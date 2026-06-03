@@ -1,5 +1,6 @@
 import { PlainTextView } from "@/components/documents/plain-text-view";
 import { prettyJson, splitJsonl, tokenizeJson, type JsonTokenType } from "@/lib/json-format";
+import { useT } from "@/i18n/context";
 
 const TOKEN_COLOR: Record<JsonTokenType, string> = {
   key: "text-accent",
@@ -23,11 +24,12 @@ function HighlightedJson({ pretty }: { pretty: string }) {
 
 /** 単一 JSON。パース不能ならプレーンテキストへフォールバック。 */
 export function JsonView({ text }: { text: string }) {
+  const { t } = useT();
   const r = prettyJson(text);
   if (!r.ok) {
     return (
       <div className="p-5">
-        <div className="mb-2 text-[11.5px] text-muted">JSON として解析できませんでした。原文を表示します。</div>
+        <div className="mb-2 text-[11.5px] text-muted">{t.documents.jsonParseError}</div>
         <PlainTextView text={text} />
       </div>
     );
@@ -37,9 +39,10 @@ export function JsonView({ text }: { text: string }) {
 
 /** JSONL/NDJSON。行ごとに整形ブロックを連番付きで描画。パース不能行は生表示。 */
 export function JsonlView({ text }: { text: string }) {
+  const { t } = useT();
   const lines = splitJsonl(text);
   if (!lines.length) {
-    return <div className="p-5 text-[12px] text-muted">表示できる内容がありません</div>;
+    return <div className="p-5 text-[12px] text-muted">{t.documents.previewEmpty}</div>;
   }
   return (
     <div className="flex flex-col gap-3 p-5">

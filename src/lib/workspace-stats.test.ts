@@ -17,6 +17,12 @@ test("normalizeWorkspaceStats clamps invalid counts and preserves timestamps", (
 
 test("formatLastSynced renders a short Japanese relative time", () => {
   const now = new Date("2026-05-31T08:16:30Z");
-  expect(formatLastSynced("2026-05-31T08:14:00Z", now)).toBe("2分前");
-  expect(formatLastSynced(null, now)).toBe("未同期");
+  expect(formatLastSynced("2026-05-31T08:14:00Z", "ja", now)).toBe("2分前");
+  expect(formatLastSynced(null, "ja", now)).toBe("未同期");
+});
+
+test("formatLastSynced renders a short Chinese relative time", () => {
+  const now = new Date("2026-05-31T08:16:30Z");
+  expect(formatLastSynced("2026-05-31T08:14:00Z", "zh", now)).toBe("2分钟前");
+  expect(formatLastSynced(null, "zh", now)).toBe("未同步");
 });

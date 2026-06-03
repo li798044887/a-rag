@@ -2,6 +2,8 @@
 
 import { cn } from "@/lib/utils";
 import { colLabel, type GridModel } from "@/components/documents/spreadsheet-model";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
 
 export interface SpreadsheetGridProps {
   sheetNames: string[];
@@ -16,6 +18,7 @@ export interface SpreadsheetGridProps {
 export function SpreadsheetGrid({
   sheetNames, activeSheet, onSelectSheet, grid, clamped, totalRows, downloadHref,
 }: SpreadsheetGridProps) {
+  const { t, locale } = useT();
   // 結合に覆われる（左上以外の）セルは描画しない。"r:c" の集合で判定する。
   const covered = new Set<string>();
   for (const m of grid.merges) {
@@ -32,7 +35,7 @@ export function SpreadsheetGrid({
     <div className="flex h-full flex-col bg-surface">
       <div className="min-h-0 flex-1 overflow-auto">
         {grid.rowCount === 0 ? (
-          <div className="grid h-full place-items-center text-[12px] text-muted">このシートは空です</div>
+          <div className="grid h-full place-items-center text-[12px] text-muted">{t.documents.emptySheet}</div>
         ) : (
           <table className="border-collapse font-mono text-[12px] text-fg-2">
             <thead>
@@ -82,8 +85,8 @@ export function SpreadsheetGrid({
 
       {clamped && (
         <div className="shrink-0 border-t-[0.5px] border-divider bg-bg-2 px-3 py-1.5 text-[11px] text-muted">
-          全 {totalRows.toLocaleString()} 行中、先頭 {grid.rowCount.toLocaleString()} 行を表示。
-          <a href={downloadHref} className="ml-1 font-medium text-accent hover:underline">原本をダウンロード</a>
+          {interpolate(t.documents.gridRowsShown, { total: totalRows.toLocaleString(locale === "zh" ? "zh-CN" : "ja-JP"), shown: grid.rowCount.toLocaleString(locale === "zh" ? "zh-CN" : "ja-JP") })}
+          <a href={downloadHref} className="ml-1 font-medium text-accent hover:underline">{t.documents.gridDownload}</a>
         </div>
       )}
 

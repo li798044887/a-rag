@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/icons";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/context";
 
 interface Props {
   open: boolean;
@@ -11,15 +12,8 @@ interface Props {
 
 type Tab = "overview" | "workflow" | "features" | "shortcuts" | "tips";
 
-const TABS: { id: Tab; label: string; icon: NavIconName }[] = [
-  { id: "overview", label: "概要", icon: "sparkles" },
-  { id: "workflow", label: "基本の流れ", icon: "route" },
-  { id: "features", label: "主要機能", icon: "layers" },
-  { id: "shortcuts", label: "ショートカット", icon: "keyboard" },
-  { id: "tips", label: "うまく使うコツ", icon: "lightbulb" },
-];
-
 export function HelpModal({ open, onClose }: Props) {
+  const { t } = useT();
   const [tab, setTab] = useState<Tab>("overview");
   // Reset to the overview tab whenever the modal transitions to open — done in
   // render via the "previous value" pattern rather than an effect.
@@ -36,6 +30,14 @@ export function HelpModal({ open, onClose }: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const TABS: { id: Tab; label: string; icon: NavIconName }[] = [
+    { id: "overview", label: t.modals.helpTabOverview, icon: "sparkles" },
+    { id: "workflow", label: t.modals.helpTabWorkflow, icon: "route" },
+    { id: "features", label: t.modals.helpTabFeatures, icon: "layers" },
+    { id: "shortcuts", label: t.modals.helpTabShortcuts, icon: "keyboard" },
+    { id: "tips", label: t.modals.helpTabTips, icon: "lightbulb" },
+  ];
+
   if (!open) return null;
 
   return (
@@ -43,7 +45,7 @@ export function HelpModal({ open, onClose }: Props) {
       className="fixed inset-0 z-[90] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.48)] p-6 motion-reduce:animate-none max-md:p-0"
       role="dialog"
       aria-modal="true"
-      aria-label="ARag ヘルプ"
+      aria-label={t.modals.helpAriaLabel}
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="grid h-[min(680px,92vh)] w-[min(960px,100%)] animate-pop-in grid-cols-[220px_1fr] overflow-hidden rounded-[16px] border-[0.5px] border-divider-strong bg-surface shadow-[0_30px_80px_rgba(0,0,0,0.32)] motion-reduce:animate-none max-md:h-full max-md:max-h-screen max-md:w-full max-md:grid-cols-1 max-md:grid-rows-[auto_1fr] max-md:rounded-none max-md:border-0">
@@ -55,26 +57,26 @@ export function HelpModal({ open, onClose }: Props) {
             </div>
             <div className="max-md:hidden">
               <div className="text-[14px] font-bold tracking-[-0.01em]">ARag</div>
-              <div className="mt-px font-mono text-[10.5px] text-muted">v2.4 · ヘルプ</div>
+              <div className="mt-px font-mono text-[10.5px] text-muted">{t.modals.helpVersion}</div>
             </div>
           </div>
           <nav className="flex flex-1 flex-col gap-0.5 max-md:flex-row max-md:gap-1">
-            {TABS.map((t) => (
+            {TABS.map((tb) => (
               <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
+                key={tb.id}
+                onClick={() => setTab(tb.id)}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium transition-colors max-md:shrink-0 max-md:px-2.5 max-md:text-[12.5px]",
-                  tab === t.id ? "bg-surface font-semibold text-fg shadow-e1 [&_svg]:text-accent" : "text-fg-2 hover:bg-divider hover:text-fg",
+                  tab === tb.id ? "bg-surface font-semibold text-fg shadow-e1 [&_svg]:text-accent" : "text-fg-2 hover:bg-divider hover:text-fg",
                 )}
               >
-                <NavIcon name={t.icon} />
-                <span>{t.label}</span>
+                <NavIcon name={tb.icon} />
+                <span>{tb.label}</span>
               </button>
             ))}
           </nav>
           <div className="flex flex-col gap-0.5 border-t-[0.5px] border-divider pt-2.5 max-md:hidden">
-            {["ドキュメント", "サポートに連絡"].map((l) => (
+            {[t.modals.helpDocs, t.modals.helpContactSupport].map((l) => (
               <a key={l} href="#" onClick={(e) => e.preventDefault()} className="flex items-center justify-between rounded-[7px] px-2.5 py-[7px] text-[12px] text-muted no-underline transition-colors hover:bg-divider hover:text-fg-2">
                 <span>{l}</span>
                 <svg viewBox="0 0 16 16" width="11" height="11">
@@ -88,19 +90,19 @@ export function HelpModal({ open, onClose }: Props) {
         {/* Main */}
         <section className="grid min-h-0 grid-rows-[auto_1fr]">
           <header className="flex items-center justify-between border-b-[0.5px] border-divider px-7 pb-3.5 pt-[18px]">
-            <h2 className="m-0 text-[18px] font-bold tracking-[-0.015em]">{TABS.find((t) => t.id === tab)?.label}</h2>
-            <button className="grid h-[30px] w-[30px] place-items-center rounded-lg border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
+            <h2 className="m-0 text-[18px] font-bold tracking-[-0.015em]">{TABS.find((tb) => tb.id === tab)?.label}</h2>
+            <button className="grid h-[30px] w-[30px] place-items-center rounded-lg border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label={t.common.close}>
               <svg viewBox="0 0 16 16" width="14" height="14">
                 <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
             </button>
           </header>
           <div className="overflow-y-auto px-7 pb-7 pt-[22px]">
-            {tab === "overview" && <Overview onJump={setTab} />}
-            {tab === "workflow" && <Workflow />}
-            {tab === "features" && <Features />}
-            {tab === "shortcuts" && <Shortcuts />}
-            {tab === "tips" && <Tips />}
+            {tab === "overview" && <Overview onJump={setTab} t={t.modals} />}
+            {tab === "workflow" && <Workflow t={t.modals} />}
+            {tab === "features" && <Features t={t.modals} />}
+            {tab === "shortcuts" && <Shortcuts t={t.modals} />}
+            {tab === "tips" && <Tips t={t.modals} />}
           </div>
         </section>
       </div>
@@ -110,29 +112,35 @@ export function HelpModal({ open, onClose }: Props) {
 
 const lead = "m-0 text-[13.5px] leading-[1.65] text-fg-2 [&_strong]:font-semibold [&_strong]:text-fg";
 
-function Overview({ onJump }: { onJump: (t: Tab) => void }) {
+// Helper to safely render strings containing <strong> tags.
+function RichText({ text, className }: { text: string; className?: string }) {
+  return <span className={className} dangerouslySetInnerHTML={{ __html: text }} />;
+}
+
+type ModalsT = ReturnType<typeof useT>["t"]["modals"];
+
+function Overview({ onJump, t }: { onJump: (tab: Tab) => void; t: ModalsT }) {
   const cards: { n: string; t: Tab; title: string; desc: string }[] = [
-    { n: "01", t: "workflow", title: "基本の流れ", desc: "質問 → エージェント実行 → 引用付き回答までの3ステップ。" },
-    { n: "02", t: "features", title: "主要機能", desc: "スコープ・添付・ツール可視化・引用パネル・共有の使い方。" },
-    { n: "03", t: "shortcuts", title: "ショートカット", desc: "⌘N / ⌘K / ⌘B など、手を止めずに操作するためのキー。" },
-    { n: "04", t: "tips", title: "うまく使うコツ", desc: "質問の書き方・精度を上げる小ワザ・避けたい使い方。" },
+    { n: "01", t: "workflow", title: t.overviewCard01Title, desc: t.overviewCard01Desc },
+    { n: "02", t: "features", title: t.overviewCard02Title, desc: t.overviewCard02Desc },
+    { n: "03", t: "shortcuts", title: t.overviewCard03Title, desc: t.overviewCard03Desc },
+    { n: "04", t: "tips", title: t.overviewCard04Title, desc: t.overviewCard04Desc },
   ];
   return (
     <div className="flex flex-col gap-[22px]">
       <div className="flex flex-col gap-3.5 rounded-[14px] border-[0.5px] border-divider-strong bg-gradient-to-b from-surface-2 to-surface p-[22px_24px_24px]">
         <div className="self-start rounded-full border-[0.5px] border-accent/55 bg-accent/[0.08] px-[9px] py-[3px] font-mono text-[10px] font-bold tracking-[0.12em] text-accent">
-          AGENTIC RAG
+          {t.overviewHeroTag}
         </div>
-        <h3 className="m-0 text-[22px] font-bold leading-[1.25] tracking-[-0.02em]">社内ナレッジに、エージェントの目で。</h3>
+        <h3 className="m-0 text-[22px] font-bold leading-[1.25] tracking-[-0.02em]">{t.overviewHeroTitle}</h3>
         <p className="m-0 max-w-[56ch] text-[13.5px] leading-[1.7] text-fg-2">
-          ARag は議事録・Wiki・Slack・DB を横断して質問に答える <strong className="font-semibold text-fg">エージェント型 RAG アシスタント</strong> です。
-          単純な検索ではなく、複数ステップで情報源を辿り、引用付きで根拠を示します。
+          <RichText text={t.overviewHeroBody} />
         </p>
         <div className="mt-1.5 grid grid-cols-3 gap-px overflow-hidden rounded-[10px] border-[0.5px] border-divider bg-divider">
           {[
-            { n: "26,194", l: "索引中のドキュメント" },
-            { n: "8", l: "接続データソース" },
-            { n: "~2.6s", l: "平均回答時間" },
+            { n: "26,194", l: t.overviewStatDocs },
+            { n: "8", l: t.overviewStatSources },
+            { n: "~2.6s", l: t.overviewStatSpeed },
           ].map((s) => (
             <div key={s.l} className="bg-surface px-3.5 py-3">
               <div className="font-mono text-[19px] font-bold tracking-[-0.02em] text-accent">{s.n}</div>
@@ -166,16 +174,16 @@ function Overview({ onJump }: { onJump: (t: Tab) => void }) {
   );
 }
 
-function Workflow() {
+function Workflow({ t }: { t: ModalsT }) {
   const steps = [
-    { n: "01", title: "質問を入力する", body: "画面下のコンポーザーに自然文で質問を入力します。「いつ」「誰が」「なぜ」など5W1Hを含めると精度が上がります。", hint: "左のスコープピッカーで対象範囲（全社・プロジェクト・特定チーム）を絞り込めます。" },
-    { n: "02", title: "エージェントが情報源を辿る", body: "クエリ分解 → ベクトル検索 → 一次資料の取得 → 重複排除 → 回答生成、と複数ステップで動作します。途中経過はツール実行カードでリアルタイムに確認できます。", hint: "誤った方向に進んだら ⌘⌫ または停止ボタンで即座にキャンセル可能。" },
-    { n: "03", title: "引用付きの回答を受け取る", body: "回答中の番号 [1] [2] が一次資料への引用です。クリックすると右パネルで該当セクションがハイライトされ、根拠を確認できます。", hint: "👍/👎 でフィードバック、コピー・再生成・Markdown エクスポートにも対応。" },
+    { n: "01", title: t.workflowStep01Title, body: t.workflowStep01Body, hint: t.workflowStep01Hint },
+    { n: "02", title: t.workflowStep02Title, body: t.workflowStep02Body, hint: t.workflowStep02Hint },
+    { n: "03", title: t.workflowStep03Title, body: t.workflowStep03Body, hint: t.workflowStep03Hint },
   ];
   return (
     <div className="flex flex-col gap-[22px]">
       <p className={lead}>
-        ARag は <strong>3つのフェーズ</strong> で動きます。各フェーズはすべて画面上で可視化され、いつでも介入できます。
+        <RichText text={t.workflowLead} />
       </p>
       <ol className="m-0 ml-3 flex list-none flex-col border-l-[0.5px] border-dashed border-divider-strong p-0">
         {steps.map((s) => (
@@ -198,19 +206,19 @@ function Workflow() {
   );
 }
 
-function Features() {
+function Features({ t }: { t: ModalsT }) {
   const features: { icon: FeatIconName; title: string; body: string }[] = [
-    { icon: "scope", title: "検索範囲のスコープ", body: "コンポーザー左のピッカーから「全社」「プロジェクト単位」「データソース指定」など対象を絞り込めます。広すぎる範囲はノイズの原因に。まずは狭く始めて広げるのがおすすめ。" },
-    { icon: "paperclip", title: "ファイル添付", body: "PDF・Word・スプレッドシート・画像をドラッグ＆ドロップで質問に添付できます。「この資料の要点をまとめて」「決定事項を抽出して」など、添付ファイル前提の質問にそのまま対応。" },
-    { icon: "steps", title: "ツール実行の可視化", body: "各ステップ（クエリ分解・検索・取得・要約）がカードで表示されます。Tweaks パネルから「カード」「タイムライン」「ターミナル風ログ」の3表示に切り替え可能。" },
-    { icon: "cite", title: "引用と一次資料パネル", body: "回答中の [1] [2] をクリックすると右パネルが開き、該当箇所がハイライトされます。一次資料はそのままダウンロード・新規タブで閲覧・共有リンクで配布できます。" },
-    { icon: "thread", title: "スレッド管理", body: "過去の質問はサイドバーから即座に再オープン。検索ボックスで履歴を絞り込み、スター・プロジェクト・データソースのコレクションにまとめられます。" },
-    { icon: "share", title: "共有とエクスポート", body: "スレッド全体を共有リンク or Markdown でエクスポート。一次資料は単体でも共有できます。社内向けは閲覧権限を引き継ぎ、社外向けはマスク済みコピーを生成。" },
+    { icon: "scope", title: t.featScopeTitle, body: t.featScopeBody },
+    { icon: "paperclip", title: t.featAttachTitle, body: t.featAttachBody },
+    { icon: "steps", title: t.featStepsTitle, body: t.featStepsBody },
+    { icon: "cite", title: t.featCiteTitle, body: t.featCiteBody },
+    { icon: "thread", title: t.featThreadTitle, body: t.featThreadBody },
+    { icon: "share", title: t.featShareTitle, body: t.featShareBody },
   ];
   return (
     <div className="flex flex-col gap-[22px]">
       <p className={lead}>
-        ARag の各機能は <strong>少ない操作で深く掘る</strong> ことを目的に設計されています。
+        <RichText text={t.featuresLead} />
       </p>
       <div className="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
         {features.map((f) => (
@@ -229,30 +237,30 @@ function Features() {
   );
 }
 
-function Shortcuts() {
+function Shortcuts({ t }: { t: ModalsT }) {
   const groups = [
-    { label: "基本操作", items: [
-      { keys: ["⌘", "N"], desc: "新規スレッドを開く" },
-      { keys: ["⌘", "K"], desc: "設定を開く" },
-      { keys: ["⌘", "B"], desc: "サイドバーを開閉" },
-      { keys: ["⌘", "/"], desc: "サイドバーを開く" },
-      { keys: ["Esc"], desc: "モーダル / パネルを閉じる" },
+    { label: t.shortcutsGroupBasic, items: [
+      { keys: ["⌘", "N"], desc: t.shortcutsNewThread },
+      { keys: ["⌘", "K"], desc: t.shortcutsOpenSettings },
+      { keys: ["⌘", "B"], desc: t.shortcutsToggleSidebar },
+      { keys: ["⌘", "/"], desc: t.shortcutsOpenSidebar },
+      { keys: ["Esc"], desc: t.shortcutsCloseModal },
     ] },
-    { label: "実行中", items: [
-      { keys: ["⌘", "⌫"], desc: "エージェントの実行を停止" },
-      { keys: ["Enter"], desc: "質問を送信" },
-      { keys: ["⇧", "Enter"], desc: "コンポーザーで改行" },
+    { label: t.shortcutsGroupRunning, items: [
+      { keys: ["⌘", "⌫"], desc: t.shortcutsStopAgent },
+      { keys: ["Enter"], desc: t.shortcutsSend },
+      { keys: ["⇧", "Enter"], desc: t.shortcutsNewline },
     ] },
-    { label: "回答", items: [
-      { keys: ["C"], desc: "回答をコピー（フォーカス時）" },
-      { keys: ["R"], desc: "回答を再生成" },
-      { keys: ["1", "〜", "9"], desc: "引用 [N] にジャンプ" },
+    { label: t.shortcutsGroupAnswer, items: [
+      { keys: ["C"], desc: t.shortcutsCopyAnswer },
+      { keys: ["R"], desc: t.shortcutsRegenerate },
+      { keys: ["1", "〜", "9"], desc: t.shortcutsJumpCitation },
     ] },
   ];
   return (
     <div className="flex flex-col gap-[22px]">
       <p className={lead}>
-        <strong>⌘</strong> は macOS、Windows / Linux では <strong>Ctrl</strong> に読み替えてください。
+        <RichText text={t.shortcutsLead} />
       </p>
       <div className="flex flex-col gap-4">
         {groups.map((g) => (
@@ -280,23 +288,23 @@ function Shortcuts() {
   );
 }
 
-function Tips() {
+function Tips({ t }: { t: ModalsT }) {
   const tips = [
-    { kind: "do", title: "具体的な制約を含める", body: "「2024年Q3の」「営業チームの」など期間・主体・対象を明示すると、エージェントが検索範囲を絞れます。" },
-    { kind: "do", title: "複数の質問は分割する", body: "「Aの背景と、Bの今後の方針」のような複合質問は精度が下がります。スレッドを分けるか、順番に聞きましょう。" },
-    { kind: "do", title: "略語は展開する", body: "社内特有の略語（例: PJK, OKR-Q3）は初出で展開すると、エージェントが正しい索引にヒットしやすくなります。" },
-    { kind: "dont", title: "機密情報の社外共有", body: "スレッド共有時は権限が引き継がれます。社外向けには「マスク済みコピー」を選択してください。" },
-    { kind: "dont", title: "広すぎるスコープ", body: "常に「全社」で検索するとノイズが増えます。プロジェクト / チーム単位に絞ると速度も精度も向上します。" },
-    { kind: "dont", title: "回答の鵜呑み", body: "エージェントは引用元を示しますが、解釈は必ず一次資料で確認してください。👎 フィードバックは改善に反映されます。" },
-  ] as const;
+    { kind: "do" as const, title: t.tipDo01Title, body: t.tipDo01Body },
+    { kind: "do" as const, title: t.tipDo02Title, body: t.tipDo02Body },
+    { kind: "do" as const, title: t.tipDo03Title, body: t.tipDo03Body },
+    { kind: "dont" as const, title: t.tipDont01Title, body: t.tipDont01Body },
+    { kind: "dont" as const, title: t.tipDont02Title, body: t.tipDont02Body },
+    { kind: "dont" as const, title: t.tipDont03Title, body: t.tipDont03Body },
+  ];
   return (
     <div className="flex flex-col gap-[22px]">
-      <p className={lead}>質問の書き方ひとつで、エージェントの体感速度と精度は大きく変わります。</p>
+      <p className={lead}>{t.tipsLead}</p>
       <div className="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
-        {tips.map((t, i) => (
+        {tips.map((tip, i) => (
           <div key={i} className="grid grid-cols-[28px_1fr] gap-3 rounded-xl border-[0.5px] border-divider-strong bg-surface p-3.5">
-            <div className={cn("grid h-7 w-7 place-items-center rounded-full", t.kind === "do" ? "bg-accent-soft text-accent" : "bg-[rgba(192,83,58,0.13)] text-[#C0533A]")}>
-              {t.kind === "do" ? (
+            <div className={cn("grid h-7 w-7 place-items-center rounded-full", tip.kind === "do" ? "bg-accent-soft text-accent" : "bg-[rgba(192,83,58,0.13)] text-[#C0533A]")}>
+              {tip.kind === "do" ? (
                 <svg viewBox="0 0 16 16" width="13" height="13">
                   <path d="M3 8.5l3 3 7-7" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -307,11 +315,11 @@ function Tips() {
               )}
             </div>
             <div>
-              <div className={cn("font-mono text-[10px] font-bold tracking-[0.1em]", t.kind === "do" ? "text-accent" : "text-[#C0533A]")}>
-                {t.kind === "do" ? "DO" : "DON'T"}
+              <div className={cn("font-mono text-[10px] font-bold tracking-[0.1em]", tip.kind === "do" ? "text-accent" : "text-[#C0533A]")}>
+                {tip.kind === "do" ? "DO" : "DON'T"}
               </div>
-              <div className="mt-0.5 text-[13.5px] font-semibold tracking-[-0.005em]">{t.title}</div>
-              <p className="mt-1.5 text-[12px] leading-[1.6] text-muted">{t.body}</p>
+              <div className="mt-0.5 text-[13.5px] font-semibold tracking-[-0.005em]">{tip.title}</div>
+              <p className="mt-1.5 text-[12px] leading-[1.6] text-muted">{tip.body}</p>
             </div>
           </div>
         ))}
@@ -319,14 +327,14 @@ function Tips() {
 
       <div className="mt-1 flex items-center justify-between gap-3.5 rounded-xl border-[0.5px] border-accent/40 bg-accent/[0.05] px-[18px] py-3.5 max-md:flex-col max-md:items-start">
         <div>
-          <div className="text-[13.5px] font-semibold tracking-[-0.005em]">まずは試してみる</div>
-          <div className="mt-0.5 text-[11.5px] leading-[1.5] text-muted">空のスレッドにあるサジェスト質問から、エージェントの動きを体感できます。</div>
+          <div className="text-[13.5px] font-semibold tracking-[-0.005em]">{t.tipsTryTitle}</div>
+          <div className="mt-0.5 text-[11.5px] leading-[1.5] text-muted">{t.tipsTryDesc}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Kbd>⌘</Kbd>
           <span className="font-mono text-[11px] text-muted-2">+</span>
           <Kbd>N</Kbd>
-          <span className="ml-2 text-[12px] text-muted">で新規スレッド</span>
+          <span className="ml-2 text-[12px] text-muted">{t.tipsTryNewThread}</span>
         </div>
       </div>
     </div>

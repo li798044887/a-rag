@@ -1,3 +1,5 @@
+import type { Locale } from "@/i18n/config";
+
 export interface WorkspaceStats {
   indexedDocumentCount: number;
   totalDocumentCount: number;
@@ -26,12 +28,25 @@ export function normalizeWorkspaceStats(payload: WorkspaceStatsPayload): Workspa
   };
 }
 
-export function formatLastSynced(value: string | null, now = new Date()): string {
-  if (!value) return "未同期";
-  const t = new Date(value).getTime();
-  if (!Number.isFinite(t)) return "未同期";
-  const diff = Math.max(0, now.getTime() - t);
+export function formatLastSynced(value: string | null, locale: Locale, now = new Date()): string {
+  const never = locale === "zh" ? "未同步" : "未同期";
+  if (!value) return never;
+  const ts = new Date(value).getTime();
+  if (!Number.isFinite(ts)) return never;
+  const diff = Math.max(0, now.getTime() - ts);
   const minutes = Math.floor(diff / 60_000);
+  if (locale === "zh") {
+    if (minutes < 1) return "刚刚";
+    if (minutes < 60) return `${minutes}分钟前`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}小时前`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}天前`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}个月前`;
+    return `${Math.floor(months / 12)}年前`;
+  }
+  // ja
   if (minutes < 1) return "たった今";
   if (minutes < 60) return `${minutes}分前`;
   const hours = Math.floor(minutes / 60);

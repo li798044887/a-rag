@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { Source } from "@/lib/types";
+import { useT } from "@/i18n/context";
 
 interface Props {
   tokens: number;
@@ -20,6 +21,7 @@ const chipCls =
 const btnCls = "grid h-7 w-7 place-items-center rounded-md border-0 bg-transparent text-muted hover:bg-divider hover:text-fg";
 
 export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate, onOpenSources, sourcesActive, onFeedback, feedback }: Props) {
+  const { t } = useT();
   return (
     <div className="mt-3.5 flex items-center justify-between gap-2 border-t-[0.5px] border-dashed border-divider-strong pt-3.5 max-md:flex-wrap max-md:gap-y-2">
       <div className="flex flex-wrap gap-1.5">
@@ -39,7 +41,7 @@ export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate
         <button
           type="button"
           onClick={onOpenSources}
-          title="このターンの一次資料を表示"
+          title={t.chat.sourcesTitle}
           className={cn(
             chipCls,
             "cursor-pointer",
@@ -57,20 +59,20 @@ export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate
         </button>
       </div>
       <div className="flex gap-0.5 max-md:ml-auto">
-        <button className={btnCls} title="コピー" onClick={onCopy}>
+        <button className={btnCls} title={t.chat.copyTitle} onClick={onCopy}>
           <svg viewBox="0 0 16 16" width="12" height="12">
             <rect x="5" y="3" width="9" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.4" fill="none" />
             <path d="M3 11V4.5A1.5 1.5 0 014.5 3H10" stroke="currentColor" strokeWidth="1.4" fill="none" />
           </svg>
         </button>
-        <button className={btnCls} title="再生成" onClick={onRegenerate}>
+        <button className={btnCls} title={t.chat.regenerateTitle} onClick={onRegenerate}>
           <svg viewBox="0 0 16 16" width="12" height="12">
             <path d="M13 8a5 5 0 11-1.5-3.5L13 6V3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
         <button
           className={cn(btnCls, feedback === "up" && "text-accent")}
-          title="良い回答"
+          title={t.chat.feedbackUpTitle}
           onClick={() => onFeedback("up")}
         >
           <svg viewBox="0 0 16 16" width="12" height="12" fill={feedback === "up" ? "currentColor" : "none"}>
@@ -79,7 +81,7 @@ export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate
         </button>
         <button
           className={cn(btnCls, feedback === "down" && "text-[#B83A1F]")}
-          title="悪い回答"
+          title={t.chat.feedbackDownTitle}
           onClick={() => onFeedback("down")}
         >
           <svg viewBox="0 0 16 16" width="12" height="12" style={{ transform: "rotate(180deg)" }} fill={feedback === "down" ? "currentColor" : "none"}>
@@ -92,15 +94,16 @@ export function AnswerFooter({ tokens, durationMs, sources, onCopy, onRegenerate
 }
 
 export function CancelledNotice({ onRetry }: { onRetry: () => void }) {
+  const { t } = useT();
   return (
     <div className="flex items-center gap-2.5 rounded-[10px] border-[0.5px] border-dashed border-divider-strong bg-surface-2 px-3.5 py-2.5 text-[13px] text-muted">
       <svg viewBox="0 0 16 16" width="14" height="14">
         <rect x="3" y="3" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.4" fill="none" />
         <path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
-      <span>ユーザーにより実行が停止されました。</span>
+      <span>{t.chat.cancelledNotice}</span>
       <button className="ml-auto border-0 bg-transparent py-1 text-[12.5px] font-semibold text-accent hover:underline" onClick={onRetry}>
-        もう一度実行
+        {t.chat.retryRun}
       </button>
     </div>
   );

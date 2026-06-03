@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "@/i18n/context";
 import type { AgentCfg, AgentEvent, Turn } from "@/lib/types";
 
 export type ConvStatus = "running" | "done" | "cancelled" | "error";
@@ -87,6 +88,11 @@ export function useAgent() {
   const [convs, setConvs] = useState<Record<string, ConvState>>({});
   const controllers = useRef<Record<string, AbortController>>({});
   const pendingSeq = useRef(0);
+
+  // useCallback の依存を増やさずに最新辞書を読むための ref（他フックと同様の方式）。
+  const { t } = useT();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
 
   const get = useCallback((id: string): ConvState | undefined => convs[id], [convs]);
 
@@ -196,7 +202,7 @@ export function useAgent() {
       const last = c.turns[c.turns.length - 1];
       const nextLast = { ...last, streaming: false, status: "cancelled" as const,
         steps: last.steps.map((s) => (s.status === "running"
-          ? { ...s, status: "pending" as const, summary: "キャンセルされました" } : s)) };
+          ? { ...s, status: "pending" as const, summary: tRef.current.chat.stepCancelled } : s)) };
       return { ...prev, [id]: { turns: [...c.turns.slice(0, -1), nextLast] } };
     });
   }, []);

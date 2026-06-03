@@ -2,11 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
-import { MODELS } from "@/lib/data";
+import { getModels } from "@/lib/data";
 import { ACCENT_PRESETS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { SessionClaims } from "@/hooks/use-auth";
 import type { AgentCfg, AppUser, ModelOption, Tweaks } from "@/lib/types";
+import { useT } from "@/i18n/context";
+import { interpolate } from "@/i18n/interpolate";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
+import { persistAndSwitchLocale, browserLocaleEffects } from "@/i18n/use-locale-switch";
+import { useConfirm } from "@/hooks/use-confirm";
 
 interface Props {
   open: boolean;
@@ -23,28 +28,12 @@ interface Props {
   claims: SessionClaims | null;
   onSetRemember: (value: boolean) => Promise<void> | void;
   onRevokeAllSessions: () => Promise<void> | void;
+  /** 表示名を永続化する。成功で resolve、失敗で reject。 */
+  onSaveName: (name: string) => Promise<void>;
 }
 
 export type SettingsSection = "model" | "sources" | "agent" | "appearance" | "security" | "account";
 type Section = SettingsSection;
-
-const NAV: { id: Section; label: string; icon: IconName }[] = [
-  { id: "model", label: "モデル", icon: "brain" },
-  { id: "sources", label: "データソース", icon: "folders" },
-  { id: "agent", label: "エージェント挙動", icon: "sliders" },
-  { id: "appearance", label: "外観", icon: "sun" },
-  { id: "security", label: "セキュリティ", icon: "shield" },
-  { id: "account", label: "アカウント", icon: "user" },
-];
-
-const TITLES: Record<Section, string> = {
-  model: "モデル",
-  sources: "データソース",
-  agent: "エージェント挙動",
-  appearance: "外観",
-  security: "セキュリティ",
-  account: "アカウント",
-};
 
 const CONNECTORS: { name: string; desc: string; enabled: boolean; icon: IconName }[] = [
   { name: "Confluence", desc: "15,234 pages", enabled: true, icon: "confluence" },
@@ -56,44 +45,21 @@ const CONNECTORS: { name: string; desc: string; enabled: boolean; icon: IconName
   { name: "Linear", desc: "12 teams", enabled: false, icon: "linear" },
 ];
 
-/** JWT クレームを読みやすい順に並べて JSON 表示する。null/undefined は省略。 */
-function renderClaims(claims: SessionClaims | null): string {
-  if (!claims) return "{\n  // セッションを読み込み中…\n}";
-  const ordered: Record<string, unknown> = {
-    sub: claims.sub,
-    email: claims.email,
-    org: claims.org,
-    role: claims.role,
-    scopes: claims.scopes,
-    rem: claims.rem,
-    iat: claims.iat,
-    exp: claims.exp,
-    iss: claims.iss,
-    aud: claims.aud,
-  };
-  for (const key of Object.keys(ordered)) {
-    if (ordered[key] === null || ordered[key] === undefined) delete ordered[key];
-  }
-  return JSON.stringify(ordered, null, 2);
-}
-
-/** exp(秒) − 現在 を「Xh Ym」形式に。期限切れは「期限切れ」。 */
-function formatRemaining(expSec: number | null | undefined): string {
-  if (!expSec) return "—";
+/** exp(秒) − 現在を表示用にフォーマット。期限切れは辞書の文言を使う。 */
+function formatRemainingRaw(expSec: number | null | undefined): { expired: boolean; h: number; m: number; s: number } | null {
+  if (!expSec) return null;
   const diffSec = expSec - Math.floor(Date.now() / 1000);
-  if (diffSec <= 0) return "期限切れ";
+  if (diffSec <= 0) return { expired: true, h: 0, m: 0, s: 0 };
   const h = Math.floor(diffSec / 3600);
   const m = Math.floor((diffSec % 3600) / 60);
-  if (h >= 1) return `${h}h ${m}m`;
   const s = diffSec % 60;
-  return `${m}m ${s}s`;
+  return { expired: false, h, m, s };
 }
 
-function formatLifetime(claims: SessionClaims | null): string {
-  if (!claims?.iat || !claims?.exp) return "—";
+function formatLifetimeHours(claims: SessionClaims | null): number | null {
+  if (!claims?.iat || !claims?.exp) return null;
   const totalSec = claims.exp - claims.iat;
-  const h = Math.round(totalSec / 3600);
-  return `${h}時間`;
+  return Math.round(totalSec / 3600);
 }
 
 /** Accessible on/off switch (button so width/height apply in any layout context). */
@@ -154,6 +120,7 @@ export function SettingsModal({
   claims,
   onSetRemember,
   onRevokeAllSessions,
+  onSaveName,
 }: Props) {
   const [section, setSection] = useState<Section>(() =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches ? "account" : "model",
@@ -172,6 +139,15 @@ export function SettingsModal({
   const [jwtCopied, setJwtCopied] = useState(false);
   const [rememberPending, setRememberPending] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  // 表示名の編集ドラフト。保存(/api)成功や非同期ロードで user.name が変わったら追従する
+  // （レンダー中に前回値と比較して調整する React 推奨パターン）。
+  const [nameDraft, setNameDraft] = useState(user.name);
+  const [nameSaving, setNameSaving] = useState(false);
+  const [prevUserName, setPrevUserName] = useState(user.name);
+  if (user.name !== prevUserName) {
+    setPrevUserName(user.name);
+    setNameDraft(user.name);
+  }
   // 「残り時間」を 30 秒ごとに再計算（モーダル開いている間のみ）。
   const [nowTick, setNowTick] = useState(0);
   useEffect(() => {
@@ -182,7 +158,87 @@ export function SettingsModal({
   // nowTick を参照することで eslint と再描画を成立させる（値自体は使わない）。
   void nowTick;
 
-  const claimsJson = renderClaims(claims);
+  // 言語切替：現在ロケールと翻訳辞書、確認ダイアログ。
+  const { locale, t } = useT();
+  const models = getModels(locale);
+  const { confirm, dialog } = useConfirm();
+
+  // NAV と TITLES を辞書から生成（t が必要なので関数スコープ内に置く）。
+  const NAV: { id: Section; label: string; icon: IconName }[] = [
+    { id: "model", label: t.modals.navModel, icon: "brain" },
+    { id: "sources", label: t.modals.navSources, icon: "folders" },
+    { id: "agent", label: t.modals.navAgent, icon: "sliders" },
+    { id: "appearance", label: t.modals.navAppearance, icon: "sun" },
+    { id: "security", label: t.modals.navSecurity, icon: "shield" },
+    { id: "account", label: t.modals.navAccount, icon: "user" },
+  ];
+
+  const TITLES: Record<Section, string> = {
+    model: t.modals.navModel,
+    sources: t.modals.navSources,
+    agent: t.modals.navAgent,
+    appearance: t.modals.navAppearance,
+    security: t.modals.navSecurity,
+    account: t.modals.navAccount,
+  };
+
+  const onLocaleSelect = async (next: Locale) => {
+    if (next === locale) return;
+    const ok = await confirm({
+      title: t.modals.languageSwitchTitle,
+      description: t.modals.languageSwitchDesc,
+      confirmLabel: t.common.confirm,
+      cancelLabel: t.common.cancel,
+    });
+    if (ok) {
+      try {
+        await persistAndSwitchLocale(next, browserLocaleEffects);
+      } catch {
+        // 保存失敗時はリロードしない（言語は変わらないまま）。
+      }
+    }
+  };
+
+  // セキュリティ画面: JWT クレームを読みやすい順に並べて JSON 表示する。null/undefined は省略。
+  const claimsJson = (() => {
+    if (!claims) return `{\n  ${t.modals.securityClaimsLoading}\n}`;
+    const ordered: Record<string, unknown> = {
+      sub: claims.sub,
+      email: claims.email,
+      org: claims.org,
+      role: claims.role,
+      scopes: claims.scopes,
+      rem: claims.rem,
+      iat: claims.iat,
+      exp: claims.exp,
+      iss: claims.iss,
+      aud: claims.aud,
+    };
+    for (const key of Object.keys(ordered)) {
+      if (ordered[key] === null || ordered[key] === undefined) delete ordered[key];
+    }
+    return JSON.stringify(ordered, null, 2);
+  })();
+
+  // 残り時間の表示文字列を生成。
+  const remainingStr = (() => {
+    const raw = formatRemainingRaw(claims?.exp);
+    if (!raw) return "—";
+    if (raw.expired) return t.modals.securityTokenExpired;
+    if (raw.h >= 1) return `${raw.h}h ${raw.m}m`;
+    return `${raw.m}m ${raw.s}s`;
+  })();
+
+  const lifetimeStr = (() => {
+    const h = formatLifetimeHours(claims);
+    if (h === null) return "—";
+    return interpolate(t.modals.securityTokenLifetimeHours, { h: String(h) });
+  })();
+
+  const tokenExpiryDisplay = interpolate(t.modals.securityTokenRemainingFormat, {
+    lifetime: lifetimeStr,
+    remaining: remainingStr,
+  });
 
   const copyJwt = async () => {
     try {
@@ -191,6 +247,24 @@ export function SettingsModal({
       setTimeout(() => setJwtCopied(false), 1500);
     } catch {
       /* clipboard unavailable (e.g. insecure context) — no-op */
+    }
+  };
+
+  // 表示名をコミット（フォーカス外し / Enter）。空欄・未変更は元へ戻すだけ。失敗時も元へ戻す。
+  const commitName = async () => {
+    if (nameSaving) return;
+    const next = nameDraft.trim();
+    if (!next || next === user.name) {
+      setNameDraft(user.name);
+      return;
+    }
+    setNameSaving(true);
+    try {
+      await onSaveName(next);
+    } catch {
+      setNameDraft(user.name);
+    } finally {
+      setNameSaving(false);
     }
   };
 
@@ -220,6 +294,7 @@ export function SettingsModal({
   const selectInput = "h-[30px] w-[180px] rounded-[7px] border border-divider-strong bg-surface px-2 text-[12.5px] text-fg outline-none max-md:w-full";
 
   return (
+    <>
     <div className="fixed inset-0 z-[100] grid animate-overlay-in place-items-center bg-[rgba(20,18,15,0.45)] p-6 backdrop-blur-[4px] motion-reduce:animate-none max-md:p-0" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
@@ -227,7 +302,7 @@ export function SettingsModal({
       >
         {/* Side nav */}
         <div className="flex flex-col gap-0.5 border-r-[0.5px] border-divider bg-bg-2 p-[16px_10px] max-md:flex-row max-md:overflow-x-auto max-md:border-b-[0.5px] max-md:border-r-0 max-md:p-[8px_10px] max-md:[scrollbar-width:none]">
-          <div className="px-2.5 pb-3 pt-1 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-2 max-md:hidden">設定</div>
+          <div className="px-2.5 pb-3 pt-1 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-2 max-md:hidden">{t.modals.settingsTitle}</div>
           {NAV.map((s) => (
             <button
               key={s.id}
@@ -249,7 +324,7 @@ export function SettingsModal({
         <div className="grid min-h-0 grid-rows-[auto_1fr]">
           <div className="flex items-center justify-between border-b-[0.5px] border-divider px-6 pb-3 pt-[18px] max-md:px-4 max-md:pt-3.5">
             <h2 className="m-0 text-[17px] font-bold tracking-[-0.01em] max-md:text-[16px]">{TITLES[section]}</h2>
-            <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label="閉じる">
+            <button className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-muted hover:bg-divider hover:text-fg" onClick={onClose} aria-label={t.common.close}>
               <svg viewBox="0 0 16 16" width="13" height="13">
                 <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
               </svg>
@@ -259,7 +334,7 @@ export function SettingsModal({
           <div className="overflow-y-auto px-6 pb-6 pt-[18px] max-md:px-4">
             {section === "model" && (
               <div className="flex flex-col gap-1.5">
-                {MODELS.map((m) => (
+                {models.map((m) => (
                   <button
                     key={m.id}
                     onClick={() => onModelChange(m)}
@@ -281,7 +356,7 @@ export function SettingsModal({
                   </button>
                 ))}
                 <div className="mt-3.5 rounded-lg border-[0.5px] border-divider bg-surface-2 px-3 py-2.5 text-[11.5px] leading-[1.55] text-muted">
-                  プロンプト・回答はログに保存されますが、モデル提供元に利用・または学習されることがありません。
+                  {t.modals.modelPrivacyNote}
                 </div>
               </div>
             )}
@@ -309,7 +384,7 @@ export function SettingsModal({
 
             {section === "agent" && (
               <div className="flex flex-col gap-3.5">
-                <Field label="最大ステップ数" hint="エージェントが取れる最大のツール呼出し回数">
+                <Field label={t.modals.agentMaxStepsLabel} hint={t.modals.agentMaxStepsHint}>
                   <input
                     type="number"
                     min={1}
@@ -318,7 +393,7 @@ export function SettingsModal({
                     className={fieldInput}
                   />
                 </Field>
-                <Field label="並列ツール実行" hint="同時に走らせるツール数">
+                <Field label={t.modals.agentParallelToolsLabel} hint={t.modals.agentParallelToolsHint}>
                   <input
                     type="number"
                     min={1}
@@ -327,18 +402,18 @@ export function SettingsModal({
                     className={fieldInput}
                   />
                 </Field>
-                <Field label="引用の必須化" hint="回答中の各事実に引用を付けることを強制">
+                <Field label={t.modals.agentRequireCitationsLabel} hint={t.modals.agentRequireCitationsHint}>
                   <Switch
                     on={agentCfg.requireCitations}
                     onToggle={() => setAgentCfg("requireCitations", !agentCfg.requireCitations)}
-                    label="引用の必須化"
+                    label={t.modals.agentRequireCitationsLabel}
                   />
                 </Field>
-                <Field label='未知の場合に "わからない" と返す'>
+                <Field label={t.modals.agentAdmitUnknownLabel}>
                   <Switch
                     on={agentCfg.admitUnknown}
                     onToggle={() => setAgentCfg("admitUnknown", !agentCfg.admitUnknown)}
-                    label='未知の場合に "わからない" と返す'
+                    label={t.modals.agentAdmitUnknownLabel}
                   />
                 </Field>
               </div>
@@ -346,12 +421,12 @@ export function SettingsModal({
 
             {section === "appearance" && (
               <div className="flex flex-col gap-3.5">
-                <Field label="ダークモード" hint="目に優しい暗い配色に切り替えます">
-                  <Switch on={tweaks.dark} onToggle={() => setTweak("dark", !tweaks.dark)} label="ダークモード" />
+                <Field label={t.modals.appearanceDarkModeLabel} hint={t.modals.appearanceDarkModeHint}>
+                  <Switch on={tweaks.dark} onToggle={() => setTweak("dark", !tweaks.dark)} label={t.modals.appearanceDarkModeLabel} />
                 </Field>
 
                 <div className="rounded-[10px] border-[0.5px] border-divider bg-surface-2 px-3 py-2.5">
-                  <label className="text-[12.5px] font-semibold text-fg-2">アクセントカラー</label>
+                  <label className="text-[12.5px] font-semibold text-fg-2">{t.modals.appearanceAccentColorLabel}</label>
                   <div className="mt-2 flex gap-1.5">
                     {ACCENT_PRESETS.map((c) => {
                       const on = tweaks.accent.toLowerCase() === c.toLowerCase();
@@ -380,38 +455,38 @@ export function SettingsModal({
                   </div>
                 </div>
 
-                <Field label="ツール実行の表示" hint="エージェントのツール呼び出しの見せ方">
+                <Field label={t.modals.appearanceToolViewLabel} hint={t.modals.appearanceToolViewHint}>
                   <select
                     value={tweaks.toolView}
                     onChange={(e) => setTweak("toolView", e.target.value as Tweaks["toolView"])}
                     className={selectInput}
                   >
-                    <option value="card">カード（折りたたみ）</option>
-                    <option value="timeline">タイムライン</option>
-                    <option value="log">ターミナル風ログ</option>
+                    <option value="card">{t.modals.appearanceToolViewCard}</option>
+                    <option value="timeline">{t.modals.appearanceToolViewTimeline}</option>
+                    <option value="log">{t.modals.appearanceToolViewLog}</option>
                   </select>
                 </Field>
 
-                <Field label="情報密度">
+                <Field label={t.modals.appearanceDensityLabel}>
                   <Segmented
                     value={tweaks.density}
                     options={[
-                      { value: "compact", label: "コンパクト" },
-                      { value: "comfy", label: "快適" },
+                      { value: "compact", label: t.modals.appearanceDensityCompact },
+                      { value: "comfy", label: t.modals.appearanceDensityComfy },
                     ]}
                     onChange={(v) => setTweak("density", v as Tweaks["density"])}
                   />
                 </Field>
 
-                <Field label="引用スタイル">
+                <Field label={t.modals.appearanceCitationStyleLabel}>
                   <select
                     value={tweaks.citationStyle}
                     onChange={(e) => setTweak("citationStyle", e.target.value as Tweaks["citationStyle"])}
                     className={selectInput}
                   >
-                    <option value="numbered">上付き番号</option>
-                    <option value="chip">[N] チップ</option>
-                    <option value="pill">ピル形</option>
+                    <option value="numbered">{t.modals.appearanceCitationStyleNumbered}</option>
+                    <option value="chip">{t.modals.appearanceCitationStyleChip}</option>
+                    <option value="pill">{t.modals.appearanceCitationStylePill}</option>
                   </select>
                 </Field>
               </div>
@@ -421,31 +496,31 @@ export function SettingsModal({
               <div className="flex flex-col gap-3.5">
                 <div className="rounded-[10px] border-[0.5px] border-divider bg-surface-2 p-3">
                   <div className="mb-2 flex items-center justify-between font-mono text-[11.5px] text-muted">
-                    <span>現在のJWT (デコード)</span>
+                    <span>{t.modals.securityJwtTitle}</span>
                     <button
                       type="button"
                       onClick={copyJwt}
                       disabled={!claims}
                       className="border-0 bg-transparent font-mono text-[11px] font-semibold text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {jwtCopied ? "コピーしました" : "コピー"}
+                      {jwtCopied ? t.modals.securityCopiedBtn : t.modals.securityCopyBtn}
                     </button>
                   </div>
                   <pre className="m-0 max-h-[180px] overflow-auto rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 font-mono text-[11px] leading-[1.6] text-fg-2">{claimsJson}</pre>
                 </div>
-                <Field label="トークン有効期限" hint="exp 到達時に自動で再ログインが必要になります">
+                <Field label={t.modals.securityTokenExpiryLabel} hint={t.modals.securityTokenExpiryHint}>
                   <span className="font-mono text-[12px] text-muted">
-                    {formatLifetime(claims)} (残り {formatRemaining(claims?.exp)})
+                    {tokenExpiryDisplay}
                   </span>
                 </Field>
                 <Field
-                  label="Refresh Token を保存"
-                  hint="ON: ブラウザを閉じても 30 日間サインインを保持 / OFF: 終了で破棄"
+                  label={t.modals.securityRememberTokenLabel}
+                  hint={t.modals.securityRememberTokenHint}
                 >
                   <Switch
                     on={Boolean(claims?.rem) && !rememberPending}
                     onToggle={handleRememberToggle}
-                    label="Refresh Token を保存"
+                    label={t.modals.securityRememberTokenLabel}
                   />
                 </Field>
                 <button
@@ -454,7 +529,7 @@ export function SettingsModal({
                   disabled={revoking || !claims}
                   className="h-8 self-start rounded-lg border-[0.5px] border-[#B83A1F] bg-transparent px-3.5 text-[12px] font-medium text-[#B83A1F] hover:bg-[#B83A1F] hover:text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[#B83A1F]"
                 >
-                  {revoking ? "サインアウト中…" : "全デバイスでサインアウト"}
+                  {revoking ? t.modals.securityRevokingBtn : t.modals.securityRevokeAllBtn}
                 </button>
               </div>
             )}
@@ -468,13 +543,32 @@ export function SettingsModal({
                     <div className="font-mono text-[11.5px] text-muted">{user.email}</div>
                   </div>
                 </div>
-                <Field label="表示名">
-                  <input type="text" defaultValue={user.name} className={fieldInput} />
+                <Field label={t.modals.accountDisplayNameLabel}>
+                  <input
+                    type="text"
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    onBlur={commitName}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    disabled={nameSaving}
+                    maxLength={80}
+                    className={cn(fieldInput, "disabled:opacity-60")}
+                  />
                 </Field>
-                <Field label="言語">
-                  <select defaultValue="ja" className={fieldInput}>
-                    <option value="ja">日本語</option>
-                    <option value="en">English</option>
+                <Field label={t.modals.accountLanguageLabel} hint={t.modals.languageHint}>
+                  <select
+                    value={locale}
+                    onChange={(e) => onLocaleSelect(e.target.value as Locale)}
+                    className={fieldInput}
+                  >
+                    {LOCALES.map((l) => (
+                      <option key={l} value={l}>{LOCALE_LABELS[l]}</option>
+                    ))}
                   </select>
                 </Field>
               </div>
@@ -483,6 +577,9 @@ export function SettingsModal({
         </div>
       </div>
     </div>
+    {/* 言語切替確認ダイアログ */}
+    {dialog}
+    </>
   );
 }
 
