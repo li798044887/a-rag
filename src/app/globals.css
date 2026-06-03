@@ -8,15 +8,13 @@
    This lets utilities like `bg-surface`, `text-muted`, `border-divider`,
    `bg-accent` automatically follow the active theme + the user-picked accent. */
 @theme inline {
-  /* 統一 CJK フォールバック。簡体専用字形(业/样/认/证 等)も共用漢字も同一フォントから
-     描画させ、lang=ja で日本語フォント→簡体フォントへ字ごとにフォールバックして
-     太さがちぐはぐになる問題を防ぐ。簡体を網羅する包括的フォントを先頭に置く。 */
-  /* Maple Mono CN を主 CJK フォントにする。簡体専用字形も共用漢字も仮名も単一フォントから
-     描画され、lang 依存のフォールバックによる字重ムラが起きない。--font-cjk は Maple が
-     万一欠く字向けの実ウェイト兜底（PingFang SC 等）。 */
-  --font-cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei";
-  --font-sans: var(--font-jakarta), var(--font-maple), var(--font-cjk), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-maple), var(--font-cjk), ui-monospace, monospace;
+  /* CJK は lang で字形を出し分ける。--cjk-runtime を :root / :root:lang(zh) で切替え、
+     ja は IBM Plex Sans JP（日本語字形）、zh は IBM Plex Sans SC（簡体字形）を主書体にする。
+     いずれも実ウェイト 400/500/600/700 を備えるため、font-synthesis:none のまま合成太字
+     による字重ムラが起きない。ラテン・数字・等幅まで IBM Plex 系で見た目を統一する。 */
+  --font-cjk: var(--cjk-runtime);
+  --font-sans: var(--font-plex-sans), var(--font-cjk), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-plex-mono), var(--font-cjk), ui-monospace, monospace;
 
   /* The shell switches column layout at these widths (tablet → overlay drawer,
      wide → full 3-column). `tablet:` ≥769px, `wide:` ≥1181px. */
@@ -93,6 +91,17 @@
   --accent-glow: color-mix(in srgb, var(--accent) 25%, transparent);
   /* Secondary decorative glow for the login backdrop (set per-accent at runtime). */
   --accent-alt-glow: color-mix(in srgb, #d97757 30%, transparent);
+
+  /* CJK 既定スタック（日本語字形）。Plex JP を主とし、JP に無い簡体専用字（么/电/资 等）は
+     OS フォントへ脱落させず兄弟書体の Plex SC で受ける。これで日本語 UI に中国語本文が
+     混じっても太さ・字面が同一ファミリーで揃い、字重ムラを防ぐ。最後に OS 標準書体で兜底。 */
+  --cjk-runtime: var(--font-plex-jp), var(--font-plex-sc), "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+}
+
+/* lang=zh（html lang="zh-CN"）は簡体字形スタックへ切替える。Plex SC を主とし、SC に無い字は
+   兄弟書体の Plex JP で受けてから OS 標準書体（PingFang SC 等）で兜底する。 */
+:root:lang(zh) {
+  --cjk-runtime: var(--font-plex-sc), var(--font-plex-jp), "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
 }
 
 @layer base {
@@ -110,7 +119,6 @@
   body {
     margin: 0;
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "cv11";
     /* CJK はフォールバックフォントに 500/600 の実ウェイトが無いことが多く、
        合成太字(faux bold)で字ごとに太さがちぐはぐになる。合成を切り実ウェイトのみ使う。 */
     font-synthesis: none;

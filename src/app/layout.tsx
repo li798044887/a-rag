@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Sans_JP, IBM_Plex_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import { THEME_STORAGE_KEY } from "@/lib/constants";
 import { getLocale } from "@/i18n/server";
@@ -9,23 +9,42 @@ import { LocaleProvider } from "@/i18n/context";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
+// IBM Plex Sans（ラテン）— UI とラテン文字・数字の基幹書体。業務向けの中立的サンセリフ。
+const plexSans = IBM_Plex_Sans({
+  variable: "--font-plex-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
-// Maple Mono CN（含 CJK の等幅）。CJK を単一フォントで描画し、lang 依存の
-// フォールバックによる字重ムラを根治する。woff2 自前ホスト。
-const maple = localFont({
-  variable: "--font-maple",
+// IBM Plex Sans JP（日本語）— 仮名・漢字を日本語字形で描画する既定 CJK 書体。
+// 日本語グリフは unicode-range で必要分のみ遅延配信される（latin のみプリロード）。
+const plexJp = IBM_Plex_Sans_JP({
+  variable: "--font-plex-jp",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
+
+// IBM Plex Mono（等幅）— コードブロック・kbd 用。Plex ファミリーで見た目を統一。
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
+
+// IBM Plex Sans SC（簡体中国語）— 簡体字形を woff2 で自前ホスト。lang=zh の CJK に使う。
+// next/font/google のカタログに SC 版が無いため自前配信する。実ウェイト 400/500/600/700 を
+// 揃え、font-synthesis:none のまま合成太字による字重ムラを避ける。
+const plexSc = localFont({
+  variable: "--font-plex-sc",
   display: "swap",
   src: [
-    { path: "./fonts/MapleMonoCN-Regular.woff2", weight: "400", style: "normal" },
-    { path: "./fonts/MapleMonoCN-Medium.woff2", weight: "500", style: "normal" },
-    { path: "./fonts/MapleMonoCN-SemiBold.woff2", weight: "600", style: "normal" },
-    { path: "./fonts/MapleMonoCN-Bold.woff2", weight: "700", style: "normal" },
+    { path: "./fonts/IBMPlexSansSC-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/IBMPlexSansSC-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/IBMPlexSansSC-SemiBold.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/IBMPlexSansSC-Bold.woff2", weight: "700", style: "normal" },
   ],
 });
 
@@ -64,7 +83,11 @@ export default async function RootLayout({
   const locale = await getLocale();
   const dict = getDictionary(locale);
   return (
-    <html lang={htmlLang(locale)} className={`${jakarta.variable} ${maple.variable}`} suppressHydrationWarning>
+    <html
+      lang={htmlLang(locale)}
+      className={`${plexSans.variable} ${plexJp.variable} ${plexSc.variable} ${plexMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>

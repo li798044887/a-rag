@@ -1,15 +1,17 @@
-<!-- アプリでは next/font が --font-jakarta / --font-jetbrains を注入する。
-     Storybook では next/font が使えないため Google Fonts から読み込み、
-     同名の CSS 変数を定義して globals.css の var(--font-sans) を満たす。 -->
+<!-- アプリでは next/font が --font-plex-sans / --font-plex-jp / --font-plex-sc /
+     --font-plex-mono を注入する。Storybook では next/font が使えないため Google Fonts から
+     読み込み、同名の CSS 変数を定義して globals.css の var(--font-sans) 等を満たす。 -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link
-  href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Sans+SC:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
   rel="stylesheet"
 />
 <style>
   :root {
-    --font-jakarta: "Plus Jakarta Sans";
-    --font-jetbrains: "JetBrains Mono";
+    --font-plex-sans: "IBM Plex Sans";
+    --font-plex-jp: "IBM Plex Sans JP";
+    --font-plex-sc: "IBM Plex Sans SC";
+    --font-plex-mono: "IBM Plex Mono";
   }
 </style>
