@@ -89,6 +89,13 @@ export class CitationRegistry {
     return expanded;
   }
 
+  /** verify 用に、登録済み出典を引用番号 n 付きで列挙する（登録順）。 */
+  listSources(): { n: number; title: string; heading: string; snippet: string }[] {
+    return this.order.map((c, i) => ({
+      n: i + 1, title: c.documentTitle, heading: c.headingPath, snippet: c.snippet,
+    }));
+  }
+
   get size(): number {
     return this.order.length;
   }

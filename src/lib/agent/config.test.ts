@@ -75,3 +75,26 @@ test("buildSystemPrompt は locale=zh で中国語プロンプトを返す", () 
   expect(p).toContain("出处");
   expect(p).not.toContain("ください");
 });
+
+test("clampAgentCfg は新フィールドの既定値を埋める", () => {
+  const cfg = clampAgentCfg({});
+  expect(cfg.maxRetrieveRetries).toBe(AGENT_CFG_DEFAULTS.maxRetrieveRetries);
+  expect(cfg.gradeThreshold).toBe(AGENT_CFG_DEFAULTS.gradeThreshold);
+  expect(cfg.maxRevisions).toBe(AGENT_CFG_DEFAULTS.maxRevisions);
+  expect(cfg.verify).toBe(AGENT_CFG_DEFAULTS.verify);
+});
+
+test("clampAgentCfg は範囲外の新フィールドを丸める", () => {
+  const cfg = clampAgentCfg({ maxRetrieveRetries: 9, gradeThreshold: 5, maxRevisions: 9, verify: false });
+  expect(cfg.maxRetrieveRetries).toBe(2);
+  expect(cfg.gradeThreshold).toBeLessThanOrEqual(1);
+  expect(cfg.gradeThreshold).toBeGreaterThanOrEqual(0);
+  expect(cfg.maxRevisions).toBe(1);
+  expect(cfg.verify).toBe(false);
+});
+
+test("clampAgentCfg は負値の retries/revisions を 0 に丸める", () => {
+  const cfg = clampAgentCfg({ maxRetrieveRetries: -3, maxRevisions: -1 });
+  expect(cfg.maxRetrieveRetries).toBe(0);
+  expect(cfg.maxRevisions).toBe(0);
+});

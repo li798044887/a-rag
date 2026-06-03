@@ -104,6 +104,17 @@ describe("引用フィルタ（実際に引用された出典のみ採用）", (
   });
 });
 
+test("listSources は登録順に n 付きの出典スナップショットを返す", () => {
+  const reg = new CitationRegistry();
+  reg.register({ documentId: "d1", documentTitle: "A.pdf", chunkId: "c1", headingPath: "h1", snippet: "本文1", blockType: "text", page: 1, score: 0.9 });
+  reg.register({ documentId: "d1", documentTitle: "A.pdf", chunkId: "c2", headingPath: "h2", snippet: "本文2", blockType: "text", page: 2 });
+  const list = reg.listSources();
+  expect(list).toEqual([
+    { n: 1, title: "A.pdf", heading: "h1", snippet: "本文1" },
+    { n: 2, title: "A.pdf", heading: "h2", snippet: "本文2" },
+  ]);
+});
+
 describe("withDocumentImages（引用文書の図版をパネルに含める）", () => {
   const seed = () => {
     const reg = new CitationRegistry();

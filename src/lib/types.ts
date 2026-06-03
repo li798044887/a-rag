@@ -40,6 +40,9 @@ export type ToolName =
   | "bm25_search"
   | "rerank"
   | "expand"
+  | "grade"
+  | "verify"
+  | "revise"
   | "fetch_document"
   | "summarize"
   | "answer"
@@ -235,6 +238,14 @@ export interface AgentCfg {
   topK: number;
   /** ベクトル/BM25 検索それぞれの候補プール件数（リランク対象） */
   candidateK: number;
+  /** grade で関連資料が不足のときに再検索する最大回数（0=無効） */
+  maxRetrieveRetries: number;
+  /** grade のリランクスコア閾値（0–1）。これ以上を関連、近傍のみ LLM 判定 */
+  gradeThreshold: number;
+  /** 根拠検証で未裏付けがあったとき訂正再生成する最大回数（0=無効, 上限1） */
+  maxRevisions: number;
+  /** 生成後の根拠検証フェーズを有効にするか */
+  verify: boolean;
 }
 
 // ── Tweaks (persisted display preferences) ──────────────────────────────────

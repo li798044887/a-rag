@@ -1,4 +1,14 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+
+const generateTextMock = vi.fn();
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  return {
+    ...actual,
+    generateText: (...a: unknown[]) => generateTextMock(...a),
+    Output: { object: (cfg: unknown) => cfg, text: () => ({}) },
+  };
+});
 
 vi.mock("@/lib/agent/retrieve-client", () => ({
   retrieveChunks: vi.fn(),
@@ -25,6 +35,11 @@ import { retrieveChunksStream, fetchDocument } from "@/lib/agent/retrieve-client
 import { StepBus } from "@/lib/agent/step-bus";
 import type { AgentEvent } from "@/lib/types";
 import { getAgentPrompts } from "@/lib/agent/prompts";
+
+afterEach(() => {
+  generateTextMock.mockReset();
+  vi.mocked(retrieveChunksStream).mockClear();
+});
 
 test("retrieve tool registers citations and returns numbered text", async () => {
   const reg = new CitationRegistry();
@@ -180,4 +195,44 @@ test("retrieve tool passes undefined documentIds without attachments", async () 
 
   expect(vi.mocked(retrieveChunksStream)).toHaveBeenLastCalledWith(
     expect.objectContaining({ documentIds: undefined }));
+});
+
+test("grade が不足判定なら rewrite して再検索する", async () => {
+  vi.mocked(retrieveChunksStream)
+    .mockImplementationOnce(async () => [
+      { chunkId: "c1", documentId: "d1", documentTitle: "A", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "弱", expandedText: "弱", score: 0.05 },
+    ])
+    .mockImplementationOnce(async () => [
+      { chunkId: "c2", documentId: "d2", documentTitle: "B", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "強", expandedText: "強", score: 0.9 },
+    ]);
+  generateTextMock.mockResolvedValueOnce({ text: "改善クエリ" });
+
+  const reg = new CitationRegistry();
+  const bus = new StepBus();
+  const events: AgentEvent[] = [];
+  const drain = (async () => { for await (const e of bus) events.push(e); })();
+  const tools = buildTools({
+    registry: reg, ownerUserId: "u1", meta: new Map(), bus, prompts: getAgentPrompts("ja"),
+    gradeModel: "m" as never, gradeThreshold: 0.5, maxRetrieveRetries: 1,
+  });
+  const out = await tools.retrieve.execute!({ query: "q" }, { toolCallId: "call-1", messages: [] } as never);
+  bus.close();
+  await drain;
+
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenCalledTimes(2);
+  expect(String(out)).toContain("強");
+  expect(events.some((e) => e.type === "step" && e.step.name === "grade")).toBe(true);
+  expect(events.some((e) => e.type === "step" && e.step.name === "rewrite_query" && e.step.parentId === "call-1")).toBe(true);
+});
+
+test("maxRetrieveRetries=0 なら grade のみで再検索しない", async () => {
+  vi.mocked(retrieveChunksStream).mockImplementationOnce(async () => [
+    { chunkId: "c1", documentId: "d1", documentTitle: "A", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "弱", expandedText: "弱", score: 0.05 },
+  ]);
+  const tools = buildTools({
+    registry: new CitationRegistry(), ownerUserId: "u1", meta: new Map(), bus: new StepBus(),
+    prompts: getAgentPrompts("ja"), gradeModel: "m" as never, gradeThreshold: 0.5, maxRetrieveRetries: 0,
+  });
+  await tools.retrieve.execute!({ query: "q" }, { toolCallId: "c", messages: [] } as never);
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenCalledTimes(1);
 });

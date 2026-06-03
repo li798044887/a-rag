@@ -1,4 +1,4 @@
-import { tool, type ToolSet } from "ai";
+import { generateText, tool, type LanguageModel, type ToolSet } from "ai";
 import { z } from "zod";
 import { retrieveChunksStream, fetchDocument, type RetrieveStageEvent } from "@/lib/agent/retrieve-client";
 import { resolveImageUrls } from "@/lib/agent/image-urls";
@@ -8,6 +8,7 @@ import type { AgentEvent, ToolName } from "@/lib/types";
 import type { AgentPrompts } from "@/lib/agent/prompts";
 import { Semaphore } from "@/lib/agent/semaphore";
 import { AGENT_CFG_DEFAULTS } from "@/lib/agent/config";
+import { gradeChunks } from "@/lib/agent/grade";
 
 /** toolCallId -> UI 用メタ。fullStream の tool-call/tool-result に対応付ける。 */
 export interface ToolCallMeta {
@@ -30,6 +31,12 @@ export interface BuildToolsInput {
   topK?: number;
   /** ベクトル/BM25 検索の候補プール件数。未指定なら既定値。 */
   candidateK?: number;
+  /** grade / 再検索クエリ生成に使う安価モデル。未指定なら CRAG を行わない（従来挙動）。 */
+  gradeModel?: LanguageModel;
+  /** grade のスコア閾値。未指定なら既定値。 */
+  gradeThreshold?: number;
+  /** 関連不足時の再検索の最大回数。未指定なら 0（再検索しない）。 */
+  maxRetrieveRetries?: number;
 }
 
 /** done 時の段階別 summary を prompts から組み立てる。 */
@@ -87,10 +94,12 @@ function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, p
   return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummaryOf(prompts, ev.stage, ev.count) } };
 }
 
-export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency, topK, candidateK }: BuildToolsInput): ToolSet {
+export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency, topK, candidateK, gradeModel, gradeThreshold, maxRetrieveRetries }: BuildToolsInput): ToolSet {
   const sema = new Semaphore(concurrency ?? AGENT_CFG_DEFAULTS.parallelTools);
   const resolvedTopK = topK ?? AGENT_CFG_DEFAULTS.topK;
   const resolvedCandidateK = candidateK ?? AGENT_CFG_DEFAULTS.candidateK;
+  const resolvedGradeThreshold = gradeThreshold ?? AGENT_CFG_DEFAULTS.gradeThreshold;
+  const resolvedMaxRetries = maxRetrieveRetries ?? 0;
   return {
     retrieve: tool({
       description: prompts.toolDescriptions.retrieve,
@@ -98,11 +107,58 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
         query: z.string().describe(prompts.retrieveQueryDescribe),
       }),
       execute: ({ query }, { toolCallId }) => sema.run(async () => {
-        const chunks = await retrieveChunksStream({
-          query, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
+        let q = query;
+        let chunks = await retrieveChunksStream({
+          query: q, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
-          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, query, prompts)),
+          onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, q, prompts)),
         });
+
+        // gradeModel が指定されたときのみ CRAG（grade→不足なら rewrite して再検索）。
+        // 設計上、grade は「再検索の要否」と関連度サマリの算出のみに使い、取得チャンクの
+        // 間引きはしない（keptIds でのフィルタはしない）。根拠の担保は生成後の verify と、
+        // 回答本文に実際に出た [n] だけを出典パネルへ採用する引用抽出が担う多層防御とし、
+        // ここでの早すぎる間引きで本来有用な文脈を落とす取りこぼしを避ける（recall 優先）。
+        if (gradeModel) {
+          for (let retry = 0; retry <= resolvedMaxRetries; retry++) {
+            const grade = await gradeChunks({
+              query: q, threshold: resolvedGradeThreshold, model: gradeModel, prompts,
+              chunks: chunks.map((c) => ({
+                chunkId: c.chunkId, score: c.score, documentTitle: c.documentTitle,
+                headingPath: c.headingPath, text: c.expandedText || c.text,
+              })),
+            });
+            bus.push({ type: "step", step: {
+              id: `${toolCallId}:grade`, name: "grade", parentId: toolCallId, label: prompts.grade.label,
+              status: "done", durationMs: 0, input: {}, output: { kept: grade.keptIds.length, total: grade.total },
+              summary: prompts.grade.done(grade.keptIds.length, grade.total),
+            } });
+            if (!grade.needRetry || retry >= resolvedMaxRetries) break;
+
+            // 再検索クエリを生成（失敗したら再検索を打ち切る）。
+            let rewritten = q;
+            try {
+              const { text } = await generateText({ model: gradeModel, system: prompts.queryRewrite.system, prompt: q });
+              // 冗長なモデル出力が検索クエリとして渡るのを防ぐため長さを上限で切る。
+              rewritten = text.trim().slice(0, 200) || q;
+            } catch {
+              break;
+            }
+            if (rewritten === q) break;
+            bus.push({ type: "step", step: {
+              id: `${toolCallId}:rewrite-retry-${retry}`, name: "rewrite_query", parentId: toolCallId,
+              label: prompts.rewriteLabel, status: "done", durationMs: 0,
+              input: { original: q, rewritten }, output: null, summary: prompts.rewriteSummary(rewritten),
+            } });
+            q = rewritten;
+            chunks = await retrieveChunksStream({
+              query: q, rewritten: q, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
+              documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
+              onStage: (ev) => bus.push(stageToEvent(ev, toolCallId, q, prompts)),
+            });
+          }
+        }
+
         const lines = chunks.map((c) => {
           const n = registry.register({
             documentId: c.documentId, documentTitle: c.documentTitle, chunkId: c.chunkId,
@@ -120,8 +176,8 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
           const body = resolveImageUrls(c.expandedText || c.text, c.documentId);
           return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${body}`;
         });
-        meta.set(toolCallId, { name: "retrieve", input: { query },
-          summary: prompts.retrieveMetaSummary(query, chunks.length) });
+        meta.set(toolCallId, { name: "retrieve", input: { query: q },
+          summary: prompts.retrieveMetaSummary(q, chunks.length) });
         return lines.length ? lines.join("\n\n") : prompts.fallback.retrieveNoHits;
       }),
     }),
