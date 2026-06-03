@@ -32,6 +32,22 @@ test("clampAgentCfg keeps explicit boolean values", () => {
   expect(clampAgentCfg({ admitUnknown: false }).admitUnknown).toBe(false);
 });
 
+test("clampAgentCfg clamps topK / candidateK into range", () => {
+  expect(clampAgentCfg({ topK: 0 }).topK).toBe(1);
+  expect(clampAgentCfg({ topK: 100 }).topK).toBe(20);
+  // candidateK: 0 → clamp で 1、ただし topK デフォルト(6) >= 1 なので candidateK は 6 になる
+  expect(clampAgentCfg({ candidateK: 0 }).candidateK).toBe(AGENT_CFG_DEFAULTS.topK);
+  expect(clampAgentCfg({ candidateK: 999 }).candidateK).toBe(50);
+  expect(clampAgentCfg({ topK: "abc" }).topK).toBe(AGENT_CFG_DEFAULTS.topK);
+});
+
+test("clampAgentCfg は candidateK を topK 以上へ引き上げる", () => {
+  // candidateK(3) < topK(8) のとき candidateK は topK まで引き上げられる
+  expect(clampAgentCfg({ topK: 8, candidateK: 3 }).candidateK).toBe(8);
+  // candidateK が十分大きければそのまま
+  expect(clampAgentCfg({ topK: 6, candidateK: 20 }).candidateK).toBe(20);
+});
+
 test("buildSystemPrompt enforces citations when requireCitations is on", () => {
   const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, requireCitations: true }, "ja");
   expect(p).toContain("必ず");
