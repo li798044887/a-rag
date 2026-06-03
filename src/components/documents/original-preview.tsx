@@ -109,7 +109,8 @@ function RawObjectPreview({ docId, onShowParsed, children }: { docId: string; on
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/documents/${encodeURIComponent(docId)}/raw`, { method: "HEAD" })
-      .then((r) => { if (!cancelled && !r.ok) setMissingFor(docId); })
+      // 成功時は null へ戻して自己回復させる（一過性404や同一IDの再アップロードに追従）。
+      .then((r) => { if (!cancelled) setMissingFor(r.ok ? null : docId); })
       .catch(() => { if (!cancelled) setMissingFor(docId); });
     return () => { cancelled = true; };
   }, [docId]);
