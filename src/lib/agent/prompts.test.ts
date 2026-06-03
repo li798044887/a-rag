@@ -1,19 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { getAgentPrompts } from "./prompts";
+import { buildSystemPrompt, AGENT_CFG_DEFAULTS } from "./config";
 
 describe("getAgentPrompts", () => {
-  it("zh 返回中文系统提示词且体现 RAG 专家要点", () => {
-    const p = getAgentPrompts("zh");
-    expect(p.system).toContain("仅");
-    expect(p.system).toContain("出处");
-    expect(p.system).toContain("中文");
-    expect(p.system).toContain("不要");
-    expect(p.system).not.toContain("ください");
+  it("zh 的系统提示词（默认配置）体现 RAG 专家要点", () => {
+    const sys = buildSystemPrompt(AGENT_CFG_DEFAULTS, "zh");
+    expect(sys).toContain("仅");
+    expect(sys).toContain("出处");
+    expect(sys).toContain("中文");
+    expect(sys).toContain("不要");
+    expect(sys).not.toContain("ください");
   });
-  it("ja 返回日语系统提示词", () => {
-    const p = getAgentPrompts("ja");
-    expect(p.system).toContain("ください");
-    expect(p.system).toContain("出典番号");
+  it("ja 的系统提示词（默认配置）为日语", () => {
+    const sys = buildSystemPrompt(AGENT_CFG_DEFAULTS, "ja");
+    expect(sys).toContain("ください");
+    expect(sys).toContain("出典番号");
   });
   it("两种语言的工具标签/兜底文案齐全", () => {
     for (const loc of ["zh", "ja"] as const) {

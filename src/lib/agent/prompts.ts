@@ -1,8 +1,12 @@
 import type { Locale } from "@/i18n/config";
 
 export interface AgentPrompts {
-  /** streamText に渡すシステムプロンプト。 */
-  system: string;
+  /** システムプロンプトの構成断片（buildSystemPrompt が cfg に応じて結合する）。 */
+  systemIntro: string;
+  citationRequired: string;
+  citationOptional: string;
+  unknownAdmit: string;
+  unknownFill: string;
   /** 添付ありターンのユーザーメッセージ整形。 */
   buildUserContent: (query: string, attachments: string[], attachmentDocIds: string[]) => string;
   /** retrieve 検索クエリ引数の zod .describe() 文。 */
@@ -50,11 +54,15 @@ export interface AgentPrompts {
 }
 
 const JA: AgentPrompts = {
-  system:
+  systemIntro:
     "あなたは社内ナレッジ検索アシスタントです。必要に応じて retrieve / fetch_document ツールを使い、" +
     "会話の文脈を踏まえて自己完結した検索クエリを組み立ててください。" +
-    "回答は提供された一次資料のみに基づき日本語で簡潔に行い、重要な事実には必ずツール結果に付いた [1] [2] の出典番号を付け、" +
-    "Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。資料に無いことは推測しないでください。",
+    "回答は提供された一次資料に基づき日本語で簡潔に行い、" +
+    "Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。",
+  citationRequired: "重要な事実には必ずツール結果に付いた [1] [2] の出典番号を付けてください。",
+  citationOptional: "可能であればツール結果に付いた [1] [2] の出典番号を付けてください（必須ではありません）。",
+  unknownAdmit: "資料に無いことは推測せず、判断できない場合は「わからない」と明確に答えてください。",
+  unknownFill: "資料に直接の記載が無い場合は、一般的な知識で補って回答してもかまいません。",
   buildUserContent: (query, attachments, attachmentDocIds) => {
     if (attachmentDocIds.length && attachments.length) {
       return (
@@ -116,13 +124,14 @@ const JA: AgentPrompts = {
 };
 
 const ZH: AgentPrompts = {
-  system:
+  systemIntro:
     "你是企业内部知识检索助手。请在需要时调用 retrieve / fetch_document 工具，" +
     "并结合对话上下文构造自包含的中文检索查询。" +
-    "回答必须仅依据工具返回的一手资料，用简洁的中文作答；" +
-    "对每条关键事实务必标注工具结果中对应的 [1] [2] 出处编号；" +
-    "使用 Markdown 结构化（**加粗**小标题、- 列表）。" +
-    "资料中没有依据的内容不要臆测或编造。",
+    "回答用简洁的中文，并以 Markdown 结构化（**加粗**小标题、- 列表）。",
+  citationRequired: "对每条关键事实务必标注工具结果中对应的 [1] [2] 出处编号。",
+  citationOptional: "如有可能，请为关键事实标注工具结果中的 [1] [2] 出处编号（非强制）。",
+  unknownAdmit: "回答须仅依据检索到的一手资料；资料中没有依据的内容不要臆测或编造，无法判断时请明确回答“无法确定”。",
+  unknownFill: "若检索到的资料中没有直接记载，可结合通用知识进行补充回答。",
   buildUserContent: (query, attachments, attachmentDocIds) => {
     if (attachmentDocIds.length && attachments.length) {
       return (

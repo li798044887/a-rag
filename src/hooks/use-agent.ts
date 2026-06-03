@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/context";
-import type { AgentEvent, Turn } from "@/lib/types";
+import type { AgentCfg, AgentEvent, Turn } from "@/lib/types";
 
 export type ConvStatus = "running" | "done" | "cancelled" | "error";
 
@@ -116,6 +116,7 @@ export function useAgent() {
       attachmentDocIds: string[],
       threadId: string | undefined,
       modelId: string | undefined,
+      agentCfg: AgentCfg,
       cb: { onPendingThread?: (id: string) => void; onThread?: (id: string, previousId?: string) => void; onDone?: (id: string, status: ConvStatus) => void;
             truncateFrom?: number; regenerateFrom?: number } = {},
     ): Promise<{ status: ConvStatus; threadId: string }> => {
@@ -147,7 +148,7 @@ export function useAgent() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, attachments, attachmentDocIds, threadId, model: modelId, regenerateFrom: cb.regenerateFrom }),
+          body: JSON.stringify({ query, attachments, attachmentDocIds, threadId, model: modelId, regenerateFrom: cb.regenerateFrom, agentCfg }),
           signal: ctrl.signal,
         });
 

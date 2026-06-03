@@ -10,7 +10,7 @@ import { interpolate } from "@/i18n/interpolate";
 
 const proseCls = "whitespace-pre-wrap text-[12.5px] leading-[1.65] text-fg-2 [overflow-wrap:anywhere]";
 
-function SectionImage({ src, alt }: { src: string; alt: string }) {
+export function SectionImage({ src, alt }: { src: string; alt: string }) {
   const { t } = useT();
   const [failed, setFailed] = useState(false);
   if (failed) {

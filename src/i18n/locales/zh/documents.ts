@@ -56,7 +56,10 @@ export const documents = {
   tabLayout: "布局",
   tabSpan: "Span",
   tabText: "解析文本",
+  tabRich: "格式化显示",
   tabHtml: "HTML格式",
+  previewEmpty: "无可显示的内容",
+  jsonParseError: "无法解析为 JSON，将显示原文。",
   tabImages: "图片",
   tabImagesCount: "图片 ({n})",
 

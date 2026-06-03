@@ -9,9 +9,10 @@ import { resolveModels, DEFAULT_MODEL_ID } from "@/lib/agent/models";
 import { buildTools, type ToolCallMeta } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
 import { StepBus } from "@/lib/agent/step-bus";
-import type { AgentEvent, ToolCall, ToolName } from "@/lib/types";
+import type { AgentCfg, AgentEvent, ToolCall, ToolName } from "@/lib/types";
 import { getAgentPrompts, type AgentPrompts } from "@/lib/agent/prompts";
 import { DEFAULT_LOCALE, type Locale } from "@/i18n/config";
+import { AGENT_CFG_DEFAULTS, buildSystemPrompt } from "@/lib/agent/config";
 
 export interface RunInput {
   query: string;
@@ -22,9 +23,9 @@ export interface RunInput {
   attachmentDocIds?: string[];
   modelId?: string;
   locale?: Locale;
+  agentCfg?: AgentCfg;
 }
 
-const MAX_STEPS = 6;
 
 export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   const bus = new StepBus();
@@ -34,13 +35,14 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
 }
 
 async function pump(
-  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds, locale }: RunInput,
+  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds, locale, agentCfg }: RunInput,
   bus: StepBus,
 ): Promise<void> {
   // pump の本体は何が throw しても必ず bus.close() する。これを欠くと runAgent の
   // drain が永久にハングする（pump は fire-and-forget なので reject も握り潰される）。
   try {
     const started = Date.now();
+    const cfg = agentCfg ?? AGENT_CFG_DEFAULTS;
     const modelLabel = modelId ?? DEFAULT_MODEL_ID;
     const resolution = resolveModels(modelId);
     const prompts = getAgentPrompts(locale ?? DEFAULT_LOCALE);
@@ -56,17 +58,17 @@ async function pump(
 
     const registry = new CitationRegistry();
     const meta = new Map<string, ToolCallMeta>();
-    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts });
+    const tools = buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency: cfg.parallelTools });
 
     const userContent = prompts.buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);
     const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: userContent }];
 
     const result = streamText({
       model: resolution.models.chat,
-      system: prompts.system,
+      system: buildSystemPrompt(cfg, locale ?? DEFAULT_LOCALE),
       messages,
       tools,
-      stopWhen: stepCountIs(MAX_STEPS),
+      stopWhen: stepCountIs(cfg.maxSteps),
     });
 
     const stepStart = new Map<string, number>();

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { isConvertibleToPdf, isSpreadsheet } from "@/lib/file-types";
+import { getTextPreviewKind, isConvertibleToPdf, isSpreadsheet, type TextPreviewKind } from "@/lib/file-types";
 
 test("isConvertibleToPdf: Office 形式は true（拡張子の大小無視）", () => {
   for (const name of [
@@ -26,5 +26,31 @@ test("isSpreadsheet: 表計算形式は true（拡張子の大小無視）", () 
 test("isSpreadsheet: それ以外は false", () => {
   for (const name of ["a.csv", "a.docx", "a.pdf", "a.png", "noext"]) {
     expect(isSpreadsheet(name), name).toBe(false);
+  }
+});
+
+test("getTextPreviewKind: 種別を拡張子で判定（大小無視）", () => {
+  const cases: [string, TextPreviewKind][] = [
+    ["README.md", "markdown"],
+    ["NOTES.MARKDOWN", "markdown"],
+    ["data.json", "json"],
+    ["golden_qa.jsonl", "jsonl"],
+    ["stream.ndjson", "jsonl"],
+    ["notes.txt", "text"],
+    ["server.log", "text"],
+    ["table.csv", "text"],
+    ["table.tsv", "text"],
+    ["conf.yaml", "text"],
+    ["conf.yml", "text"],
+    ["feed.xml", "text"],
+  ];
+  for (const [name, kind] of cases) {
+    expect(getTextPreviewKind(name), name).toBe(kind);
+  }
+});
+
+test("getTextPreviewKind: テキスト系でない/拡張子なしは null", () => {
+  for (const name of ["a.pdf", "a.png", "a.docx", "a.xlsx", "a.ods", "noext", ""]) {
+    expect(getTextPreviewKind(name), name).toBeNull();
   }
 });

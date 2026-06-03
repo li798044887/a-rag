@@ -58,7 +58,10 @@ export const documents: typeof zhDocuments = {
   tabLayout: "レイアウト",
   tabSpan: "Span",
   tabText: "解析テキスト",
+  tabRich: "整形表示",
   tabHtml: "HTML整形",
+  previewEmpty: "表示できる内容がありません",
+  jsonParseError: "JSON として解析できませんでした。原文を表示します。",
   tabImages: "画像",
   tabImagesCount: "画像 ({n})",
 

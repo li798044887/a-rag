@@ -6,7 +6,7 @@ import { getModels } from "@/lib/data";
 import { ACCENT_PRESETS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { SessionClaims } from "@/hooks/use-auth";
-import type { AppUser, ModelOption, Tweaks } from "@/lib/types";
+import type { AgentCfg, AppUser, ModelOption, Tweaks } from "@/lib/types";
 import { useT } from "@/i18n/context";
 import { interpolate } from "@/i18n/interpolate";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
@@ -22,6 +22,8 @@ interface Props {
   requestedSection?: SettingsSection | null;
   tweaks: Tweaks;
   setTweak: <K extends keyof Tweaks>(key: K, value: Tweaks[K]) => void;
+  agentCfg: AgentCfg;
+  setAgentCfg: <K extends keyof AgentCfg>(key: K, value: AgentCfg[K]) => void;
   user: AppUser;
   claims: SessionClaims | null;
   onSetRemember: (value: boolean) => Promise<void> | void;
@@ -110,6 +112,8 @@ export function SettingsModal({
   requestedSection,
   tweaks,
   setTweak,
+  agentCfg,
+  setAgentCfg,
   user,
   claims,
   onSetRemember,
@@ -129,7 +133,6 @@ export function SettingsModal({
   const [connectors, setConnectors] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(CONNECTORS.map((c) => [c.name, c.enabled])),
   );
-  const [agentCfg, setAgentCfg] = useState({ maxSteps: 12, parallelTools: 3, requireCitations: true, admitUnknown: true });
   const [jwtCopied, setJwtCopied] = useState(false);
   const [rememberPending, setRememberPending] = useState(false);
   const [revoking, setRevoking] = useState(false);
@@ -350,7 +353,7 @@ export function SettingsModal({
                     type="number"
                     min={1}
                     value={agentCfg.maxSteps}
-                    onChange={(e) => setAgentCfg((c) => ({ ...c, maxSteps: Number(e.target.value) }))}
+                    onChange={(e) => setAgentCfg("maxSteps", Number(e.target.value))}
                     className={fieldInput}
                   />
                 </Field>
@@ -359,21 +362,21 @@ export function SettingsModal({
                     type="number"
                     min={1}
                     value={agentCfg.parallelTools}
-                    onChange={(e) => setAgentCfg((c) => ({ ...c, parallelTools: Number(e.target.value) }))}
+                    onChange={(e) => setAgentCfg("parallelTools", Number(e.target.value))}
                     className={fieldInput}
                   />
                 </Field>
                 <Field label={t.modals.agentRequireCitationsLabel} hint={t.modals.agentRequireCitationsHint}>
                   <Switch
                     on={agentCfg.requireCitations}
-                    onToggle={() => setAgentCfg((c) => ({ ...c, requireCitations: !c.requireCitations }))}
+                    onToggle={() => setAgentCfg("requireCitations", !agentCfg.requireCitations)}
                     label={t.modals.agentRequireCitationsLabel}
                   />
                 </Field>
                 <Field label={t.modals.agentAdmitUnknownLabel}>
                   <Switch
                     on={agentCfg.admitUnknown}
-                    onToggle={() => setAgentCfg((c) => ({ ...c, admitUnknown: !c.admitUnknown }))}
+                    onToggle={() => setAgentCfg("admitUnknown", !agentCfg.admitUnknown)}
                     label={t.modals.agentAdmitUnknownLabel}
                   />
                 </Field>
