@@ -108,15 +108,16 @@ function RenderedChunk({ chunk }: { chunk: DocumentPreviewChunk }) {
  *  children 無し（原本タブ）のときは生テキストを PlainTextView で表示する。
  *  loading/error と truncate 注記もここで一元的に出す。 */
 function RawTextContent({ raw, docId, children }: { raw: RawTextState; docId: string; children?: ReactNode }) {
+  const { t } = useT();
   if (raw.status === "loading" || raw.status === "idle") {
-    return <div className="grid h-full place-items-center text-[12px] text-muted">読み込み中…</div>;
+    return <div className="grid h-full place-items-center text-[12px] text-muted">{t.common.loading}</div>;
   }
   if (raw.status === "error") return <UnsupportedPreview docId={docId} />;
   return (
     <div>
       {raw.truncated && (
         <div className="border-b-[0.5px] border-divider bg-accent-soft px-5 py-2 text-[11.5px] text-fg-2">
-          ファイルが大きいため冒頭のみ表示しています。全文は「原本ダウンロード」から取得してください。
+          {t.documents.rawTruncated}
         </div>
       )}
       {children ?? <PlainTextView text={raw.text} />}

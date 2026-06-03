@@ -201,12 +201,12 @@ export function RightPanel({ sources, citationMap, contextQuery, activeSourceId,
           rawMissing ? (
             <div className="grid h-full place-items-center px-6 py-10 text-center">
               <div className="max-w-[320px]">
-                <div className="mb-1.5 text-[13px] font-semibold text-fg">この文書は削除済みです</div>
-                <div className="mb-3 text-[12px] leading-[1.6] text-muted">原本ファイルは削除されています。引用テキストは「HTML整形」「解析テキスト」タブで確認できます。</div>
+                <div className="mb-1.5 text-[13px] font-semibold text-fg">{t.sources.deletedTitle}</div>
+                <div className="mb-3 text-[12px] leading-[1.6] text-muted">{t.sources.deletedDesc}</div>
                 <button
                   onClick={() => setViewMode("html")}
                   className="inline-flex items-center rounded-lg border-[0.5px] border-divider-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-surface-2"
-                >引用テキストを表示</button>
+                >{t.sources.showCitedText}</button>
               </div>
             </div>
           ) : (

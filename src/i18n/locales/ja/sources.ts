@@ -43,4 +43,9 @@ export const sources: typeof zhSources = {
 
   // PanelResizer aria-label
   panelResizerAriaLabel: "一次資料パネルの幅を調整",
+
+  // Deleted-document fallback (original PDF tab)
+  deletedTitle: "この文書は削除済みです",
+  deletedDesc: "原本ファイルは削除されています。引用テキストは「HTML整形」「解析テキスト」タブで確認できます。",
+  showCitedText: "引用テキストを表示",
 };

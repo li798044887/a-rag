@@ -60,6 +60,7 @@ export const documents = {
   tabHtml: "HTML格式",
   previewEmpty: "无可显示的内容",
   jsonParseError: "无法解析为 JSON，将显示原文。",
+  rawTruncated: "文件较大，仅显示开头部分。完整内容请通过「下载原文件」获取。",
   tabImages: "图片",
   tabImagesCount: "图片 ({n})",
 

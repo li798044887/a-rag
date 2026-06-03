@@ -62,6 +62,7 @@ export const documents: typeof zhDocuments = {
   tabHtml: "HTML整形",
   previewEmpty: "表示できる内容がありません",
   jsonParseError: "JSON として解析できませんでした。原文を表示します。",
+  rawTruncated: "ファイルが大きいため冒頭のみ表示しています。全文は「原本ダウンロード」から取得してください。",
   tabImages: "画像",
   tabImagesCount: "画像 ({n})",
 
