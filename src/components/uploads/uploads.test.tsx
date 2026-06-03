@@ -25,7 +25,7 @@ test("documents upload queue keeps the scroll container inside the bounded queue
     onClear: () => {},
   });
   const html = renderToStaticMarkup(
-    createElement(LocaleProvider, { locale: "ja", dict: ja, children: queue }),
+    createElement(LocaleProvider, { locale: "ja", dict: ja }, queue),
   );
 
   expect(html).toContain("max-h-[50vh]");

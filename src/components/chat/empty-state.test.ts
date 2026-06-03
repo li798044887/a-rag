@@ -17,7 +17,7 @@ const user: AppUser = {
 
 function renderWithJa(element: React.ReactElement) {
   return renderToStaticMarkup(
-    createElement(LocaleProvider, { locale: "ja", dict: ja, children: element }),
+    createElement(LocaleProvider, { locale: "ja", dict: ja }, element),
   );
 }
 

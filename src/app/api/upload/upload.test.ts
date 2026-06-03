@@ -13,7 +13,7 @@ vi.mock("@/lib/rag-client", () => ({
 vi.mock("next/headers", () => ({
   cookies: vi.fn(() =>
     Promise.resolve({
-      get: (_name: string) => undefined,
+      get: () => undefined,
       set: vi.fn(),
       delete: vi.fn(),
     }),
