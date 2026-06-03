@@ -11,9 +11,12 @@
   /* 統一 CJK フォールバック。簡体専用字形(业/样/认/证 等)も共用漢字も同一フォントから
      描画させ、lang=ja で日本語フォント→簡体フォントへ字ごとにフォールバックして
      太さがちぐはぐになる問題を防ぐ。簡体を網羅する包括的フォントを先頭に置く。 */
+  /* Maple Mono CN を主 CJK フォントにする。簡体専用字形も共用漢字も仮名も単一フォントから
+     描画され、lang 依存のフォールバックによる字重ムラが起きない。--font-cjk は Maple が
+     万一欠く字向けの実ウェイト兜底（PingFang SC 等）。 */
   --font-cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei";
-  --font-sans: var(--font-jakarta), var(--font-cjk), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-jetbrains), var(--font-cjk), ui-monospace, monospace;
+  --font-sans: var(--font-jakarta), var(--font-maple), var(--font-cjk), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-maple), var(--font-cjk), ui-monospace, monospace;
 
   /* The shell switches column layout at these widths (tablet → overlay drawer,
      wide → full 3-column). `tablet:` ≥769px, `wide:` ≥1181px. */

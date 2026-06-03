@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { THEME_STORAGE_KEY } from "@/lib/constants";
 import { getLocale } from "@/i18n/server";
 import { htmlLang } from "@/i18n/config";
@@ -15,11 +16,17 @@ const jakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
-const jetbrains = JetBrains_Mono({
-  variable: "--font-jetbrains",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+// Maple Mono CN（含 CJK の等幅）。CJK を単一フォントで描画し、lang 依存の
+// フォールバックによる字重ムラを根治する。woff2 自前ホスト。
+const maple = localFont({
+  variable: "--font-maple",
   display: "swap",
+  src: [
+    { path: "./fonts/MapleMonoCN-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/MapleMonoCN-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/MapleMonoCN-SemiBold.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/MapleMonoCN-Bold.woff2", weight: "700", style: "normal" },
+  ],
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -57,7 +64,7 @@ export default async function RootLayout({
   const locale = await getLocale();
   const dict = getDictionary(locale);
   return (
-    <html lang={htmlLang(locale)} className={`${jakarta.variable} ${jetbrains.variable}`} suppressHydrationWarning>
+    <html lang={htmlLang(locale)} className={`${jakarta.variable} ${maple.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
