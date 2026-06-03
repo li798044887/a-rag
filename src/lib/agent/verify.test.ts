@@ -16,19 +16,32 @@ const sources = [{ n: 1, title: "A", heading: "h", snippet: "トークンは24�
 afterEach(() => generateText.mockReset());
 
 test("全主張が裏付けられていれば revise しない", async () => {
-  generateText.mockResolvedValueOnce({ output: { unsupported: [] } });
+  generateText.mockResolvedValueOnce({
+    output: { unsupported: [] },
+    totalUsage: { inputTokens: 12, outputTokens: 3, totalTokens: 15 },
+  });
   const r = await verifyAnswer({ query: "q", answer: "失効します[1]。", sources, model, prompts, maxRevisions: 1 });
   expect(r.unsupported).toEqual([]);
   expect(r.revised).toBeNull();
+  expect((r as { verifyUsage?: unknown }).verifyUsage).toMatchObject({ inputTokens: 12, outputTokens: 3, totalTokens: 15 });
+  expect((r as { reviseUsage?: unknown }).reviseUsage).toBeNull();
   expect(generateText).toHaveBeenCalledTimes(1);
 });
 
 test("未裏付けがあり maxRevisions>0 なら訂正本文を返す", async () => {
-  generateText.mockResolvedValueOnce({ output: { unsupported: ["48時間で失効する"] } });
-  generateText.mockResolvedValueOnce({ text: "24時間で失効します[1]。" });
+  generateText.mockResolvedValueOnce({
+    output: { unsupported: ["48時間で失効する"] },
+    totalUsage: { inputTokens: 20, outputTokens: 4, totalTokens: 24 },
+  });
+  generateText.mockResolvedValueOnce({
+    text: "24時間で失効します[1]。",
+    totalUsage: { inputTokens: 30, outputTokens: 9, totalTokens: 39 },
+  });
   const r = await verifyAnswer({ query: "q", answer: "48時間で失効します[1]。", sources, model, prompts, maxRevisions: 1 });
   expect(r.unsupported).toEqual(["48時間で失効する"]);
   expect(r.revised).toBe("24時間で失効します[1]。");
+  expect((r as { verifyUsage?: unknown }).verifyUsage).toMatchObject({ totalTokens: 24 });
+  expect((r as { reviseUsage?: unknown }).reviseUsage).toMatchObject({ totalTokens: 39 });
   expect(generateText).toHaveBeenCalledTimes(2);
 });
 

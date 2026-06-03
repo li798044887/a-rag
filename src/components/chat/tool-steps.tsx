@@ -153,8 +153,23 @@ function formatTokenCount(n: unknown): string {
   return String(n);
 }
 
+function tokenRows(output: Record<string, unknown>, t: Dictionary): { k: string; v: React.ReactNode }[] {
+  const rows: { k: string; v: React.ReactNode }[] = [
+    { k: t.chat.inputTokens, v: formatTokenCount(output.inputTokens) },
+    { k: t.chat.outputTokens, v: formatTokenCount(output.outputTokens) },
+    { k: t.chat.totalTokens, v: formatTokenCount(output.totalTokens) },
+  ];
+  if (typeof output.cachedInputTokens === "number" && output.cachedInputTokens > 0) {
+    rows.push({ k: t.chat.cacheTokens, v: formatTokenCount(output.cachedInputTokens) });
+  }
+  return rows;
+}
+
 function ToolInputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
   if (step.name === "answer" && typeof step.input.model === "string") {
+    return <KeyValueGrid rows={[{ k: "model", v: step.input.model }]} />;
+  }
+  if ((step.name === "verify" || step.name === "revise") && typeof step.input.model === "string") {
     return <KeyValueGrid rows={[{ k: "model", v: step.input.model }]} />;
   }
   if (step.name === "retrieve" && typeof step.input.query === "string") {
@@ -217,15 +232,7 @@ function ToolOutputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
   if (!output) return null;
 
   if (step.name === "answer") {
-    const rows: { k: string; v: React.ReactNode }[] = [
-      { k: t.chat.inputTokens, v: formatTokenCount(output.inputTokens) },
-      { k: t.chat.outputTokens, v: formatTokenCount(output.outputTokens) },
-      { k: t.chat.totalTokens, v: formatTokenCount(output.totalTokens) },
-    ];
-    if (typeof output.cachedInputTokens === "number" && output.cachedInputTokens > 0) {
-      rows.push({ k: t.chat.cacheTokens, v: formatTokenCount(output.cachedInputTokens) });
-    }
-    return <KeyValueGrid rows={rows} />;
+    return <KeyValueGrid rows={tokenRows(output, t)} />;
   }
 
   if (step.name === "rerank" && Array.isArray(output.selected)) {
@@ -320,26 +327,33 @@ function ToolOutputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
     const claims = Array.isArray(output.claims) ? (output.claims as string[]) : [];
     if (claims.length === 0) {
       return (
-        <div className="rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 text-[12px] leading-[1.55] text-fg-2">
-          {t.chat.allGrounded}
+        <div className="flex flex-col gap-2">
+          <KeyValueGrid rows={tokenRows(output, t)} />
+          <div className="rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 text-[12px] leading-[1.55] text-fg-2">
+            {t.chat.allGrounded}
+          </div>
         </div>
       );
     }
     return (
-      <ul className="flex flex-col gap-1.5 rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5">
-        {claims.map((c, i) => (
-          <li key={i} className="grid grid-cols-[14px_1fr] gap-2 text-[12px] leading-[1.5] text-fg-2">
-            <span className="pt-px text-center font-mono text-[11px] font-semibold text-[#B83A1F]">!</span>
-            <span className="min-w-0 whitespace-pre-wrap break-words">{c}</span>
-          </li>
-        ))}
-      </ul>
+      <div className="flex flex-col gap-2">
+        <KeyValueGrid rows={tokenRows(output, t)} />
+        <ul className="flex flex-col gap-1.5 rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5">
+          {claims.map((c, i) => (
+            <li key={i} className="grid grid-cols-[14px_1fr] gap-2 text-[12px] leading-[1.5] text-fg-2">
+              <span className="pt-px text-center font-mono text-[11px] font-semibold text-[#B83A1F]">!</span>
+              <span className="min-w-0 whitespace-pre-wrap break-words">{c}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     );
   }
 
   if (step.name === "revise") {
     return (
       <div className="flex flex-col gap-2">
+        <KeyValueGrid rows={tokenRows(output, t)} />
         {typeof output.draft === "string" && (
           <div>
             <div className={sectionLabelCls}>{t.chat.sectionDraft}</div>

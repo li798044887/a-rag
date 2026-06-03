@@ -91,14 +91,7 @@ async function pump(
         id: "answer", name: "answer" as ToolName, label: prompts.answerStep.label, status,
         durationMs: status === "done" ? Date.now() - t : 0,
         input: { model: modelLabel },
-        output: status === "done"
-          ? {
-              inputTokens: usage?.inputTokens ?? null,
-              outputTokens: usage?.outputTokens ?? null,
-              totalTokens: usage?.totalTokens ?? null,
-              cachedInputTokens: usage?.inputTokenDetails?.cacheReadTokens ?? null,
-            }
-          : null,
+        output: status === "done" ? usageOutput(usage) : null,
         summary: status === "done" ? prompts.answerStep.done : prompts.answerStep.running,
       },
     });
@@ -182,9 +175,10 @@ async function pump(
     // 失敗時は verifyAnswer 内部で素通しするため answer は必ず確定ストリームされる。
     if (cfg.verify && answerStarted && answer && registry.size > 0) {
       const vStart = Date.now();
+      const verifyInput = { model: resolution.models.modelNames.rewrite };
       bus.push({ type: "step", step: {
         id: "verify", name: "verify" as ToolName, label: prompts.verify.label,
-        status: "running", durationMs: 0, input: {}, output: null, summary: prompts.verify.running,
+        status: "running", durationMs: 0, input: verifyInput, output: null, summary: prompts.verify.running,
       } });
       const v = await verifyAnswer({
         query, answer, sources: registry.listSources(),
@@ -194,14 +188,16 @@ async function pump(
       bus.push({ type: "step", step: {
         id: "verify", name: "verify" as ToolName, label: prompts.verify.label,
         status: "done", durationMs: Date.now() - vStart,
-        input: {}, output: { unsupported: v.unsupported.length, claims: v.unsupported },
+        input: verifyInput,
+        output: { unsupported: v.unsupported.length, claims: v.unsupported, ...usageOutput(v.verifyUsage) },
         summary: prompts.verify.done(v.unsupported.length),
       } });
       if (v.revised) {
         // 訂正ステップには訂正前→訂正後を載せ、差分を確認できるようにする。
         bus.push({ type: "step", step: {
           id: "revise", name: "revise" as ToolName, label: prompts.revise.label,
-          status: "done", durationMs: 0, input: {}, output: { draft: answer, revised: v.revised },
+          status: "done", durationMs: 0, input: { model: resolution.models.modelNames.rewrite },
+          output: { draft: answer, revised: v.revised, ...usageOutput(v.reviseUsage) },
           summary: prompts.revise.done,
         } });
         answer = v.revised;
@@ -243,6 +239,15 @@ function runningSummaryOf(prompts: AgentPrompts, name: string): string {
   if (name === "retrieve") return prompts.runningSummaries.retrieve;
   if (name === "fetch_document") return prompts.runningSummaries.fetch_document;
   return prompts.runningSummaries.default;
+}
+
+function usageOutput(usage?: LanguageModelUsage | null): Record<string, unknown> {
+  return {
+    inputTokens: usage?.inputTokens ?? null,
+    outputTokens: usage?.outputTokens ?? null,
+    totalTokens: usage?.totalTokens ?? null,
+    cachedInputTokens: usage?.inputTokenDetails?.cacheReadTokens ?? null,
+  };
 }
 
 function generationFailureText(prompts: AgentPrompts, error: unknown): string {
