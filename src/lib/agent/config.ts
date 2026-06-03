@@ -12,6 +12,10 @@ export const AGENT_CFG_DEFAULTS: AgentCfg = {
   admitUnknown: true,
   topK: 6,
   candidateK: 10,
+  maxRetrieveRetries: 1,
+  gradeThreshold: 0.5,
+  maxRevisions: 1,
+  verify: true,
 };
 
 export const MAX_STEPS_MIN = 1;
@@ -22,9 +26,21 @@ export const TOP_K_MIN = 1;
 export const TOP_K_MAX = 20;
 export const CANDIDATE_K_MIN = 1;
 export const CANDIDATE_K_MAX = 50;
+export const RETRIEVE_RETRIES_MIN = 0;
+export const RETRIEVE_RETRIES_MAX = 2;
+export const REVISIONS_MIN = 0;
+export const REVISIONS_MAX = 1;
+export const GRADE_THRESHOLD_MIN = 0;
+export const GRADE_THRESHOLD_MAX = 1;
 
 function clampInt(raw: unknown, min: number, max: number, fallback: number): number {
   const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function clampFloat(raw: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
 }
@@ -52,6 +68,10 @@ export function clampAgentCfg(raw: unknown): AgentCfg {
     admitUnknown: asBool(o.admitUnknown, AGENT_CFG_DEFAULTS.admitUnknown),
     topK,
     candidateK,
+    maxRetrieveRetries: clampInt(o.maxRetrieveRetries, RETRIEVE_RETRIES_MIN, RETRIEVE_RETRIES_MAX, AGENT_CFG_DEFAULTS.maxRetrieveRetries),
+    gradeThreshold: clampFloat(o.gradeThreshold, GRADE_THRESHOLD_MIN, GRADE_THRESHOLD_MAX, AGENT_CFG_DEFAULTS.gradeThreshold),
+    maxRevisions: clampInt(o.maxRevisions, REVISIONS_MIN, REVISIONS_MAX, AGENT_CFG_DEFAULTS.maxRevisions),
+    verify: asBool(o.verify, AGENT_CFG_DEFAULTS.verify),
   };
 }
 

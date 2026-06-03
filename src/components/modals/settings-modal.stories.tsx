@@ -20,6 +20,10 @@ const agentCfg: AgentCfg = {
   admitUnknown: true,
   topK: 6,
   candidateK: 10,
+  maxRetrieveRetries: 1,
+  gradeThreshold: 0.5,
+  maxRevisions: 1,
+  verify: true,
 };
 
 const now = Math.floor(Date.now() / 1000);
