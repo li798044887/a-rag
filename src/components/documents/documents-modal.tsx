@@ -8,7 +8,7 @@ import { MarkdownView } from "@/components/documents/markdown-view";
 import { JsonView, JsonlView } from "@/components/documents/json-view";
 import { PlainTextView } from "@/components/documents/plain-text-view";
 import { useRawText } from "@/hooks/use-raw-text";
-import { OriginalPreview, RawTextContent } from "@/components/documents/original-preview";
+import { OriginalPreview, RawTextContent, originalTabLabel } from "@/components/documents/original-preview";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useDocuments } from "@/hooks/use-documents";
 import { useUploads } from "@/hooks/use-uploads";
@@ -82,10 +82,6 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
 
   const selected = docs.items.find((d) => d.id === selectedId) ?? null;
   const isPdfFile = selected ? isPdf(selected.filename) : false;
-  // Office 系原本はサーバ側で PDF 変換してプレビューできる（拡張子で判定）。
-  const isConvertible = selected ? isConvertibleToPdf(selected.filename) : false;
-  // 表計算は PDF 化せず Excel 風グリッドでネイティブ描画する（PDF/画像/Office PDF 変換より優先）。
-  const isSheet = selected ? isSpreadsheet(selected.filename) : false;
   // テキスト系（md/json/jsonl/txt 等）は 原本/解析テキスト/整形表示 の3タブに切替える。
   const textKind = selected ? getTextPreviewKind(selected.filename) : null;
   const raw = useRawText(textKind ? selectedId : null);
@@ -388,7 +384,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   <div className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
                     {(textKind
                       ? ([["pdf", t.documents.tabOriginal], ["text", t.documents.tabText], ["rich", t.documents.tabRich]] as [Tab, string][])
-                      : ([["pdf", isSheet ? t.documents.tabSpreadsheet : isConvertible ? t.documents.tabConvertedPdf : t.documents.tabOriginal], ...(isPdfFile ? [["layout", t.documents.tabLayout], ["span", t.documents.tabSpan]] as [Tab, string][] : []), ["text", t.documents.tabText], ["html", t.documents.tabHtml], ["images", images.length ? interpolate(t.documents.tabImagesCount, { n: images.length }) : t.documents.tabImages]] as [Tab, string][])
+                      : ([["pdf", originalTabLabel(selected.filename, t)], ...(isPdfFile ? [["layout", t.documents.tabLayout], ["span", t.documents.tabSpan]] as [Tab, string][] : []), ["text", t.documents.tabText], ["html", t.documents.tabHtml], ["images", images.length ? interpolate(t.documents.tabImagesCount, { n: images.length }) : t.documents.tabImages]] as [Tab, string][])
                     ).map(([tabKey, label]) => (
                       <button key={tabKey} onClick={() => setTab(tabKey)} className={cn(
                         "shrink-0 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
