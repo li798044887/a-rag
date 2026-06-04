@@ -139,18 +139,22 @@ def decode_cursor(cursor: str) -> tuple[datetime, str]:
 def list_documents(session, *, owner_user_id: str, limit: int = 30,
                    cursor: str | None = None, q: str | None = None,
                    status: str | None = None):
-    """所有者の文書一覧をキーセット・ページングで返す（chunk件数/最新ジョブを一括取得）。"""
+    """所有者の参照(library entry)一覧をキーセット・ページングで返す。
+    mime/size/page_count/status は共有 content から JOIN し、chunk件数/最新ジョブは
+    content_hash 単位で一括取得する。"""
     from sqlalchemy import func, tuple_
 
-    from app.models import Chunk, Document, IngestJob
+    from app.models import Chunk, Content, Document, IngestJob
     from app.schemas import DocumentListItem, DocumentListResponse
 
     def _base():
-        q_ = session.query(Document).filter(Document.owner_user_id == owner_user_id)
+        q_ = (session.query(Document, Content)
+              .join(Content, Document.content_hash == Content.content_hash)
+              .filter(Document.owner_user_id == owner_user_id))
         if q:
             q_ = q_.filter(Document.filename.ilike(f"%{q}%"))
         if status:
-            q_ = q_.filter(Document.status == status)
+            q_ = q_.filter(Content.status == status)
         return q_
 
     total = _base().count()
@@ -162,37 +166,37 @@ def list_documents(session, *, owner_user_id: str, limit: int = 30,
         except Exception as exc:  # noqa: BLE001 — 不正/破損カーソルは 400 にする
             raise ValueError("invalid cursor") from exc
         page = page.filter(tuple_(Document.created_at, Document.id) < (ts, cid))
-    docs = page.limit(limit + 1).all()
-    has_more = len(docs) > limit
-    docs = docs[:limit]
+    rows = page.limit(limit + 1).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
 
-    doc_ids = [d.id for d in docs]
+    hashes = [c.content_hash for _, c in rows]
     counts = dict(
-        session.query(Chunk.document_id, func.count(Chunk.id))
-        .filter(Chunk.document_id.in_(doc_ids))
-        .group_by(Chunk.document_id)
+        session.query(Chunk.content_hash, func.count(Chunk.id))
+        .filter(Chunk.content_hash.in_(hashes))
+        .group_by(Chunk.content_hash)
         .all()
-    ) if doc_ids else {}
+    ) if hashes else {}
     latest_job: dict[str, object] = {}
-    if doc_ids:
+    if hashes:
         for j in (session.query(IngestJob)
-                  .filter(IngestJob.document_id.in_(doc_ids))
+                  .filter(IngestJob.content_hash.in_(hashes))
                   .order_by(IngestJob.created_at.desc())
                   .all()):
-            latest_job.setdefault(j.document_id, j)
+            latest_job.setdefault(j.content_hash, j)
 
     items = [
         DocumentListItem(
-            id=d.id, filename=d.filename, mime=d.mime, size=d.size,
-            page_count=d.page_count, status=d.status, created_at=d.created_at,
-            chunk_count=counts.get(d.id, 0),
-            latest_job_id=getattr(latest_job.get(d.id), "id", None),
-            error=getattr(latest_job.get(d.id), "error", None),
+            id=d.id, filename=d.filename, mime=c.mime, size=c.size,
+            page_count=c.page_count, status=c.status, created_at=d.created_at,
+            chunk_count=counts.get(c.content_hash, 0),
+            latest_job_id=getattr(latest_job.get(c.content_hash), "id", None),
+            error=getattr(latest_job.get(c.content_hash), "error", None),
         )
-        for d in docs
+        for d, c in rows
     ]
     next_cursor = (
-        encode_cursor(docs[-1].created_at, docs[-1].id) if has_more and docs else None
+        encode_cursor(rows[-1][0].created_at, rows[-1][0].id) if has_more and rows else None
     )
     return DocumentListResponse(items=items, next_cursor=next_cursor, total=total)
 
@@ -212,22 +216,16 @@ def record_workspace_activity(session, *, owner_user_id: str) -> None:
 
 
 def workspace_stats(session, *, owner_user_id: str):
-    """所有者のワークスペース統計を返す。現状の実データソースはアップロード文書のみ。"""
-    from app.models import Document, IngestJob, WorkspaceActivity
+    """所有者のワークスペース統計を返す。indexed は content.status=ready の参照数。"""
+    from app.models import Content, Document, WorkspaceActivity
     from app.schemas import WorkspaceStats
 
     total = session.query(Document).filter(Document.owner_user_id == owner_user_id).count()
     indexed = (
         session.query(Document)
-        .filter(Document.owner_user_id == owner_user_id, Document.status == "ready")
+        .join(Content, Document.content_hash == Content.content_hash)
+        .filter(Document.owner_user_id == owner_user_id, Content.status == "ready")
         .count()
-    )
-    latest_job = (
-        session.query(IngestJob)
-        .filter(IngestJob.owner_user_id == owner_user_id, IngestJob.status == "ready")
-        .order_by(IngestJob.created_at.desc())
-        .limit(1)
-        .all()
     )
     activity = (
         session.query(WorkspaceActivity)
@@ -235,12 +233,7 @@ def workspace_stats(session, *, owner_user_id: str):
         .limit(1)
         .all()
     )
-    candidates = []
-    if latest_job:
-        candidates.append(latest_job[0].created_at)
-    if activity:
-        candidates.append(activity[0].last_document_activity_at)
-    last_synced_at = max(candidates) if candidates else None
+    last_synced_at = activity[0].last_document_activity_at if activity else None
     return WorkspaceStats(
         indexed_document_count=indexed,
         total_document_count=total,
