@@ -21,9 +21,9 @@ def _log_info(message: str, *args) -> None:
     server_logger.info("[retrieval] " + message, *args)
 
 
-def _expand(session: Session, document_id: str, ordinal: int) -> str:
+def _expand(session: Session, content_hash: str, ordinal: int) -> str:
     rows = (session.query(Chunk)
-            .filter(Chunk.document_id == document_id,
+            .filter(Chunk.content_hash == content_hash,
                     Chunk.ordinal.in_([ordinal - 1, ordinal, ordinal + 1]))
             .order_by(Chunk.ordinal).all())
     return "\n\n".join(r.text for r in rows) if rows else ""
@@ -54,17 +54,29 @@ def _timed(fn, *args) -> tuple:
     return fn(*args), int((time.perf_counter() - s) * 1000)
 
 
-def _hit_rows(session: Session, hits: list[dict], title_cache: dict[str, str]) -> list[dict]:
+def _hit_rows(hits: list[dict], hash_to_doc: dict[str, tuple[str, str]]) -> list[dict]:
     rows = []
     for h in hits:
-        doc_id = h["document_id"]
-        if doc_id not in title_cache:
-            doc = session.get(Document, doc_id)
-            title_cache[doc_id] = doc.filename if doc else doc_id
-        rows.append({"title": title_cache[doc_id],
+        ch = h["content_hash"]
+        title = hash_to_doc.get(ch, (ch, ch))[1]
+        rows.append({"title": title,
                      "heading": h.get("heading_path", ""),
                      "score": float(h.get("score", 0.0))})
     return rows
+
+
+def _resolve_scope(session: Session, owner_user_id: str,
+                   document_ids: list[str] | None) -> tuple[list[str], dict[str, tuple[str, str]]]:
+    """owner（と任意の document_ids 範囲指定）から、検索対象 content_hash 集合と
+    content_hash -> (document_id, filename) の写像を作る。
+    UNIQUE(owner, content_hash) により owner 内で content_hash は一意。"""
+    q = (session.query(Document.content_hash, Document.id, Document.filename)
+         .filter(Document.owner_user_id == owner_user_id))
+    if document_ids:
+        q = q.filter(Document.id.in_(document_ids))
+    rows = q.all()
+    hash_to_doc = {ch: (did, fn) for ch, did, fn in rows}
+    return list(hash_to_doc.keys()), hash_to_doc
 
 
 def _expanded_rows(chunks: list[RetrievedChunk]) -> list[dict]:
@@ -87,10 +99,10 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
                     *, query: str, owner_user_id: str, top_k: int = 6,
                     candidate_k: int = DEFAULT_CANDIDATE_K,
                     document_ids: list[str] | None = None) -> Iterator[dict]:
-    title_cache: dict[str, str] = {}
+    content_hashes, hash_to_doc = _resolve_scope(session, owner_user_id, document_ids)
     reranker_name = getattr(reranker, "name", "?")
-    _log_info("retrieve_stream start top_k=%s candidate_k=%s embedder=%s reranker=%s",
-              top_k, candidate_k, getattr(embedder, "name", "?"), reranker_name)
+    _log_info("retrieve_stream start top_k=%s candidate_k=%s embedder=%s reranker=%s scope=%s",
+              top_k, candidate_k, getattr(embedder, "name", "?"), reranker_name, len(content_hashes))
 
     # 1) embed（1回の呼び出しで dense+sparse の両方を得る）
     _log_info("retrieve_stream stage=embed status=start")
@@ -108,18 +120,18 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
     _log_info("retrieve_stream stage=bm25_search status=start limit=%s", candidate_k)
     yield {"stage": "bm25_search", "status": "start"}
     with ThreadPoolExecutor(max_workers=2) as ex:
-        f_dense = ex.submit(_timed, store.dense_search, qv.dense, owner_user_id, candidate_k, document_ids)
-        f_sparse = ex.submit(_timed, store.sparse_search, qv.sparse, owner_user_id, candidate_k, document_ids)
+        f_dense = ex.submit(_timed, store.dense_search, qv.dense, content_hashes, candidate_k)
+        f_sparse = ex.submit(_timed, store.sparse_search, qv.sparse, content_hashes, candidate_k)
         dense_hits, dense_ms = f_dense.result()
         _log_info("retrieve_stream stage=vector_search status=done ms=%s count=%s",
                   dense_ms, len(dense_hits))
         yield {"stage": "vector_search", "status": "done", "ms": dense_ms,
-               "count": len(dense_hits), "hits": _hit_rows(session, dense_hits, title_cache)}
+               "count": len(dense_hits), "hits": _hit_rows(dense_hits, hash_to_doc)}
         sparse_hits, sparse_ms = f_sparse.result()
         _log_info("retrieve_stream stage=bm25_search status=done ms=%s count=%s",
                   sparse_ms, len(sparse_hits))
         yield {"stage": "bm25_search", "status": "done", "ms": sparse_ms,
-               "count": len(sparse_hits), "hits": _hit_rows(session, sparse_hits, title_cache)}
+               "count": len(sparse_hits), "hits": _hit_rows(sparse_hits, hash_to_doc)}
 
     if not dense_hits and not sparse_hits:
         _log_info("retrieve_stream stage=rerank status=start candidate_count=0 model=%s",
@@ -147,7 +159,7 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
     scores = reranker.score(query, [h["text"] for h in merged])
     ranked = sorted(zip(merged, scores), key=lambda x: x[1], reverse=True)[:top_k]
     selected = [{"id": h["chunk_id"], "score": float(s),
-                 "title": title_cache.get(h["document_id"], h["document_id"])}
+                 "title": hash_to_doc.get(h["content_hash"], (h["content_hash"], h["content_hash"]))[1]}
                 for h, s in ranked]
     rerank_ms = _ms(tr)
     _log_info("retrieve_stream stage=rerank status=done ms=%s count=%s", rerank_ms, len(ranked))
@@ -160,16 +172,13 @@ def retrieve_stream(session: Session, store: QdrantStore, embedder: Embedder, re
     te = time.perf_counter()
     out: list[RetrievedChunk] = []
     for hit, score in ranked:
-        doc_id = hit["document_id"]
-        # 候補は _hit_rows で解決済みのため通常はキャッシュヒット。念のための防御的フォールバック。
-        if doc_id not in title_cache:
-            doc = session.get(Document, doc_id)
-            title_cache[doc_id] = doc.filename if doc else doc_id
+        ch = hit["content_hash"]
+        document_id, title = hash_to_doc.get(ch, (ch, ch))
         chunk = session.get(Chunk, hit["chunk_id"])
-        expanded = "" if chunk is None else _expand(session, doc_id, chunk.ordinal)
+        expanded = "" if chunk is None else _expand(session, ch, chunk.ordinal)
         out.append(RetrievedChunk(
-            chunk_id=hit["chunk_id"], document_id=doc_id,
-            document_title=title_cache[doc_id], heading_path=hit.get("heading_path", ""),
+            chunk_id=hit["chunk_id"], document_id=document_id,
+            document_title=title, heading_path=hit.get("heading_path", ""),
             page_start=hit.get("page_start", 0), page_end=hit.get("page_end", 0),
             block_type=hit.get("block_type", "text"), text=hit["text"],
             expanded_text=expanded, score=float(score)))

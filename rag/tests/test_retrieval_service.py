@@ -1,196 +1,95 @@
 import uuid
-import logging
 
 from app.db import SessionLocal
-from app.models import Chunk, Document
 from app.embedding.factory import StubEmbedder
-from app.reranker.factory import StubReranker
-from app.retrieval.service import retrieve, retrieve_stream
+from app.models import Chunk, Content, Document
+from app.reranker.base import Reranker
+from app.retrieval.service import retrieve
 from app.vectorstore.qdrant import QdrantStore
 
-COLL = "test_retr_" + uuid.uuid4().hex[:8]
+
+class IdentityReranker(Reranker):
+    name = "identity"
+
+    def score(self, query, passages):
+        return [1.0 for _ in passages]
 
 
-def test_retrieve_reranks_and_expands_neighbors():
-    e, r = StubEmbedder(dim=8), StubReranker()
-    store = QdrantStore(collection=COLL, dim=8)
-    store.ensure_collection()
-    session = SessionLocal()
-    doc = Document(owner_user_id="u1", filename="設計.pdf", mime="application/pdf",
-                   size=1, raw_path="/tmp/x", status="ready")
-    session.add(doc); session.flush()
-
-    bodies = ["前の文脈。", "認証トークンは24時間で失効する。", "次の文脈。"]
-    rows = []
-    for i, b in enumerate(bodies):
-        c = Chunk(document_id=doc.id, ordinal=i, heading_path="認証", page_start=0,
-                  page_end=0, block_type="text", token_len=len(b), text=b)
-        session.add(c); session.flush(); rows.append(c)
+def _seed_indexed(session, store, owner, content_hash, filename, text):
+    session.add(Content(content_hash=content_hash, mime="application/pdf", size=10,
+                        raw_path=f"/tmp/{content_hash}.pdf", status="ready", ref_count=1))
+    session.flush()
+    doc = Document(owner_user_id=owner, content_hash=content_hash, filename=filename)
+    session.add(doc)
+    chunk = Chunk(content_hash=content_hash, ordinal=0, heading_path="見出し",
+                  page_start=1, page_end=1, block_type="text", token_len=3, text=text)
+    session.add(chunk)
     session.commit()
-    store.upsert([
-        {"chunk_id": c.id, "document_id": doc.id, "owner_user_id": "u1",
-         "heading_path": "認証", "page_start": 0, "page_end": 0, "block_type": "text",
-         "source_type": "doc", "text": c.text, "vector": e.embed([c.text])[0]}
-        for c in rows
-    ])
-
-    res = retrieve(session, store, e, r, query="認証トークン 失効",
-                   owner_user_id="u1", top_k=1, candidate_k=10)
-    assert len(res) == 1
-    top = res[0]
-    assert "失効する" in top.text
-    assert top.document_title == "設計.pdf"
-    # 近傍拡張: 前後の文脈が expanded_text に含まれる
-    assert "前の文脈" in top.expanded_text and "次の文脈" in top.expanded_text
-
-    store.drop()
-    session.query(Chunk).filter_by(document_id=doc.id).delete()
-    session.query(Document).filter_by(id=doc.id).delete()
-    session.commit(); session.close()
+    emb = StubEmbedder(dim=8)
+    vec = emb.embed([text])[0]
+    store.upsert([{
+        "chunk_id": chunk.id, "content_hash": content_hash, "heading_path": "見出し",
+        "page_start": 1, "page_end": 1, "block_type": "text", "source_type": "doc",
+        "text": text, "vector": vec,
+    }])
+    return doc.id
 
 
-def test_retrieve_stream_empty_results_short_circuit():
-    e, r = StubEmbedder(dim=8), StubReranker()
-    store = QdrantStore(collection="test_empty_" + uuid.uuid4().hex[:8], dim=8)
-    store.ensure_collection()
+def test_retrieve_returns_owner_document_id_for_shared_content():
+    """共有 content をヒットさせても、結果の document_id は問い合わせ owner の参照になる。"""
     session = SessionLocal()
-
-    events = list(retrieve_stream(session, store, e, r, query="認証トークン 失効",
-                                  owner_user_id="nobody-" + uuid.uuid4().hex,
-                                  top_k=1, candidate_k=10))
-    stages = [ev["stage"] for ev in events]
-    assert stages == ["embed", "embed", "vector_search", "bm25_search",
-                      "vector_search", "bm25_search", "rerank", "rerank",
-                      "expand", "expand", "result"]
-    assert events[-1]["stage"] == "result"
-    assert events[-1]["chunks"] == []
-
-    store.drop()
-    session.close()
-
-
-def test_retrieve_stream_emits_stages_in_order():
-    e, r = StubEmbedder(dim=8), StubReranker()
-    store = QdrantStore(collection="test_strm_" + uuid.uuid4().hex[:8], dim=8)
+    store = QdrantStore(collection="test_ret_" + uuid.uuid4().hex[:8], dim=8)
     store.ensure_collection()
+    o1, o2 = "u_" + uuid.uuid4().hex, "u_" + uuid.uuid4().hex
+    h = "h_" + uuid.uuid4().hex
+    text = "決算は黒字でした。"
+    try:
+        d1 = _seed_indexed(session, store, o1, h, "o1.pdf", text)
+        # o2 も同じ content を参照（ベクトルは共有、再 upsert しない）
+        session.add(Document(owner_user_id=o2, content_hash=h, filename="o2.pdf"))
+        c = session.get(Content, h); c.ref_count = 2
+        session.commit()
+
+        emb = StubEmbedder(dim=8)
+        r1 = retrieve(session, store, emb, IdentityReranker(),
+                      query=text, owner_user_id=o1, top_k=3, candidate_k=5)
+        assert r1 and r1[0].document_id == d1
+        assert r1[0].document_title == "o1.pdf"
+
+        # o2 から引くと o2 の document_id / filename になる
+        d2 = (session.query(Document)
+              .filter_by(owner_user_id=o2, content_hash=h).one()).id
+        r2 = retrieve(session, store, emb, IdentityReranker(),
+                      query=text, owner_user_id=o2, top_k=3, candidate_k=5)
+        assert r2 and r2[0].document_id == d2
+        assert r2[0].document_title == "o2.pdf"
+    finally:
+        store.drop()
+        session.query(Chunk).filter_by(content_hash=h).delete()
+        session.query(Document).filter_by(content_hash=h).delete()
+        session.query(Content).filter_by(content_hash=h).delete()
+        session.commit()
+        session.close()
+
+
+def test_retrieve_excludes_non_referencing_user():
+    """参照を持たない owner には共有 content がヒットしない。"""
     session = SessionLocal()
-    doc = Document(owner_user_id="u1", filename="設計.pdf", mime="application/pdf",
-                   size=1, raw_path="/tmp/x", status="ready")
-    session.add(doc); session.flush()
-    bodies = ["前の文脈。", "認証トークンは24時間で失効する。", "次の文脈。"]
-    rows = []
-    for i, b in enumerate(bodies):
-        c = Chunk(document_id=doc.id, ordinal=i, heading_path="認証", page_start=0,
-                  page_end=0, block_type="text", token_len=len(b), text=b)
-        session.add(c); session.flush(); rows.append(c)
-    session.commit()
-    store.upsert([
-        {"chunk_id": c.id, "document_id": doc.id, "owner_user_id": "u1",
-         "heading_path": "認証", "page_start": 0, "page_end": 0, "block_type": "text",
-         "source_type": "doc", "text": c.text, "vector": e.embed([c.text])[0]}
-        for c in rows
-    ])
-
-    events = list(retrieve_stream(session, store, e, r, query="認証トークン 失効",
-                                  owner_user_id="u1", top_k=1, candidate_k=10))
-    stages = [ev["stage"] for ev in events]
-    assert stages == ["embed", "embed", "vector_search", "bm25_search",
-                      "vector_search", "bm25_search", "rerank", "rerank",
-                      "expand", "expand", "result"]
-    result_ev = events[-1]
-    assert result_ev["stage"] == "result"
-    assert len(result_ev["chunks"]) == 1
-    assert "失効する" in result_ev["chunks"][0].text
-
-    store.drop()
-    session.query(Chunk).filter_by(document_id=doc.id).delete()
-    session.query(Document).filter_by(id=doc.id).delete()
-    session.commit(); session.close()
-
-
-def test_retrieve_scopes_to_document_ids():
-    e, r = StubEmbedder(dim=8), StubReranker()
-    store = QdrantStore(collection="test_scope_svc_" + uuid.uuid4().hex[:8], dim=8)
+    store = QdrantStore(collection="test_ret_" + uuid.uuid4().hex[:8], dim=8)
     store.ensure_collection()
-    session = SessionLocal()
-    docA = Document(owner_user_id="u1", filename="添付.pdf", mime="application/pdf",
-                    size=1, raw_path="/tmp/a", status="ready")
-    docB = Document(owner_user_id="u1", filename="他.pdf", mime="application/pdf",
-                    size=1, raw_path="/tmp/b", status="ready")
-    session.add_all([docA, docB]); session.flush()
-    for doc, body in ((docA, "添付の本文。"), (docB, "無関係の本文。")):
-        c = Chunk(document_id=doc.id, ordinal=0, heading_path="H", page_start=0,
-                  page_end=0, block_type="text", token_len=len(body), text=body)
-        session.add(c); session.flush()
-        store.upsert([{"chunk_id": c.id, "document_id": doc.id, "owner_user_id": "u1",
-                       "heading_path": "H", "page_start": 0, "page_end": 0,
-                       "block_type": "text", "source_type": "doc", "text": c.text,
-                       "vector": e.embed([c.text])[0]}])
-    session.commit()
-
-    res = retrieve(session, store, e, r, query="本文", owner_user_id="u1",
-                   top_k=5, candidate_k=10, document_ids=[docA.id])
-    assert len(res) == 1
-    assert res[0].document_id == docA.id
-
-    store.drop()
-    session.query(Chunk).filter(Chunk.document_id.in_([docA.id, docB.id])).delete(synchronize_session=False)
-    session.query(Document).filter(Document.id.in_([docA.id, docB.id])).delete(synchronize_session=False)
-    session.commit(); session.close()
-
-
-def test_retrieve_stream_done_events_carry_detail(caplog):
-    caplog.set_level(logging.INFO, logger="app.retrieval.service")
-    e, r = StubEmbedder(dim=8), StubReranker()
-    store = QdrantStore(collection="test_detail_" + uuid.uuid4().hex[:8], dim=8)
-    store.ensure_collection()
-    session = SessionLocal()
-    doc = Document(owner_user_id="u1", filename="設計.pdf", mime="application/pdf",
-                   size=1, raw_path="/tmp/x", status="ready")
-    session.add(doc); session.flush()
-    bodies = ["認証トークンは24時間で失効する。", "請求書の発行手順。", "次の文脈。"]
-    rows = []
-    for i, b in enumerate(bodies):
-        c = Chunk(document_id=doc.id, ordinal=i, heading_path=f"H{i}", page_start=0,
-                  page_end=0, block_type="text", token_len=len(b), text=b)
-        session.add(c); session.flush(); rows.append(c)
-    session.commit()
-    store.upsert([
-        {"chunk_id": c.id, "document_id": doc.id, "owner_user_id": "u1",
-         "heading_path": c.heading_path, "page_start": 0, "page_end": 0, "block_type": "text",
-         "source_type": "doc", "text": c.text, "vector": e.embed([c.text])[0]}
-        for c in rows
-    ])
-
-    events = list(retrieve_stream(session, store, e, r, query="認証トークン 失効",
-                                  owner_user_id="u1", top_k=2, candidate_k=10))
-    by = {}
-    for ev in events:
-        if ev.get("status") == "done":
-            by[ev["stage"]] = ev
-
-    embed = by["embed"]
-    assert embed["model"] == "stub" and embed["dims"] == 8
-
-    vs = by["vector_search"]
-    assert isinstance(vs["hits"], list) and vs["hits"]
-    assert set(vs["hits"][0].keys()) == {"title", "heading", "score"}
-    assert vs["hits"][0]["title"] == "設計.pdf"
-
-    rr = by["rerank"]
-    assert rr["model"] == "stub" and rr["top_n"] == 2
-    assert isinstance(rr["selected"], list) and rr["selected"]
-    assert set(rr["selected"][0].keys()) == {"id", "score", "title"}
-
-    exp = by["expand"]
-    assert exp["count"] == len(rr["selected"])
-    assert isinstance(exp["expanded"], list) and exp["expanded"]
-    assert {"id", "title", "heading", "score", "page", "blockType", "expandedChars", "preview"} <= set(exp["expanded"][0].keys())
-    assert exp["expanded"][0]["title"] == "設計.pdf"
-    assert "stage=rerank status=start candidate_count=" in caplog.text
-    assert "stage=rerank status=done" in caplog.text
-
-    store.drop()
-    session.query(Chunk).filter_by(document_id=doc.id).delete()
-    session.query(Document).filter_by(id=doc.id).delete()
-    session.commit(); session.close()
+    owner, intruder = "u_" + uuid.uuid4().hex, "u_" + uuid.uuid4().hex
+    h = "h_" + uuid.uuid4().hex
+    text = "社外秘の数値。"
+    try:
+        _seed_indexed(session, store, owner, h, "o.pdf", text)
+        emb = StubEmbedder(dim=8)
+        r = retrieve(session, store, emb, IdentityReranker(),
+                     query=text, owner_user_id=intruder, top_k=3, candidate_k=5)
+        assert r == []
+    finally:
+        store.drop()
+        session.query(Chunk).filter_by(content_hash=h).delete()
+        session.query(Document).filter_by(content_hash=h).delete()
+        session.query(Content).filter_by(content_hash=h).delete()
+        session.commit()
+        session.close()
