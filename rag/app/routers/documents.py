@@ -206,7 +206,9 @@ async def retry_job(job_id: str, owner_user_id: str | None = None):
         if job.status not in ("ready", "error"):
             raise HTTPException(status_code=409, detail=f"job is {job.status}, cannot retry")
         job.status = "queued"; job.progress = 0; job.error = None; job.stage_detail = ""
-        content = session.get(Content, content_hash)
+        content = (session.query(Content)
+                   .filter_by(content_hash=content_hash)
+                   .with_for_update().one_or_none())
         if content:
             content.status = "queued"
             content.error = None
