@@ -60,7 +60,9 @@ export function HtmlTable({ html, className, renderMath }: { html: string; class
                   colSpan={c.colspan}
                   rowSpan={c.rowspan}
                   className={cn(
-                    "border-[0.5px] border-divider px-2.5 py-1.5 align-top [overflow-wrap:anywhere]",
+                    // 列を 1 文字ずつの最小幅まで潰さない。最小幅を確保することで
+                    // 列数が多い表はコンテナ幅を超え、ラッパの横スクロールが発動する。
+                    "min-w-[5em] border-[0.5px] border-divider px-2.5 py-1.5 align-top [overflow-wrap:anywhere]",
                     c.header ? "bg-surface-2 text-left font-semibold text-fg" : "text-fg-2",
                   )}
                 >
