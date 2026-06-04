@@ -122,6 +122,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
           onStage: (ev) => bus.push(stageToEvent(ev, parentId, q, prompts, attempt, showAttemptLabel)),
         });
         let chunks = await runRetrieveAttempt(0, activeParentId);
+        let displayCount = chunks.length;
 
         // gradeModel が指定されたときのみ CRAG（grade→不足なら rewrite して再検索）。
         // 設計上、grade は「再検索の要否」と関連度サマリの算出のみに使い、取得チャンクの
@@ -138,6 +139,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
               })),
             });
             const kept = new Set(grade.keptIds);
+            displayCount = grade.keptIds.length;
             const gradeCandidates = chunks.map((c) => ({
               chunkId: c.chunkId,
               title: c.documentTitle,
@@ -158,7 +160,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
                 status: "done", durationMs: Date.now() - activeParentStarted,
                 input: { query: q, retryReason: prompts.grade.retry },
                 output: null,
-                summary: `${prompts.grade.retry}: ${prompts.retrieveMetaSummary(q, chunks.length)}`,
+                summary: `${prompts.grade.retry}: ${prompts.retrieveMetaSummary(q, displayCount)}`,
               } });
               activeParentStarted = null;
             }
@@ -190,6 +192,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
               summary: prompts.grade.retry,
             } });
             chunks = await runRetrieveAttempt(retry + 1, activeParentId, false);
+            displayCount = chunks.length;
           }
         }
 
@@ -208,7 +211,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
           return `[${n}] ${c.documentTitle} — ${c.headingPath}\n${body}`;
         });
         meta.set(toolCallId, { name: "retrieve", input: { query: originalQuery },
-          summary: prompts.retrieveMetaSummary(originalQuery, chunks.length) });
+          summary: prompts.retrieveMetaSummary(originalQuery, displayCount) });
         return lines.length ? lines.join("\n\n") : prompts.fallback.retrieveNoHits;
       }),
     }),

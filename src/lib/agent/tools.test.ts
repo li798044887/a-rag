@@ -322,10 +322,13 @@ test("maxRetrieveRetries=0 なら grade のみで再検索しない", async () =
   vi.mocked(retrieveChunksStream).mockImplementationOnce(async () => [
     { chunkId: "c1", documentId: "d1", documentTitle: "A", headingPath: "h", pageStart: 0, pageEnd: 0, blockType: "text", text: "弱", expandedText: "弱", score: 0.05 },
   ]);
+  generateTextMock.mockResolvedValueOnce({ output: { relevantIds: [] } });
+  const meta = new Map();
   const tools = buildTools({
-    registry: new CitationRegistry(), ownerUserId: "u1", meta: new Map(), bus: new StepBus(),
+    registry: new CitationRegistry(), ownerUserId: "u1", meta, bus: new StepBus(),
     prompts: getAgentPrompts("ja"), gradeModel: "m" as never, gradeThreshold: 0.5, maxRetrieveRetries: 0,
   });
   await tools.retrieve.execute!({ query: "q" }, { toolCallId: "c", messages: [] } as never);
   expect(vi.mocked(retrieveChunksStream)).toHaveBeenCalledTimes(1);
+  expect(meta.get("c")?.summary).toBe("「q」→ 0 件");
 });
