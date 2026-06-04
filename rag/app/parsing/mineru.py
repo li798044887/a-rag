@@ -6,6 +6,8 @@ from app.config import settings
 from app.parsing.types import ParsedBlock, ParsedDocument
 
 # content_list.json の type → ParsedBlock.type
+# PPTX/Office の箇条書き本文（list）と DOCX の目次（index）は list_items 構造で出るため
+# text として取り込む（未マップだと正規化後に本文が丸ごと落ちる）。
 _TYPE_MAP = {
     "text": "text",
     "title": "title",
@@ -13,6 +15,8 @@ _TYPE_MAP = {
     "equation": "equation",
     "interline_equation": "equation",
     "image": "image",
+    "list": "text",
+    "index": "text",
 }
 
 
@@ -33,7 +37,13 @@ def _block_from_item(item: dict) -> ParsedBlock | None:
     if btype == "image":
         return ParsedBlock(type="image", image_path=item.get("img_path"),
                            caption=_join(item.get("img_caption")), page=page)
-    return ParsedBlock(type="text", text=item.get("text", ""), page=page)
+    # text 系（text / list / index）。list・index は整形済みの list_items を改行で連結する。
+    text = item.get("text", "")
+    if not text:
+        items = item.get("list_items")
+        if isinstance(items, list):
+            text = "\n".join(str(s) for s in items)
+    return ParsedBlock(type="text", text=text, page=page)
 
 
 def _join(value) -> str | None:

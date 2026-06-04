@@ -1,4 +1,5 @@
 from app.parsing.types import ParsedBlock
+from app.parsing.mineru import _block_from_item
 from app.chunking.chunker import chunk_blocks, estimate_tokens
 
 
@@ -91,3 +92,17 @@ def test_image_without_path_falls_back_to_placeholder():
     blocks = [ParsedBlock(type="image", caption=None, page=0)]
     chunks = chunk_blocks(blocks, target_tokens=1000)
     assert chunks[0].text == "[image]"
+
+
+def test_pptx_list_body_survives_normalize_and_chunking():
+    # 回帰: PPTX 本文（list）が正規化＋チャンク化を通って text チャンクに残ることを保証する。
+    items = [
+        {"type": "title", "text": "提案概要", "text_level": 1, "page_idx": 0},
+        {"type": "list",
+         "list_items": ["- 導入コストの削減。", "- 検索精度の向上。"],
+         "page_idx": 0},
+    ]
+    blocks = [b for b in (_block_from_item(it) for it in items) if b is not None]
+    chunks = chunk_blocks(blocks, target_tokens=1000)
+    assert any("導入コストの削減" in c.text and "検索精度の向上" in c.text
+               and c.block_type == "text" for c in chunks)
