@@ -10,7 +10,7 @@ export const AUTH_COOKIE = "arag_token";
 /** User-selectable accent presets (sage / coral / cobalt / violet). */
 export const ACCENT_PRESETS = ["#3FA77E", "#D97757", "#3D7EE6", "#8B6FE0"] as const;
 
-export const DEFAULT_ACCENT = ACCENT_PRESETS[0];
+export const DEFAULT_ACCENT = ACCENT_PRESETS[1];
 
 /** Accepted upload extensions (mirrors the composer file input).
  *  MinerU が解析できる docx/xlsx/pptx・PDF・画像と、テキストパーサで扱う

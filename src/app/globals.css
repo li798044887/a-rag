@@ -83,14 +83,14 @@
   --shadow-3: 0 14px 40px rgba(0, 0, 0, 0.6);
 }
 
-/* Accent is user-selectable; default = sage. Soft/glow derived via color-mix
+/* Accent is user-selectable; default = terracotta. Soft/glow derived via color-mix
    so a single --accent change updates every tinted surface. */
 :root {
-  --accent: #3fa77e;
+  --accent: #d97757;
   --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
   --accent-glow: color-mix(in srgb, var(--accent) 25%, transparent);
   /* Secondary decorative glow for the login backdrop (set per-accent at runtime). */
-  --accent-alt-glow: color-mix(in srgb, #d97757 30%, transparent);
+  --accent-alt-glow: color-mix(in srgb, #3fa77e 30%, transparent);
 }
 
 @layer base {
