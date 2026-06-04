@@ -80,7 +80,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # 旧スキーマ（空テーブル）へ戻す。データ移行はしない。
+    # b7c4d9e1f2a3 時点のスキーマ（documents + その部分ユニークindex）を再構築する。データ移行はしない。
     op.drop_index(op.f("ix_ingest_jobs_content_hash"), table_name="ingest_jobs")
     op.drop_table("ingest_jobs")
     op.drop_index(op.f("ix_chunks_content_hash"), table_name="chunks")
@@ -106,6 +106,14 @@ def downgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_documents_owner_user_id"), "documents", ["owner_user_id"], unique=False)
+    # b7c4d9e1f2a3 が定義していた部分ユニークindexを復元する（後続の downgrade で drop されるため）。
+    op.create_index(
+        "uq_documents_owner_hash_active",
+        "documents",
+        ["owner_user_id", "content_hash"],
+        unique=True,
+        postgresql_where=sa.text("content_hash IS NOT NULL AND status != 'error'"),
+    )
     op.create_table(
         "chunks",
         sa.Column("id", sa.UUID(as_uuid=False), nullable=False),
