@@ -114,22 +114,23 @@ async def create_document(file: UploadFile = File(...), owner_user_id: str = For
                        .one_or_none())
 
             if content is None:
-                # 新規実体: 原本を hash 命名で 1 個だけ保存し、解析ジョブを作る。
+                # 新規実体: Content を先に INSERT し、勝者だけが原本を書き込む。
+                # 原本は content_hash 命名で全リクエスト共通パスになるため、INSERT 敗者が
+                # 書き込み/削除すると勝者の共有原本を壊す。よって書き込みは flush 成功後のみ。
                 raw_path = upload_dir / f"{content_hash}{ext}"
-                raw_path.write_bytes(data)
                 content = Content(content_hash=content_hash, mime=mime, size=len(data),
                                   raw_path=str(raw_path), status="queued", ref_count=0)
                 session.add(content)
                 try:
                     session.flush()
                 except IntegrityError:
-                    # 別リクエストが同時に同一実体を作成。原本を捨て既存を参照する。
+                    # 別リクエストが同時に同一実体を作成済み。原本は未書き込みなので触らず既存を参照。
                     session.rollback()
-                    raw_path.unlink(missing_ok=True)
                     content = (session.query(Content)
                                .filter(Content.content_hash == content_hash)
                                .with_for_update().one())
                 else:
+                    raw_path.write_bytes(data)
                     job = IngestJob(content_hash=content_hash, status="queued")
                     session.add(job)
                     session.flush()
