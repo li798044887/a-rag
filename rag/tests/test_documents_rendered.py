@@ -80,16 +80,22 @@ def _fake_doc(owner="u1", raw_path="/data/uploads/x_sheet.xlsx",
         pass
     d = _Doc()
     d.owner_user_id = owner
-    d.raw_path = raw_path
+    d.content_hash = "h1"
     d.filename = filename
-    d.mime = mime
+    # raw_path/mime は Content 側へ移動。互換のため属性も保持する。
+    d._raw_path = raw_path
+    d._mime = mime
     return d
 
 
 def _fake_session(doc):
+    class _Content:
+        raw_path = doc._raw_path
+        mime = doc._mime
+
     class _Session:
         def get(self, model, _id):
-            return doc
+            return doc if model.__name__ == "Document" else _Content()
         def close(self):
             pass
     return _Session()

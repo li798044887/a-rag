@@ -8,14 +8,17 @@ TOKEN_HEADER = {"x-internal-token": settings.rag_internal_token}
 def _patch_doc(monkeypatch, owner: str, raw_path: str):
     class _Doc:
         owner_user_id = owner
-        mime = "application/pdf"
+        content_hash = "h1"
         filename = "doc.pdf"
 
-    _Doc.raw_path = raw_path
+    class _Content:
+        mime = "application/pdf"
+
+    _Content.raw_path = raw_path
 
     class _Session:
         def get(self, model, _id):
-            return _Doc()
+            return _Doc() if model.__name__ == "Document" else _Content()
         def close(self):
             pass
 

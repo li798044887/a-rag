@@ -55,11 +55,14 @@ def test_layout_streams_pdf(client, monkeypatch, tmp_path):
 
     class _Doc:
         owner_user_id = "u1"
+        content_hash = "h1"
+
+    class _Content:
         raw_path = str(tmp_path / "doc.pdf")
 
     class _Session:
         def get(self, model, _id):
-            return _Doc()
+            return _Doc() if model.__name__ == "Document" else _Content()
         def close(self):
             pass
 
@@ -78,11 +81,14 @@ def test_span_streams_pdf(client, monkeypatch, tmp_path):
 
     class _Doc:
         owner_user_id = "u1"
+        content_hash = "h1"
+
+    class _Content:
         raw_path = str(tmp_path / "doc.pdf")
 
     class _Session:
         def get(self, model, _id):
-            return _Doc()
+            return _Doc() if model.__name__ == "Document" else _Content()
         def close(self):
             pass
 
@@ -98,11 +104,14 @@ def test_span_streams_pdf(client, monkeypatch, tmp_path):
 def test_layout_404_when_missing(client, monkeypatch, tmp_path):
     class _Doc:
         owner_user_id = "u1"
+        content_hash = "h1"
+
+    class _Content:
         raw_path = str(tmp_path / "doc.pdf")
 
     class _Session:
         def get(self, model, _id):
-            return _Doc()
+            return _Doc() if model.__name__ == "Document" else _Content()
         def close(self):
             pass
 
@@ -116,11 +125,14 @@ def test_layout_404_when_missing(client, monkeypatch, tmp_path):
 def test_span_404_when_missing(client, monkeypatch, tmp_path):
     class _Doc:
         owner_user_id = "u1"
+        content_hash = "h1"
+
+    class _Content:
         raw_path = str(tmp_path / "doc.pdf")
 
     class _Session:
         def get(self, model, _id):
-            return _Doc()
+            return _Doc() if model.__name__ == "Document" else _Content()
         def close(self):
             pass
 

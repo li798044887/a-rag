@@ -360,7 +360,7 @@ def _fetch_document(document_id: str, req: FetchDocumentRequest) -> FetchDocumen
         if not doc or doc.owner_user_id != req.owner_user_id:
             raise HTTPException(status_code=404, detail="document not found")
         rows = (session.query(Chunk)
-                .filter(Chunk.document_id == document_id)
+                .filter(Chunk.content_hash == doc.content_hash)
                 .order_by(Chunk.ordinal).all())
         around = None
         if req.around_chunk_id:
@@ -390,7 +390,7 @@ def _preview_document(document_id: str, owner_user_id: str) -> FetchDocumentResp
         if not doc or doc.owner_user_id != owner_user_id:
             raise HTTPException(status_code=404, detail="document not found")
         rows = (session.query(Chunk)
-                .filter(Chunk.document_id == document_id)
+                .filter(Chunk.content_hash == doc.content_hash)
                 .order_by(Chunk.ordinal).all())
         return FetchDocumentResponse(
             document_id=doc.id, document_title=doc.filename,
@@ -417,8 +417,11 @@ def get_document_raw(document_id: str, owner_user_id: str, download: bool = Fals
         doc = session.get(Document, document_id)
         if not doc or doc.owner_user_id != owner_user_id:
             raise HTTPException(status_code=404, detail="document not found")
-        raw_path = Path(doc.raw_path)
-        mime = doc.mime
+        content = session.get(Content, doc.content_hash)
+        if not content:
+            raise HTTPException(status_code=404, detail="document not found")
+        raw_path = Path(content.raw_path)
+        mime = content.mime
         filename = doc.filename
     finally:
         session.close()
@@ -441,9 +444,12 @@ def get_document_rendered(document_id: str, owner_user_id: str):
         doc = session.get(Document, document_id)
         if not doc or doc.owner_user_id != owner_user_id:
             raise HTTPException(status_code=404, detail="document not found")
-        raw_path = Path(doc.raw_path)
+        content = session.get(Content, doc.content_hash)
+        raw_path = Path(content.raw_path) if content else None
     finally:
         session.close()
+    if raw_path is None:
+        raise HTTPException(status_code=404, detail="document not found")
     if not is_convertible(str(raw_path)):
         raise HTTPException(status_code=404, detail="not convertible")
     if not raw_path.exists():
@@ -464,10 +470,11 @@ def get_document_layout(document_id: str, owner_user_id: str):
         doc = session.get(Document, document_id)
         if not doc or doc.owner_user_id != owner_user_id:
             raise HTTPException(status_code=404, detail="document not found")
-        raw_path = doc.raw_path
+        content = session.get(Content, doc.content_hash)
+        raw_path = content.raw_path if content else None
     finally:
         session.close()
-    layout = find_layout_pdf(raw_path)
+    layout = find_layout_pdf(raw_path) if raw_path else None
     if layout is None or not layout.is_file():
         raise HTTPException(status_code=404, detail="layout not found")
     return FileResponse(str(layout), media_type="application/pdf",
@@ -482,10 +489,11 @@ def get_document_span(document_id: str, owner_user_id: str):
         doc = session.get(Document, document_id)
         if not doc or doc.owner_user_id != owner_user_id:
             raise HTTPException(status_code=404, detail="document not found")
-        raw_path = doc.raw_path
+        content = session.get(Content, doc.content_hash)
+        raw_path = content.raw_path if content else None
     finally:
         session.close()
-    span = find_span_pdf(raw_path)
+    span = find_span_pdf(raw_path) if raw_path else None
     if span is None or not span.is_file():
         raise HTTPException(status_code=404, detail="span not found")
     return FileResponse(str(span), media_type="application/pdf",
@@ -500,9 +508,12 @@ def get_document_asset(document_id: str, asset_path: str, owner_user_id: str):
         doc = session.get(Document, document_id)
         if not doc or doc.owner_user_id != owner_user_id:
             raise HTTPException(status_code=404, detail="document not found")
-        raw_path = doc.raw_path
+        content = session.get(Content, doc.content_hash)
+        raw_path = content.raw_path if content else None
     finally:
         session.close()
+    if raw_path is None:
+        raise HTTPException(status_code=404, detail="asset not found")
     target = resolve_within(assets_dir_for(raw_path), asset_path)
     if target is None or not target.is_file():
         raise HTTPException(status_code=404, detail="asset not found")

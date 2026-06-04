@@ -55,13 +55,16 @@ def test_raw_streams_file(client, monkeypatch, tmp_path):
 
     class _Doc:
         owner_user_id = "u1"
+        content_hash = "h1"
+        filename = "src.pdf"
+
+    class _Content:
         mime = "application/pdf"
         raw_path = str(pdf)
-        filename = "src.pdf"
 
     class _Session:
         def get(self, model, _id):
-            return _Doc()
+            return _Doc() if model.__name__ == "Document" else _Content()
         def close(self):
             pass
 
@@ -80,13 +83,16 @@ def test_raw_head_ok_when_exists(client, monkeypatch, tmp_path):
 
     class _Doc:
         owner_user_id = "u1"
+        content_hash = "h1"
+        filename = "src.pdf"
+
+    class _Content:
         mime = "application/pdf"
         raw_path = str(pdf)
-        filename = "src.pdf"
 
     class _Session:
         def get(self, model, _id):
-            return _Doc()
+            return _Doc() if model.__name__ == "Document" else _Content()
         def close(self):
             pass
 
@@ -100,8 +106,7 @@ def test_raw_head_ok_when_exists(client, monkeypatch, tmp_path):
 def test_raw_head_404_when_not_owner(client, monkeypatch):
     class _Doc:
         owner_user_id = "owner-A"
-        mime = "application/pdf"
-        raw_path = "/nope.pdf"
+        content_hash = "h1"
         filename = "x.pdf"
 
     class _Session:
@@ -119,8 +124,7 @@ def test_raw_head_404_when_not_owner(client, monkeypatch):
 def test_raw_404_when_not_owner(client, monkeypatch):
     class _Doc:
         owner_user_id = "owner-A"
-        mime = "application/pdf"
-        raw_path = "/nope.pdf"
+        content_hash = "h1"
         filename = "x.pdf"
 
     class _Session:
