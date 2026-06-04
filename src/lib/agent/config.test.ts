@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { clampAgentCfg, buildSystemPrompt, AGENT_CFG_DEFAULTS } from "@/lib/agent/config";
+import { clampAgentCfg, buildSystemPrompt, buildTemporalPromptContext, AGENT_CFG_DEFAULTS } from "@/lib/agent/config";
 
 test("clampAgentCfg returns defaults for null / non-object", () => {
   expect(clampAgentCfg(null)).toEqual(AGENT_CFG_DEFAULTS);
@@ -52,6 +52,28 @@ test("buildSystemPrompt enforces citations when requireCitations is on", () => {
   const p = buildSystemPrompt({ ...AGENT_CFG_DEFAULTS, requireCitations: true }, "ja");
   expect(p).toContain("必ず");
   expect(p).toContain("[1]");
+});
+
+test("buildSystemPrompt includes current temporal context for relative dates", () => {
+  const p = buildSystemPrompt(
+    AGENT_CFG_DEFAULTS,
+    "zh",
+    new Date("2026-06-04T02:30:00.000Z"),
+    "Asia/Shanghai",
+  );
+  expect(p).toContain("当前日期时间");
+  expect(p).toContain("今天=2026-06-04");
+  expect(p).toContain("昨天=2026-06-03");
+  expect(p).toContain("不要只把相对词作为检索词");
+});
+
+test("buildTemporalPromptContext calculates calendar dates in the specified timezone", () => {
+  const context = buildTemporalPromptContext(new Date("2026-06-03T16:30:00.000Z"), "Asia/Tokyo");
+  expect(context.nowDate).toBe("2026-06-04");
+  expect(context.today).toBe("2026-06-04");
+  expect(context.yesterday).toBe("2026-06-03");
+  expect(context.tomorrow).toBe("2026-06-05");
+  expect(context.nowTime).toBe("01:30:00");
 });
 
 test("buildSystemPrompt relaxes citations when off", () => {

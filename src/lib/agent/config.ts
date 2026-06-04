@@ -3,7 +3,7 @@
  *  "use client" 依存を一切持たない純モジュールにする。 */
 import type { AgentCfg } from "@/lib/types";
 import type { Locale } from "@/i18n/config";
-import { getAgentPrompts } from "@/lib/agent/prompts";
+import { getAgentPrompts, type TemporalPromptContext } from "@/lib/agent/prompts";
 
 export const AGENT_CFG_DEFAULTS: AgentCfg = {
   maxSteps: 12,
@@ -77,9 +77,69 @@ export function clampAgentCfg(raw: unknown): AgentCfg {
 
 /** 設定と言語に応じてエージェントのシステムプロンプトを組み立てる。
  *  プロンプト断片は言語別に prompts.ts が保持する（zh は RAG 専門家視点で最適化）。 */
-export function buildSystemPrompt(cfg: AgentCfg, locale: Locale): string {
+export function buildSystemPrompt(cfg: AgentCfg, locale: Locale, now = new Date(), timeZone = resolveTimeZone()): string {
   const p = getAgentPrompts(locale);
   const citation = cfg.requireCitations ? p.citationRequired : p.citationOptional;
   const unknown = cfg.admitUnknown ? p.unknownAdmit : p.unknownFill;
-  return p.systemIntro + citation + unknown;
+  return p.systemIntro + p.temporalContext(buildTemporalPromptContext(now, timeZone)) + citation + unknown;
+}
+
+export function buildTemporalPromptContext(now: Date, timeZone = resolveTimeZone()): TemporalPromptContext {
+  const today = calendarDateInTimeZone(now, timeZone);
+  const yesterday = addCalendarDays(today, -1);
+  const tomorrow = addCalendarDays(today, 1);
+  return {
+    nowDate: formatCalendarDate(today),
+    nowTime: timeInTimeZone(now, timeZone),
+    today: formatCalendarDate(today),
+    yesterday: formatCalendarDate(yesterday),
+    tomorrow: formatCalendarDate(tomorrow),
+    timeZone,
+  };
+}
+
+function resolveTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function calendarDateInTimeZone(date: Date, timeZone: string): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  return {
+    year: Number(parts.find((p) => p.type === "year")?.value),
+    month: Number(parts.find((p) => p.type === "month")?.value),
+    day: Number(parts.find((p) => p.type === "day")?.value),
+  };
+}
+
+function timeInTimeZone(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  return ["hour", "minute", "second"]
+    .map((type) => parts.find((p) => p.type === type)?.value ?? "00")
+    .join(":");
+}
+
+function addCalendarDays(date: { year: number; month: number; day: number }, days: number): { year: number; month: number; day: number } {
+  const d = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
+
+function formatCalendarDate(date: { year: number; month: number; day: number }): string {
+  const month = String(date.month).padStart(2, "0");
+  const day = String(date.day).padStart(2, "0");
+  return `${date.year}-${month}-${day}`;
 }

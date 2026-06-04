@@ -28,6 +28,14 @@ describe("getAgentPrompts", () => {
       expect(p.fallback.genFailed).toBeTruthy();
       expect(p.toolDescriptions.retrieve).toBeTruthy();
       expect(p.stageLabels.vector_search).toBeTruthy();
+      expect(p.temporalContext({
+        nowDate: "2026-06-04",
+        nowTime: "10:00:00",
+        today: "2026-06-04",
+        yesterday: "2026-06-03",
+        tomorrow: "2026-06-05",
+        timeZone: "Asia/Shanghai",
+      })).toContain("2026-06-03");
     }
   });
   it("buildUserContent: 有附件时按 locale 给出附件提示", () => {

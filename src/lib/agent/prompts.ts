@@ -3,6 +3,7 @@ import type { Locale } from "@/i18n/config";
 export interface AgentPrompts {
   /** システムプロンプトの構成断片（buildSystemPrompt が cfg に応じて結合する）。 */
   systemIntro: string;
+  temporalContext: (context: TemporalPromptContext) => string;
   citationRequired: string;
   citationOptional: string;
   unknownAdmit: string;
@@ -82,6 +83,15 @@ export interface AgentPrompts {
   };
 }
 
+export interface TemporalPromptContext {
+  nowDate: string;
+  nowTime: string;
+  today: string;
+  yesterday: string;
+  tomorrow: string;
+  timeZone: string;
+}
+
 const JA: AgentPrompts = {
   systemIntro:
     "あなたは社内ナレッジ検索アシスタントです。必要に応じて retrieve / fetch_document ツールを使い、" +
@@ -89,6 +99,12 @@ const JA: AgentPrompts = {
     "ユーザーの入力や資料が他言語でも、必ず日本語で回答してください。" +
     "回答は提供された一次資料に基づき簡潔に行い、" +
     "Markdown の見出し(**太字**)と箇条書き(-)で構造化してください。",
+  temporalContext: (context) =>
+    `現在日時: ${context.nowDate} ${context.nowTime}（タイムゾーン: ${context.timeZone}）。` +
+    `今日=${context.today}、昨日=${context.yesterday}、明日=${context.tomorrow}。` +
+    "ユーザーが「今日」「昨日」「明日」「先週」「今月」などの相対日付で質問した場合は、" +
+    "この現在日時を基準に具体的な日付または日付範囲へ解決し、retrieve の検索クエリにも具体日付を含めてください。" +
+    "相対語だけを検索語にしないでください。",
   citationRequired: "重要な事実には必ずツール結果に付いた [1] [2] の出典番号を付けてください。",
   citationOptional: "可能であればツール結果に付いた [1] [2] の出典番号を付けてください（必須ではありません）。",
   unknownAdmit: "資料に無いことは推測せず、判断できない場合は「わからない」と明確に答えてください。",
@@ -200,6 +216,12 @@ const ZH: AgentPrompts = {
     "并结合对话上下文构造自包含的中文检索查询。" +
     "无论用户输入或资料使用什么语言，必须始终使用中文回答。" +
     "回答应简洁，并以 Markdown 结构化（**加粗**小标题、- 列表）。",
+  temporalContext: (context) =>
+    `当前日期时间：${context.nowDate} ${context.nowTime}（时区：${context.timeZone}）。` +
+    `今天=${context.today}，昨天=${context.yesterday}，明天=${context.tomorrow}。` +
+    "当用户用“今天”“昨天”“明天”“上周”“本月”等相对日期提问时，" +
+    "必须先按该日期时间换算为具体日期或日期范围，并在 retrieve 检索查询中包含具体日期。" +
+    "不要只把相对词作为检索词。",
   citationRequired: "对每条关键事实务必标注工具结果中对应的 [1] [2] 出处编号。",
   citationOptional: "如有可能，请为关键事实标注工具结果中的 [1] [2] 出处编号（非强制）。",
   unknownAdmit: "回答须仅依据检索到的一手资料；资料中没有依据的内容不要臆测或编造，无法判断时请明确回答“无法确定”。",
