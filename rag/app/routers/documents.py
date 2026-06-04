@@ -15,7 +15,7 @@ from app.documents_service import (
     is_convertible, list_documents, find_span_pdf, record_workspace_activity,
     resolve_within, select_chunks, workspace_stats,
 )
-from app.models import Chunk, Document, IngestJob
+from app.models import Chunk, Content, Document, IngestJob
 from app.queue import redis_settings
 from app.vectorstore.qdrant import QdrantStore
 from app.schemas import (
@@ -67,25 +67,26 @@ def _upload_dir() -> Path:
     return Path(settings.upload_dir)
 
 
-async def enqueue_ingest(document_id: str, job_id: str) -> None:
+async def enqueue_ingest(content_hash: str, job_id: str) -> None:
     pool = await create_pool(redis_settings())
     try:
-        await pool.enqueue_job("ingest_document", document_id, job_id, _job_id=job_id)
+        await pool.enqueue_job("ingest_document", content_hash, job_id, _job_id=job_id)
     finally:
         await pool.aclose()
 
 
-def _mark_enqueue_failed(document_id: str, job_id: str, reason: str) -> None:
-    """enqueue 失敗時、新規セッションで job/document を error にする。"""
+def _mark_enqueue_failed(content_hash: str, job_id: str, reason: str) -> None:
+    """enqueue 失敗時、新規セッションで job/content を error にする。"""
     session = SessionLocal()
     try:
         job = session.get(IngestJob, job_id)
-        doc = session.get(Document, document_id)
+        content = session.get(Content, content_hash)
         if job:
             job.status = "error"
             job.error = reason
-        if doc:
-            doc.status = "error"
+        if content:
+            content.status = "error"
+            content.error = reason
         session.commit()
     finally:
         session.close()
@@ -96,53 +97,90 @@ def _mark_enqueue_failed(document_id: str, job_id: str, reason: str) -> None:
 async def create_document(file: UploadFile = File(...), owner_user_id: str = Form(...)):
     upload_dir = _upload_dir()
     upload_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = Path(file.filename or "file").name
-    raw_path = upload_dir / f"{uuid.uuid4().hex}_{safe_name}"
+    filename = file.filename or "file"
     data = await file.read()
     content_hash = hashlib.sha256(data).hexdigest()
-    raw_path.write_bytes(data)
+    ext = Path(filename).suffix
+    mime = file.content_type or "application/octet-stream"
 
+    enqueue_job_id: str | None = None  # 新規解析が必要な時だけセット
     try:
         session = SessionLocal()
         try:
-            # 同一ユーザー・同一内容で error 以外が既にあれば重複として弾く。
-            existing = (
-                session.query(Document)
-                .filter(Document.owner_user_id == owner_user_id,
-                        Document.content_hash == content_hash,
-                        Document.status != "error")
-                .first()
-            )
-            if existing:
+            # contents 行をロックして dedup（削除GCとの直列化）。
+            content = (session.query(Content)
+                       .filter(Content.content_hash == content_hash)
+                       .with_for_update()
+                       .one_or_none())
+
+            if content is None:
+                # 新規実体: 原本を hash 命名で 1 個だけ保存し、解析ジョブを作る。
+                raw_path = upload_dir / f"{content_hash}{ext}"
+                raw_path.write_bytes(data)
+                content = Content(content_hash=content_hash, mime=mime, size=len(data),
+                                  raw_path=str(raw_path), status="queued", ref_count=0)
+                session.add(content)
+                try:
+                    session.flush()
+                except IntegrityError:
+                    # 別リクエストが同時に同一実体を作成。原本を捨て既存を参照する。
+                    session.rollback()
+                    raw_path.unlink(missing_ok=True)
+                    content = (session.query(Content)
+                               .filter(Content.content_hash == content_hash)
+                               .with_for_update().one())
+                else:
+                    job = IngestJob(content_hash=content_hash, status="queued")
+                    session.add(job)
+                    session.flush()
+                    enqueue_job_id = job.id
+            elif content.status == "error":
+                # 既存実体が解析失敗のまま: 再解析ジョブを作って queued に戻す。
+                content.status = "queued"
+                content.error = None
+                job = IngestJob(content_hash=content_hash, status="queued")
+                session.add(job)
+                session.flush()
+                enqueue_job_id = job.id
+
+            # 同一ユーザーの二重参照は 409。
+            existing_doc = (session.query(Document)
+                            .filter(Document.owner_user_id == owner_user_id,
+                                    Document.content_hash == content_hash)
+                            .one_or_none())
+            if existing_doc:
                 raise HTTPException(status_code=409, detail="duplicate document")
-            doc = Document(owner_user_id=owner_user_id, filename=file.filename or "file",
-                           mime=file.content_type or "application/octet-stream",
-                           size=raw_path.stat().st_size, raw_path=str(raw_path),
-                           content_hash=content_hash, status="queued")
+
+            doc = Document(owner_user_id=owner_user_id, content_hash=content_hash,
+                           filename=filename)
             session.add(doc)
+            content.ref_count = content.ref_count + 1
+
+            if enqueue_job_id is not None:
+                job_id = enqueue_job_id
+            else:
+                latest = (session.query(IngestJob)
+                          .filter(IngestJob.content_hash == content_hash)
+                          .order_by(IngestJob.created_at.desc()).first())
+                job_id = latest.id if latest else None
+
             session.flush()
-            job = IngestJob(document_id=doc.id, owner_user_id=owner_user_id, status="queued")
-            session.add(job)
             session.commit()
-            result = IngestStarted(document_id=doc.id, job_id=job.id)
+            result = IngestStarted(document_id=doc.id, job_id=job_id or "")
         finally:
             session.close()
     except HTTPException:
-        raw_path.unlink(missing_ok=True)
         raise
     except IntegrityError:
-        # 同時二重アップロードの競合: 部分ユニークindex違反を 409 に正規化。
-        raw_path.unlink(missing_ok=True)
+        # 同時二重アップロードの競合: UNIQUE 違反を 409 に正規化。
         raise HTTPException(status_code=409, detail="duplicate document")
-    except Exception:
-        raw_path.unlink(missing_ok=True)
-        raise
 
-    try:
-        await enqueue_ingest(result.document_id, result.job_id)
-    except Exception as exc:  # noqa: BLE001
-        _mark_enqueue_failed(result.document_id, result.job_id, f"enqueue failed: {exc}")
-        raise HTTPException(status_code=502, detail="ingest enqueue failed") from exc
+    if enqueue_job_id is not None:
+        try:
+            await enqueue_ingest(content_hash, result.job_id)
+        except Exception as exc:  # noqa: BLE001
+            _mark_enqueue_failed(content_hash, result.job_id, f"enqueue failed: {exc}")
+            raise HTTPException(status_code=502, detail="ingest enqueue failed") from exc
 
     return result
 

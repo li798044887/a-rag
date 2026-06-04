@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.db import SessionLocal
-from app.models import Chunk, Document, IngestJob
+from app.models import Chunk, Content, Document, IngestJob
 from app.schemas import JobStatus
 from app.security import require_internal_token
 
@@ -14,14 +14,24 @@ def get_job(job_id: str, owner_user_id: str | None = None):
     session = SessionLocal()
     try:
         job = session.get(IngestJob, job_id)
-        # owner_user_id が渡された場合は所有者一致を強制（web 経由の IDOR を防ぐ）。
-        if not job or (owner_user_id is not None and job.owner_user_id != owner_user_id):
+        if not job:
             raise HTTPException(status_code=404, detail="job not found")
-        doc = session.get(Document, job.document_id)
-        chunks = session.query(Chunk).filter_by(document_id=job.document_id).count()
+        content_hash = job.content_hash
+        # owner 指定時は library entry 所有を強制（IDOR 防止）。
+        if owner_user_id is not None:
+            doc = (session.query(Document)
+                   .filter_by(owner_user_id=owner_user_id, content_hash=content_hash)
+                   .one_or_none())
+            if doc is None:
+                raise HTTPException(status_code=404, detail="job not found")
+        else:
+            doc = session.query(Document).filter_by(content_hash=content_hash).first()
+        content = session.get(Content, content_hash)
+        chunks = session.query(Chunk).filter_by(content_hash=content_hash).count()
         return JobStatus(
-            document_id=job.document_id, status=job.status, progress=job.progress,
-            stage_detail=job.stage_detail, page_count=doc.page_count if doc else None,
+            document_id=doc.id if doc else content_hash, status=job.status,
+            progress=job.progress, stage_detail=job.stage_detail,
+            page_count=content.page_count if content else None,
             chunks=chunks, error=job.error,
         )
     finally:
