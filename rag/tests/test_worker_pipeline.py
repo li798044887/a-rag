@@ -121,8 +121,9 @@ def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path):
         )
 
     session = SessionLocal()
+    owner = "u_" + uuid.uuid4().hex
     h = "h_" + uuid.uuid4().hex
-    content, _, job = _mk(session, "u1", h, str(raw))
+    content, _, job = _mk(session, owner, h, str(raw))
 
     emb = RecordingEmbedder(dim=8)
     coll = "test_ingest_img_" + uuid.uuid4().hex[:8]
@@ -138,13 +139,14 @@ def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path):
     copied = Path(str(raw.with_suffix("")) + "_assets") / "images" / "a.png"
     assert copied.is_file()
 
-    _cleanup(session, store, h)
+    _cleanup(session, store, h, owner)
 
 
 async def test_ingest_document_marks_error_when_model_setup_fails(monkeypatch):
     session = SessionLocal()
+    owner = "u_" + uuid.uuid4().hex
     h = "h_" + uuid.uuid4().hex
-    content, _, job = _mk(session, "u1", h, "/tmp/x.pdf")
+    content, _, job = _mk(session, owner, h, "/tmp/x.pdf")
     job_id = job.id
     session.close()
 
@@ -163,6 +165,7 @@ async def test_ingest_document_marks_error_when_model_setup_fails(monkeypatch):
         assert j.status == "error"
         assert "model download failed" in (j.error or "")
         assert c.status == "error"
+        assert "model download failed" in (c.error or "")
     finally:
         check.query(IngestJob).filter_by(content_hash=h).delete()
         check.query(Document).filter_by(content_hash=h).delete()
