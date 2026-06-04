@@ -33,11 +33,13 @@ interface VerifiedClaim {
   reason?: string;
 }
 
+// strict structured outputs（OpenAI 互換）では全プロパティを required にする必要があるため、
+// 省略可フィールドは optional/default ではなく nullable で表現する。
 const VerifiedClaimSchema = z.object({
   text: z.string(),
-  citedNums: z.array(z.number().int()).default([]),
+  citedNums: z.array(z.number().int()),
   verdict: z.enum(["supported", "unsupported", "not_a_claim"]),
-  reason: z.string().optional(),
+  reason: z.string().nullable(),
 });
 
 const VerifyOutputSchema = z.object({
