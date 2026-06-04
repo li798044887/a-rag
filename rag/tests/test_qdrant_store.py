@@ -68,7 +68,9 @@ def test_dense_and_sparse_search_scope_to_content_subset():
     ha, hb = "h_" + uuid.uuid4().hex, "h_" + uuid.uuid4().hex
     store.upsert([_split_row(e, "添付された設計メモ", content_hash=ha),
                   _split_row(e, "別の社内資料", content_hash=hb)])
-    qv = e.embed(["設計メモ"])[0]
+    # StubEmbedder のスパースは文字列全体ハッシュ由来で部分一致では指標が重ならない。
+    # スコープ絞り込みの検証が目的なので保存テキストと一致させて確実にヒットさせる。
+    qv = e.embed(["添付された設計メモ"])[0]
 
     dense = store.dense_search(qv.dense, [ha], limit=10)
     sparse = store.sparse_search(qv.sparse, [ha], limit=10)
