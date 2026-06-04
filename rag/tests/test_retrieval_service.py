@@ -93,3 +93,33 @@ def test_retrieve_excludes_non_referencing_user():
         session.query(Content).filter_by(content_hash=h).delete()
         session.commit()
         session.close()
+
+
+def test_retrieve_scopes_to_document_ids():
+    """document_ids 指定時は、その owner の指定 library entry のみに絞り込まれる。"""
+    session = SessionLocal()
+    store = QdrantStore(collection="test_ret_" + uuid.uuid4().hex[:8], dim=8)
+    store.ensure_collection()
+    owner = "u_" + uuid.uuid4().hex
+    ha, hb = "h_" + uuid.uuid4().hex, "h_" + uuid.uuid4().hex
+    text_a, text_b = "売上は増加しました。", "費用は減少しました。"
+    try:
+        da = _seed_indexed(session, store, owner, ha, "a.pdf", text_a)
+        db = _seed_indexed(session, store, owner, hb, "b.pdf", text_b)
+        emb = StubEmbedder(dim=8)
+        # da だけにスコープ → b.pdf は返らない
+        r = retrieve(session, store, emb, IdentityReranker(),
+                     query=text_a, owner_user_id=owner, top_k=5, candidate_k=10,
+                     document_ids=[da])
+        assert r, "スコープ内の文書はヒットすること"
+        assert all(c.document_id == da for c in r)
+        assert all(c.document_title == "a.pdf" for c in r)
+        assert db not in {c.document_id for c in r}
+    finally:
+        store.drop()
+        for h in (ha, hb):
+            session.query(Chunk).filter_by(content_hash=h).delete()
+            session.query(Document).filter_by(content_hash=h).delete()
+            session.query(Content).filter_by(content_hash=h).delete()
+        session.commit()
+        session.close()
