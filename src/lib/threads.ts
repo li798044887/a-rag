@@ -63,7 +63,7 @@ export async function getThreadDetail(threadId: string, userId: string): Promise
     .where(eq(messages.threadId, threadId))
     .orderBy(desc(messages.createdAt)).limit(1);
   if (!msg) {
-    return { completed: { query: t.title, answerText: "", tokens: 0, durationMs: 0 },
+    return { completed: { query: t.title, answerText: "", tokens: 0, durationMs: 0, createdAt: t.createdAt.toISOString() },
              sources: [], citationMap: {}, steps: [] };
   }
 
@@ -73,7 +73,7 @@ export async function getThreadDetail(threadId: string, userId: string): Promise
   for (const c of cites) citationMap[c.ordinal] = { sourceId: c.documentId, sectionId: c.sectionId };
 
   return {
-    completed: { query: msg.query, answerText: msg.answerText, tokens: msg.tokens, durationMs: msg.durationMs },
+    completed: { query: msg.query, answerText: msg.answerText, tokens: msg.tokens, durationMs: msg.durationMs, createdAt: msg.createdAt.toISOString() },
     sources,
     citationMap,
     steps: msg.steps as ToolCall[],
@@ -90,7 +90,7 @@ export async function getThreadMessages(threadId: string, userId: string): Promi
     .where(eq(messages.threadId, threadId))
     .orderBy(messages.createdAt);
   if (msgs.length === 0) {
-    return [{ completed: { query: t.title, answerText: "", tokens: 0, durationMs: 0 },
+    return [{ completed: { query: t.title, answerText: "", tokens: 0, durationMs: 0, createdAt: t.createdAt.toISOString() },
               sources: [], citationMap: {}, steps: [] }];
   }
 
@@ -103,7 +103,7 @@ export async function getThreadMessages(threadId: string, userId: string): Promi
     const citationMap: CitationMap = {};
     for (const c of cites) citationMap[c.ordinal] = { sourceId: c.documentId, sectionId: c.sectionId };
     out.push({
-      completed: { query: msg.query, answerText: msg.answerText, tokens: msg.tokens, durationMs: msg.durationMs },
+      completed: { query: msg.query, answerText: msg.answerText, tokens: msg.tokens, durationMs: msg.durationMs, createdAt: msg.createdAt.toISOString() },
       sources, citationMap, steps: msg.steps as ToolCall[],
     });
   }

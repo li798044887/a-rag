@@ -6,13 +6,27 @@ import { AnswerFooter, CancelledNotice } from "@/components/chat/answer-footer";
 import { UserAttachments } from "@/components/uploads/uploads";
 import type { CitationStyle, StagedFile, Turn, ToolView } from "@/lib/types";
 import { useT } from "@/i18n/context";
+import { dateSeparator, formatTurnTimestamp, sameLocalDay } from "@/lib/datetime";
 
-export function UserMessage({ text }: { text: string }) {
+export function UserMessage({ text, time }: { text: string; time?: React.ReactNode }) {
   return (
-    <div className="flex justify-end gap-3">
-      <div className="max-w-[80%] rounded-[16px_16px_4px_16px] bg-bubble-user px-4 py-3 text-[14.5px] leading-[1.55] text-fg [overflow-wrap:anywhere] max-md:max-w-[88%] max-md:rounded-[14px_14px_4px_14px] max-md:px-3.5 max-md:py-[11px] max-md:text-[14px]">
+    <div className="flex items-end justify-end gap-2">
+      {/* 吹き出しを peer にし、ホバー時だけ時刻（order-first で左側）を出す。 */}
+      <div className="peer max-w-[80%] rounded-[16px_16px_4px_16px] bg-bubble-user px-4 py-3 text-[14.5px] leading-[1.55] text-fg [overflow-wrap:anywhere] max-md:max-w-[88%] max-md:rounded-[14px_14px_4px_14px] max-md:px-3.5 max-md:py-[11px] max-md:text-[14px]">
         {text}
       </div>
+      {time}
+    </div>
+  );
+}
+
+/** ターン間の日付セパレータ（今日/昨日/月日）。 */
+function DateSeparator({ label }: { label: string }) {
+  return (
+    <div className="my-1 flex items-center gap-3 text-[11px] text-muted max-md:my-0">
+      <span className="h-px flex-1 bg-divider" />
+      <span className="shrink-0">{label}</span>
+      <span className="h-px flex-1 bg-divider" />
     </div>
   );
 }
@@ -92,14 +106,32 @@ export function Transcript({
   isLiveLastTurn: boolean;
 }) {
   const { t } = useT();
+  const now = new Date();
   return (
     <>
       {turns.map((turn, idx) => {
         const isLast = idx === turns.length - 1;
         const running = turn.status === "running";
+        // 先頭、または前ターンと暦日が変わったら日付セパレータを挿入。
+        const prev = turns[idx - 1];
+        const showSeparator = !!turn.createdAt &&
+          (idx === 0 || !prev?.createdAt || !sameLocalDay(new Date(prev.createdAt), new Date(turn.createdAt)));
+        const sentTime = turn.createdAt ? formatTurnTimestamp(turn.createdAt) : "";
         return (
           <div key={idx} data-turn={idx} className="flex flex-col gap-6 max-md:gap-[18px]">
-            <UserMessage text={turn.query} />
+            {showSeparator && <DateSeparator label={dateSeparator(turn.createdAt!, now, { today: t.chat.dateToday, yesterday: t.chat.dateYesterday })} />}
+            <UserMessage
+              text={turn.query}
+              time={sentTime ? (
+                <time
+                  dateTime={turn.createdAt}
+                  aria-label={t.chat.sentAt.replace("{time}", sentTime)}
+                  className="order-first shrink-0 pb-1 text-[11px] text-muted opacity-0 transition-opacity duration-100 peer-hover:opacity-100"
+                >
+                  {sentTime}
+                </time>
+              ) : undefined}
+            />
             <AssistantMessage>
               {isLast && isLiveLastTurn && liveAttachments.length > 0 && <UserAttachments files={liveAttachments} />}
               {running && turn.steps.length === 0 && (

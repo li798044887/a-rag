@@ -47,6 +47,13 @@ const doneTurn: Turn = {
   durationMs: 4900,
   status: "done",
   attachments: [],
+  createdAt: new Date().toISOString(),
+};
+
+const daysAgoIso = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
 };
 
 /** 1ターン全体（質問 → エージェント活動 → 回答 → フッター）。 */
@@ -54,6 +61,32 @@ export const FullTurn: Story = {
   render: () => (
     <Transcript
       turns={[doneTurn]}
+      toolView="card"
+      expandedSteps={{}}
+      onToggleStep={fn()}
+      onCite={fn()}
+      citationStyle="numbered"
+      onCopy={fn()}
+      onRegenerate={fn()}
+      onOpenSources={fn()}
+      onFeedback={fn()}
+      feedback={{}}
+      activeCiteTurn={-1}
+      rightPanelOpen={false}
+      liveAttachments={[]}
+      isLiveLastTurn={false}
+    />
+  ),
+};
+
+/** 複数日にまたがる会話。日付セパレータ（昨日／今日）とホバー時刻を確認できる。 */
+export const MultiDayTurns: Story = {
+  render: () => (
+    <Transcript
+      turns={[
+        { ...doneTurn, query: "昨日の議事録の要点は？", createdAt: daysAgoIso(1) },
+        { ...doneTurn, query: "その続きで、今日の対応方針を整理して", createdAt: daysAgoIso(0) },
+      ]}
       toolView="card"
       expandedSteps={{}}
       onToggleStep={fn()}

@@ -404,14 +404,14 @@ export function Workspace() {
       // APIからスレッド詳細を取得して履歴を復元
       fetch(`/api/threads/${id}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((data: { turns: Turn[] | { completed: { query: string; answerText: string; tokens: number; durationMs: number }; sources: Source[]; citationMap: CitationMap; steps: ToolCall[] }[] } | null) => {
+        .then((data: { turns: Turn[] | { completed: { query: string; answerText: string; tokens: number; durationMs: number; createdAt?: string }; sources: Source[]; citationMap: CitationMap; steps: ToolCall[] }[] } | null) => {
           if (data && data.turns) {
             const loaded = data.turns.map((d) => ("answer" in d ? d as Turn : {
               query: d.completed.query, steps: (d.steps ?? []).map((s) => ({ ...s, status: "done" as const })),
               answer: d.completed.answerText, streaming: false, citationMap: d.citationMap,
               sourceIds: d.sources.map((s) => s.id), sources: d.sources,
               tokens: d.completed.tokens, durationMs: d.completed.durationMs,
-              status: "done" as const, attachments: [],
+              status: "done" as const, attachments: [], createdAt: d.completed.createdAt,
             }));
             setUserAttachments([]);
             agent.loadCompleted(id, loaded);

@@ -14,6 +14,9 @@ export const chat: typeof zhChat = {
 
   // messages
   thinking: "考え中…",
+  dateToday: "今日",
+  dateYesterday: "昨日",
+  sentAt: "{time} に送信",
 
   // agent-activity
   agentRunning: "エージェント実行中…",

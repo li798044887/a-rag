@@ -12,6 +12,9 @@ export const chat = {
 
   // messages
   thinking: "思考中…",
+  dateToday: "今天",
+  dateYesterday: "昨天",
+  sentAt: "发送于 {time}",
 
   // agent-activity
   agentRunning: "智能体执行中…",

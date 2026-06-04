@@ -82,6 +82,8 @@ export interface CompletedThread {
   answerText: string;
   tokens: number;
   durationMs: number;
+  /** メッセージ作成時刻（ISO 文字列）。表示の時刻・日付セパレータに使う。 */
+  createdAt?: string;
 }
 
 /** 1ターン分（ユーザー質問 + エージェント実行 + 回答）。 */
@@ -99,6 +101,8 @@ export interface Turn {
   attachments: string[];
   /** 添付の documentId（添付ありターンの retrieve スコープ・再生成再利用に使う。in-memory のみ）。 */
   attachmentDocIds?: string[];
+  /** ターン作成時刻（ISO 文字列）。履歴は DB 値、ライブは送信時刻。表示用。 */
+  createdAt?: string;
 }
 
 // ── Models / prompts / scope ────────────────────────────────────────────────

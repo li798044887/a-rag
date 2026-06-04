@@ -23,6 +23,7 @@ export function emptyTurn(query: string, attachments: string[], attachmentDocIds
     query, steps: [], answer: "", streaming: false, citationMap: {},
     sourceIds: [], sources: [], tokens: 0, durationMs: 0,
     status: "running", attachments, attachmentDocIds,
+    createdAt: new Date().toISOString(),
   };
 }
 
