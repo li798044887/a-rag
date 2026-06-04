@@ -87,6 +87,19 @@ DATABASE_URL=postgres://arag:arag@localhost:5433/arag pnpm drizzle-kit migrate  
 docker compose exec -T rag uv run alembic upgrade head
 ```
 
+### 横断共有への移行リセット（既存データ破棄）
+
+コンテンツアドレス方式（`contents`/`documents` 分離）へ移行する際は、既存の重複データを
+移行せず破棄する。マイグレーション適用に加えて Qdrant と原本ストレージもクリアする。
+
+```bash
+docker compose exec -T rag uv run alembic upgrade head   # 旧 documents/chunks/ingest_jobs を破棄し再構築
+# Qdrant コレクション削除（worker が次回 ensure_collection で payload index 付き再作成）
+docker compose exec -T rag python -c "from app.vectorstore.qdrant import QdrantStore; QdrantStore().drop()"
+# 原本・派生物のアップロード領域をクリア
+docker compose exec -T rag sh -c 'rm -rf /data/uploads/*'
+```
+
 ### テストの前提
 
 - 単体テストのうち DB 統合系（`src/lib/users.test.ts` / `threads.test.ts` / `src/app/api/auth/auth.test.ts` 等）は **Postgres 稼働 + マイグレーション適用済み**が前提。スキーマ変更後は migrate しないと `column ... does not exist` で落ちる。

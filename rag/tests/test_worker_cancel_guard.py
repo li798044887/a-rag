@@ -15,4 +15,4 @@ class _BoomStore:
 def test_run_ingest_noop_when_doc_or_job_missing():
     # doc/job が無いとき run_ingest は例外を投げず、処理にも入らず終わる。
     run_ingest(_EmptySession(), _BoomStore(), embedder=None,
-               parse_fn=None, document_id="gone", job_id="gone")
+               parse_fn=None, content_hash="gone", job_id="gone")
