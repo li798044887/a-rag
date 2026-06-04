@@ -292,7 +292,7 @@ test("未裏付けがあれば訂正本文が最終回答になる", async () =>
   // verify ステップは未裏付け主張の一覧を、revise ステップは訂正前→訂正後を保持する。
   const verifyDone = events.find((e) => e.type === "step" && e.step.name === "verify" && e.step.status === "done");
   expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "deepseek-chat" });
-  expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({ claims: ["x"] });
+  expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({ claims: ["x"], checkableClaims: 1 });
   expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({
     inputTokens: 12,
     outputTokens: 4,

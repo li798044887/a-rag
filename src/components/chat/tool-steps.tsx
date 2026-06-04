@@ -393,12 +393,13 @@ function ToolOutputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
 
   if (step.name === "verify") {
     const claims = Array.isArray(output.claims) ? (output.claims as string[]) : [];
+    const message = output.checkableClaims === 0 ? t.chat.noCheckableClaims : t.chat.allGrounded;
     if (claims.length === 0) {
       return (
         <div className="flex flex-col gap-2">
           <KeyValueGrid rows={tokenRows(output, t)} />
           <div className="rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5 text-[12px] leading-[1.55] text-fg-2">
-            {t.chat.allGrounded}
+            {message}
           </div>
         </div>
       );

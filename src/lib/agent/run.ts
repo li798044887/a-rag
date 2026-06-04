@@ -189,8 +189,8 @@ async function pump(
         id: "verify", name: "verify" as ToolName, label: prompts.verify.label,
         status: "done", durationMs: Date.now() - vStart,
         input: verifyInput,
-        output: { unsupported: v.unsupported.length, claims: v.unsupported, ...usageOutput(v.verifyUsage) },
-        summary: prompts.verify.done(v.unsupported.length),
+        output: { unsupported: v.unsupported.length, checkableClaims: v.checkableClaims, claims: v.unsupported, ...usageOutput(v.verifyUsage) },
+        summary: prompts.verify.done(v.unsupported.length, v.checkableClaims),
       } });
       if (v.revised) {
         // 訂正ステップには訂正前→訂正後を載せ、差分を確認できるようにする。

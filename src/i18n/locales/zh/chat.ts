@@ -75,6 +75,7 @@ export const chat = {
   sectionUnsupported: "无依据主张",
   sectionRevised: "修订后回答",
   allGrounded: "全部主张均有出处支撑",
+  noCheckableClaims: "没有可校验的事实主张",
   moreItems: "… 其他 {n} 条",
   stepCancelled: "已取消",
 };

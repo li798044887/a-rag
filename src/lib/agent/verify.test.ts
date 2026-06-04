@@ -22,6 +22,7 @@ test("全主張が裏付けられていれば revise しない", async () => {
   });
   const r = await verifyAnswer({ query: "q", answer: "失効します[1]。", sources, model, prompts, maxRevisions: 1 });
   expect(r.unsupported).toEqual([]);
+  expect(r.checkableClaims).toBe(1);
   expect(r.revised).toBeNull();
   expect((r as { verifyUsage?: unknown }).verifyUsage).toMatchObject({ inputTokens: 12, outputTokens: 3, totalTokens: 15 });
   expect((r as { reviseUsage?: unknown }).reviseUsage).toBeNull();
@@ -104,6 +105,26 @@ test("資料不足と追加情報依頼だけの中国語回答は unsupported �
     "如果您能提供具体的公司名称或相关财务数据，我可以尝试更深入地为您查找相关信息。";
   const r = await verifyAnswer({ query: "q", answer, sources, model, prompts: zhPrompts, maxRevisions: 1 });
   expect(r.unsupported).toEqual([]);
+  expect(r.checkableClaims).toBe(0);
+  expect(r.revised).toBeNull();
+  expect(generateText).toHaveBeenCalledTimes(1);
+});
+
+test("中国語の該当記録なし回答は検証対象の主張なしにする", async () => {
+  generateText.mockResolvedValueOnce({
+    output: {
+      claims: [
+        { text: "2025年10月观看的电影", citedNums: [], verdict: "unsupported" },
+      ],
+    },
+  });
+  const zhPrompts = getAgentPrompts("zh");
+  const answer =
+    "关于你在 2025年10月观看的电影，当前资料库中没有相关记录，无法提供具体信息。" +
+    "如果还有其他问题或需要帮助，请随时告诉我。";
+  const r = await verifyAnswer({ query: "q", answer, sources, model, prompts: zhPrompts, maxRevisions: 1 });
+  expect(r.unsupported).toEqual([]);
+  expect(r.checkableClaims).toBe(0);
   expect(r.revised).toBeNull();
   expect(generateText).toHaveBeenCalledTimes(1);
 });

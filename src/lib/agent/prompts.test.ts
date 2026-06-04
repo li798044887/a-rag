@@ -60,6 +60,7 @@ describe("getAgentPrompts", () => {
       expect(p.queryRewrite.system.length).toBeGreaterThan(0);
       expect(p.verify.system.length).toBeGreaterThan(0);
       expect(p.verify.done(0).length).toBeGreaterThan(0);
+      expect(p.verify.done(0, 0).length).toBeGreaterThan(0);
       expect(p.verify.done(2).length).toBeGreaterThan(0);
       expect(p.revise.system.length).toBeGreaterThan(0);
       expect(p.revise.done.length).toBeGreaterThan(0);

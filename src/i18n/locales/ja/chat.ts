@@ -77,6 +77,7 @@ export const chat: typeof zhChat = {
   sectionUnsupported: "未裏付けの主張",
   sectionRevised: "訂正後の回答",
   allGrounded: "全主張が出典で裏付け済み",
+  noCheckableClaims: "検証対象の事実主張はありません",
   moreItems: "… 他 {n} 件",
   stepCancelled: "キャンセルされました",
 };
