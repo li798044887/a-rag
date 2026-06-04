@@ -1,5 +1,35 @@
+import uuid
+
 from app.config import settings
-from app.routers import documents as documents_router
+from app.db import SessionLocal
+from app.models import Content, Document
+
+
+def _seed(owner, filename="f.pdf"):
+    session = SessionLocal()
+    h = "h_" + uuid.uuid4().hex
+    session.add(Content(content_hash=h, mime="application/pdf", size=10,
+                        raw_path=f"/tmp/{h}.pdf", status="ready", ref_count=1))
+    session.flush()
+    doc = Document(owner_user_id=owner, content_hash=h, filename=filename)
+    session.add(doc)
+    session.commit()
+    doc_id = doc.id
+    session.close()
+    return doc_id
+
+
+def _hdr():
+    return {"x-internal-token": settings.rag_internal_token}
+
+
+def _content_hashes(doc_ids):
+    session = SessionLocal()
+    try:
+        return [d.content_hash for d in
+                session.query(Document).filter(Document.id.in_(doc_ids)).all()]
+    finally:
+        session.close()
 
 
 def test_bulk_delete_requires_token(client):
@@ -8,83 +38,44 @@ def test_bulk_delete_requires_token(client):
     assert res.status_code == 401
 
 
-def _install_fakes(monkeypatch, owners):
-    """owners: dict id -> owner_user_id（存在しない id はマップに入れない）。"""
-    state = {"vectors": [], "Chunk": 0, "IngestJob": 0,
-             "docs_deleted": [], "files": [], "activity": 0}
-
-    class _Doc:
-        def __init__(self, doc_id, owner):
-            self.id = doc_id
-            self.owner_user_id = owner
-            self.raw_path = f"/u/{doc_id}.pdf"
-            self.parsed_md_path = None
-
-    class _Query:
-        def __init__(self, model):
-            self.model = model
-
-        def filter(self, *a, **k):
-            return self
-
-        def delete(self):
-            state[self.model.__name__] += 1
-            return 1
-
-    class _Session:
-        def get(self, model, doc_id):
-            owner = owners.get(doc_id)
-            return _Doc(doc_id, owner) if owner is not None else None
-
-        def query(self, model):
-            return _Query(model)
-
-        def delete(self, obj):
-            state["docs_deleted"].append(obj.id)
-
-        def commit(self):
-            pass
-
-        def close(self):
-            pass
-
-    class _Qdrant:
-        def delete_by_document(self, doc_id):
-            state["vectors"].append(doc_id)
-
-    monkeypatch.setattr(documents_router, "SessionLocal", lambda: _Session())
-    monkeypatch.setattr(documents_router, "QdrantStore", lambda *a, **k: _Qdrant())
-    monkeypatch.setattr(documents_router, "cleanup_document_files",
-                        lambda raw, md=None: state["files"].append((raw, md)))
-    monkeypatch.setattr(documents_router, "record_workspace_activity",
-                        lambda session, *, owner_user_id: state.update(activity=state["activity"] + 1))
-    return state
-
-
-def test_bulk_delete_removes_owned_and_reports_missing(client, monkeypatch):
-    # d1,d2 は u1 所有、d3 は不在、d4 は別人所有
-    state = _install_fakes(monkeypatch, {"d1": "u1", "d2": "u1", "d4": "owner-B"})
+def test_bulk_delete_removes_owned_and_reports_missing(client):
+    owner = "u_" + uuid.uuid4().hex
+    other = "u_" + uuid.uuid4().hex
+    d1 = _seed(owner)
+    d2 = _seed(owner)
+    d4 = _seed(other)
+    h1, h2 = _content_hashes([d1, d2])
+    missing = str(uuid.uuid4())  # 不在 id（Document.id は UUID 型）
     res = client.post("/documents/bulk-delete",
-                      headers={"x-internal-token": settings.rag_internal_token},
-                      json={"owner_user_id": "u1",
-                            "document_ids": ["d1", "d2", "d3", "d4"]})
+                      headers=_hdr(),
+                      json={"owner_user_id": owner,
+                            "document_ids": [d1, d2, missing, d4]})
     assert res.status_code == 200
     body = res.json()
-    assert body["deleted"] == ["d1", "d2"]
-    assert body["not_found"] == ["d3", "d4"]
-    assert state["vectors"] == ["d1", "d2"]
-    assert state["Chunk"] == 2
-    assert state["IngestJob"] == 2
-    assert state["docs_deleted"] == ["d1", "d2"]
-    assert state["files"] == [("/u/d1.pdf", None), ("/u/d2.pdf", None)]
-    assert state["activity"] == 1
+    assert body["deleted"] == [d1, d2]
+    assert body["not_found"] == [missing, d4]
+    session = SessionLocal()
+    try:
+        # 各 doc は ref_count=1 だったので、削除で content も GC される。
+        assert session.get(Content, h1) is None
+        assert session.get(Content, h2) is None
+        # 別人所有の d4 は削除されない。
+        assert session.get(Document, d4) is not None
+    finally:
+        # 後始末（d4 とその content）。
+        leftover = session.get(Document, d4)
+        if leftover is not None:
+            h4 = leftover.content_hash
+            session.query(Document).filter_by(content_hash=h4).delete()
+            session.query(Content).filter_by(content_hash=h4).delete()
+            session.commit()
+        session.close()
 
 
-def test_bulk_delete_empty_list_is_noop(client, monkeypatch):
-    state = _install_fakes(monkeypatch, {})
+def test_bulk_delete_empty_list_is_noop(client):
+    owner = "u_" + uuid.uuid4().hex
     res = client.post("/documents/bulk-delete",
-                      headers={"x-internal-token": settings.rag_internal_token},
-                      json={"owner_user_id": "u1", "document_ids": []})
+                      headers=_hdr(),
+                      json={"owner_user_id": owner, "document_ids": []})
     assert res.status_code == 200
     assert res.json() == {"deleted": [], "not_found": []}
-    assert state["activity"] == 0

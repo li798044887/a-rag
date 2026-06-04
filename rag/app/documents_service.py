@@ -101,15 +101,16 @@ def find_span_pdf(raw_path: str) -> Path | None:
     return _find_mineru_pdf(raw_path, "span")
 
 
-def cleanup_document_files(raw_path: str, parsed_md_path: str | None = None) -> None:
-    """文書に紐づく実体（原本・解析MD・_rendered.pdf・_assets・_mineru）を best-effort で削除する。"""
+def cleanup_document_files(raw_path: str | None, parsed_md_path: str | None = None) -> None:
+    """文書に紐づく実体（原本・解析MD・_rendered.pdf・_assets・_mineru）を best-effort で削除する。
+    参照カウント GC で実体が残る場合は raw_path=None で呼ばれるため、その時は何もしない。"""
     for f in (raw_path, parsed_md_path):
         if f:
             Path(f).unlink(missing_ok=True)
     if raw_path:
         rendered_pdf_for(raw_path).unlink(missing_ok=True)
-    for d in (assets_dir_for(raw_path), mineru_dir_for(raw_path)):
-        shutil.rmtree(d, ignore_errors=True)
+        for d in (assets_dir_for(raw_path), mineru_dir_for(raw_path)):
+            shutil.rmtree(d, ignore_errors=True)
 
 
 def resolve_within(base: str, rel: str) -> Path | None:

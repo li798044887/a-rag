@@ -192,53 +192,88 @@ async def retry_job(job_id: str, owner_user_id: str | None = None):
     session = SessionLocal()
     try:
         job = session.get(IngestJob, job_id)
-        # owner_user_id が渡された場合は所有者一致を強制（web 経由の IDOR を防ぐ）。
-        if not job or (owner_user_id is not None and job.owner_user_id != owner_user_id):
+        if not job:
             raise HTTPException(status_code=404, detail="job not found")
+        content_hash = job.content_hash
+        # owner 指定時は library entry 所有を強制（IDOR 防止）。
+        doc = None
+        if owner_user_id is not None:
+            doc = (session.query(Document)
+                   .filter_by(owner_user_id=owner_user_id, content_hash=content_hash)
+                   .one_or_none())
+            if doc is None:
+                raise HTTPException(status_code=404, detail="job not found")
         if job.status not in ("ready", "error"):
             raise HTTPException(status_code=409, detail=f"job is {job.status}, cannot retry")
         job.status = "queued"; job.progress = 0; job.error = None; job.stage_detail = ""
-        doc = session.get(Document, job.document_id)
-        if doc:
-            doc.status = "queued"
+        content = session.get(Content, content_hash)
+        if content:
+            content.status = "queued"
+            content.error = None
+        # 結果に返す document_id は要求 owner の参照（無ければ任意の参照）。
+        if doc is None:
+            doc = session.query(Document).filter_by(content_hash=content_hash).first()
         session.commit()
-        result = IngestStarted(document_id=job.document_id, job_id=job.id)
+        result = IngestStarted(document_id=doc.id if doc else content_hash, job_id=job.id)
     finally:
         session.close()
-    await enqueue_ingest(result.document_id, result.job_id)
+    await enqueue_ingest(content_hash, result.job_id)
     return result
 
 
 @router.post("/jobs/{job_id}/cancel", status_code=204,
              dependencies=[Depends(require_internal_token)])
 def cancel_job(job_id: str, owner_user_id: str | None = None):
-    """待機中(queued)ジョブの取り消し。行と生ファイルを削除する。
-    queued 以外は 409。Worker 着手との競合は status 条件付き DELETE で原子化。"""
+    """待機中(queued)実体への参照取り消し。owner の参照を 1 つ落とし、
+    ref_count が 0 になった時だけ queued ジョブ・実体・生ファイルを削除する。
+    content が queued 以外なら 409。Worker 着手との競合は status 条件付き DELETE で原子化。"""
     session = SessionLocal()
     raw_path: str | None = None
     parsed_md_path: str | None = None
     try:
         job = session.get(IngestJob, job_id)
-        if not job or (owner_user_id is not None and job.owner_user_id != owner_user_id):
+        if not job:
             raise HTTPException(status_code=404, detail="job not found")
-        if job.status != "queued":
-            raise HTTPException(status_code=409, detail=f"job is {job.status}, cannot cancel")
-        doc = session.get(Document, job.document_id)
-        raw_path = doc.raw_path if doc else None
-        parsed_md_path = doc.parsed_md_path if doc else None
-        # status='queued' の行だけを原子的に削除。0件なら Worker が着手済みなので 409。
-        deleted = (
-            session.query(IngestJob)
-            .filter(IngestJob.id == job_id, IngestJob.status == "queued")
-            .delete()
-        )
-        if not deleted:
-            session.rollback()
-            raise HTTPException(status_code=409, detail="job is no longer queued, cannot cancel")
-        if doc:
-            QdrantStore().delete_by_document(doc.id)
-            session.query(Chunk).filter(Chunk.document_id == doc.id).delete()
+        content_hash = job.content_hash
+
+        doc = None
+        if owner_user_id is not None:
+            doc = (session.query(Document)
+                   .filter_by(owner_user_id=owner_user_id, content_hash=content_hash)
+                   .one_or_none())
+            if doc is None:
+                raise HTTPException(status_code=404, detail="job not found")
+
+        content = (session.query(Content)
+                   .filter_by(content_hash=content_hash)
+                   .with_for_update().one_or_none())
+        if content is None or content.status != "queued":
+            cur = content.status if content else "gone"
+            raise HTTPException(status_code=409, detail=f"job is {cur}, cannot cancel")
+
+        # 参照を落とす。owner 指定なし（管理操作）は全参照を落として完全 GC。
+        if doc is not None:
             session.delete(doc)
+            content.ref_count = max(0, content.ref_count - 1)
+        else:
+            session.query(Document).filter_by(content_hash=content_hash).delete()
+            content.ref_count = 0
+        session.flush()
+
+        if content.ref_count == 0:
+            # status='queued' の行だけを原子的に削除。0件なら Worker 着手済みなので 409。
+            deleted = (session.query(IngestJob)
+                       .filter(IngestJob.id == job_id, IngestJob.status == "queued")
+                       .delete())
+            if not deleted:
+                session.rollback()
+                raise HTTPException(status_code=409,
+                                    detail="job is no longer queued, cannot cancel")
+            raw_path, parsed_md_path = content.raw_path, content.parsed_md_path
+            QdrantStore().delete_by_content(content_hash)
+            session.query(Chunk).filter_by(content_hash=content_hash).delete()
+            session.query(IngestJob).filter_by(content_hash=content_hash).delete()
+            session.delete(content)
         session.commit()
     finally:
         session.close()
@@ -247,14 +282,27 @@ def cancel_job(job_id: str, owner_user_id: str | None = None):
 
 
 def _delete_one(session: Session, doc: Document) -> tuple[str | None, str | None]:
-    """1文書の Qdrant ベクトル/chunks/job/行を削除し、cleanup 対象の生ファイルパスを返す。
-    commit と cleanup_document_files は呼び出し側で行う。"""
-    raw_path, parsed_md_path = doc.raw_path, doc.parsed_md_path
-    QdrantStore().delete_by_document(doc.id)
-    session.query(Chunk).filter(Chunk.document_id == doc.id).delete()
-    session.query(IngestJob).filter(IngestJob.document_id == doc.id).delete()
+    """library entry を 1 つ削除して ref_count を減らす。0 になった時のみ
+    Qdrant ベクトル・chunks・ingest_jobs・contents を削除し、cleanup 対象の
+    生ファイルパスを返す。0 にならなければ (None, None)。commit と
+    cleanup_document_files は呼び出し側で行う。"""
+    content_hash = doc.content_hash
     session.delete(doc)
-    return raw_path, parsed_md_path
+    session.flush()
+    content = (session.query(Content)
+               .filter(Content.content_hash == content_hash)
+               .with_for_update().one_or_none())
+    if content is None:
+        return (None, None)
+    content.ref_count = max(0, content.ref_count - 1)
+    if content.ref_count > 0:
+        return (None, None)
+    raw_path, parsed_md_path = content.raw_path, content.parsed_md_path
+    QdrantStore().delete_by_content(content_hash)
+    session.query(Chunk).filter(Chunk.content_hash == content_hash).delete()
+    session.query(IngestJob).filter(IngestJob.content_hash == content_hash).delete()
+    session.delete(content)
+    return (raw_path, parsed_md_path)
 
 
 @router.delete("/documents/{document_id}", status_code=204,

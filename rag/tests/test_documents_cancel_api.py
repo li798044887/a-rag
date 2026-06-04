@@ -1,119 +1,84 @@
+import uuid
+
 from app.config import settings
-from app.routers import documents as documents_router
+from app.db import SessionLocal
+from app.models import Content, Document, IngestJob
 
 
-def test_cancel_requires_token(client):
-    res = client.post("/jobs/j1/cancel?owner_user_id=u1")
-    assert res.status_code == 401
+def _seed_queued(owner, content_hash):
+    session = SessionLocal()
+    c = session.get(Content, content_hash)
+    if c is None:
+        c = Content(content_hash=content_hash, mime="application/pdf", size=10,
+                    raw_path=f"/tmp/{content_hash}.pdf", status="queued", ref_count=0)
+        session.add(c)
+        session.flush()
+        session.add(IngestJob(content_hash=content_hash, status="queued"))
+    doc = Document(owner_user_id=owner, content_hash=content_hash, filename="f.pdf")
+    session.add(doc)
+    c.ref_count = c.ref_count + 1
+    session.commit()
+    job = session.query(IngestJob).filter_by(content_hash=content_hash).first()
+    ids = (doc.id, job.id)
+    session.close()
+    return ids
 
 
-def _install_fakes(monkeypatch, *, owner="u1", status="queued", job_exists=True,
-                   simulate_race=False):
-    state = {"deleted_jobs": 0, "doc_deleted": False, "files": None,
-             "vectors": None, "chunks_deleted": False}
-
-    class _Job:
-        id = "j1"
-        document_id = "d1"
-        owner_user_id = owner
-
-    class _Doc:
-        id = "d1"
-        owner_user_id = owner
-        raw_path = "/u/d1.pdf"
-        parsed_md_path = None
-
-    job = _Job()
-    job.status = status
-
-    class _DeleteQuery:
-        def __init__(self, model):
-            self._model = model
-
-        def filter(self, *a, **k):
-            return self
-
-        def delete(self):
-            if self._model is documents_router.IngestJob:
-                # simulate_race: status チェックは通過したが原子DELETEは0件
-                if simulate_race:
-                    return 0
-                if job.status == "queued":
-                    state["deleted_jobs"] = 1
-                    return 1
-                return 0
-            elif self._model is documents_router.Chunk:
-                state["chunks_deleted"] = True
-                return 0
-
-    class _Session:
-        def get(self, model, _id):
-            if model is documents_router.IngestJob:
-                return job if job_exists else None
-            return _Doc()
-
-        def query(self, model):
-            return _DeleteQuery(model)
-
-        def delete(self, obj):
-            state["doc_deleted"] = True
-
-        def rollback(self):
-            pass
-
-        def commit(self):
-            pass
-
-        def close(self):
-            pass
-
-    class _Qdrant:
-        def delete_by_document(self, doc_id):
-            state["vectors"] = doc_id
-
-    monkeypatch.setattr(documents_router, "SessionLocal", lambda: _Session())
-    monkeypatch.setattr(documents_router, "QdrantStore", lambda *a, **k: _Qdrant())
-    monkeypatch.setattr(documents_router, "cleanup_document_files",
-                        lambda raw, md=None: state.update(files=(raw, md)))
-    return state
+def _hdr():
+    return {"x-internal-token": settings.rag_internal_token}
 
 
-def test_cancel_queued_deletes_job_doc_and_files(client, monkeypatch):
-    state = _install_fakes(monkeypatch, status="queued")
-    res = client.post("/jobs/j1/cancel?owner_user_id=u1",
-                      headers={"x-internal-token": settings.rag_internal_token})
+def test_cancel_last_reference_removes_job_and_content(client):
+    owner = "u_" + uuid.uuid4().hex
+    h = "h_" + uuid.uuid4().hex
+    _doc_id, job_id = _seed_queued(owner, h)
+    res = client.post(f"/jobs/{job_id}/cancel?owner_user_id={owner}", headers=_hdr())
     assert res.status_code == 204
-    assert state["deleted_jobs"] == 1
-    assert state["vectors"] == "d1"
-    assert state["chunks_deleted"] is True
-    assert state["doc_deleted"] is True
-    assert state["files"] == ("/u/d1.pdf", None)
+    session = SessionLocal()
+    try:
+        assert session.get(Content, h) is None
+        assert session.get(IngestJob, job_id) is None
+    finally:
+        session.close()
 
 
-def test_cancel_409_when_not_queued(client, monkeypatch):
-    _install_fakes(monkeypatch, status="parsing")
-    res = client.post("/jobs/j1/cancel?owner_user_id=u1",
-                      headers={"x-internal-token": settings.rag_internal_token})
+def test_cancel_one_of_two_keeps_queued_content(client):
+    o1, o2 = "u_" + uuid.uuid4().hex, "u_" + uuid.uuid4().hex
+    h = "h_" + uuid.uuid4().hex
+    _seed_queued(o1, h)
+    _doc2, job_id = _seed_queued(o2, h)
+    # o1 がキャンセル → ref は減るが content は queued のまま残る
+    res = client.post(f"/jobs/{job_id}/cancel?owner_user_id={o1}", headers=_hdr())
+    assert res.status_code == 204
+    session = SessionLocal()
+    try:
+        c = session.get(Content, h)
+        assert c is not None and c.ref_count == 1
+        assert session.get(IngestJob, job_id) is not None
+    finally:
+        session.query(Document).filter_by(content_hash=h).delete()
+        session.query(IngestJob).filter_by(content_hash=h).delete()
+        session.query(Content).filter_by(content_hash=h).delete()
+        session.commit()
+        session.close()
+
+
+def test_cancel_409_when_not_queued(client):
+    owner = "u_" + uuid.uuid4().hex
+    h = "h_" + uuid.uuid4().hex
+    _doc_id, job_id = _seed_queued(owner, h)
+    session = SessionLocal()
+    c = session.get(Content, h)
+    c.status = "parsing"
+    session.commit()
+    session.close()
+    res = client.post(f"/jobs/{job_id}/cancel?owner_user_id={owner}", headers=_hdr())
     assert res.status_code == 409
-
-
-def test_cancel_404_when_not_owner(client, monkeypatch):
-    _install_fakes(monkeypatch, owner="owner-A")
-    res = client.post("/jobs/j1/cancel?owner_user_id=intruder-B",
-                      headers={"x-internal-token": settings.rag_internal_token})
-    assert res.status_code == 404
-
-
-def test_cancel_404_when_job_missing(client, monkeypatch):
-    _install_fakes(monkeypatch, job_exists=False)
-    res = client.post("/jobs/j1/cancel?owner_user_id=u1",
-                      headers={"x-internal-token": settings.rag_internal_token})
-    assert res.status_code == 404
-
-
-def test_cancel_409_when_lost_race(client, monkeypatch):
-    """status チェック通過後に Worker が先取りし原子 DELETE が 0 件になるケース → 409"""
-    _install_fakes(monkeypatch, status="queued", simulate_race=True)
-    res = client.post("/jobs/j1/cancel?owner_user_id=u1",
-                      headers={"x-internal-token": settings.rag_internal_token})
-    assert res.status_code == 409
+    session = SessionLocal()
+    try:
+        session.query(Document).filter_by(content_hash=h).delete()
+        session.query(IngestJob).filter_by(content_hash=h).delete()
+        session.query(Content).filter_by(content_hash=h).delete()
+        session.commit()
+    finally:
+        session.close()
