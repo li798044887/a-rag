@@ -60,3 +60,6 @@ rag/__pycache__/
 /storybook-static
 /outputs
 /.playwright-mcp
+
+# observatory（観測ツールのスナップショット。実データ由来なのでコミットしない）
+tools/observatory/snapshots/
