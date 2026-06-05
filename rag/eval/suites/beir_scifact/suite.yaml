@@ -1,0 +1,10 @@
+suite: beir_scifact
+adapter: beir
+dataset: scifact
+split: test
+source_url: https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip
+owner_user_id: __eval_beir_scifact__
+query_limit: 100
+corpus_limit: 0
+thresholds:
+  recall_at_5: 0.50

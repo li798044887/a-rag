@@ -23,6 +23,7 @@ jobs:
         # --noconftest: autouse fixture 経由の app/DB import を避け、純粋に eval/* のみ検証する。
         run: >
           uv run pytest --noconftest
+          tests/test_eval_beir.py
           tests/test_eval_metrics.py
           tests/test_eval_dataset.py
           tests/test_eval_runner.py

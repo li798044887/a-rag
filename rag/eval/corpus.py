@@ -1,4 +1,5 @@
 import hashlib
+import mimetypes
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -50,7 +51,8 @@ def ingest_files(session: Session, store: QdrantStore, embedder: Embedder,
 
         content = session.get(Content, content_hash)
         if content is None:
-            content = Content(content_hash=content_hash, mime="application/pdf",
+            mime = mimetypes.guess_type(path.name)[0] or "text/plain"
+            content = Content(content_hash=content_hash, mime=mime,
                               size=len(data), raw_path=str(raw_path),
                               status="queued", ref_count=0)
             session.add(content)

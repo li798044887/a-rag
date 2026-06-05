@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class KeyFact(BaseModel):
@@ -13,8 +13,9 @@ class Case(BaseModel):
     query: str
     rewritten: str | None = None
     top_k: int = 6
-    relevant_documents: list[str] = []
-    key_facts: list[KeyFact] = []
+    tags: list[str] = Field(default_factory=list)
+    relevant_documents: list[str] = Field(default_factory=list)
+    key_facts: list[KeyFact] = Field(default_factory=list)
 
 
 class Thresholds(BaseModel):
@@ -25,6 +26,7 @@ class Thresholds(BaseModel):
 class GoldenSuite(BaseModel):
     suite: str
     owner_user_id: str
+    files_dir: str | None = None
     documents: list[str]
     thresholds: Thresholds = Thresholds()
     cases: list[Case]

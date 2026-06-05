@@ -4,39 +4,74 @@ name: rag-eval-full
 # GitHub-hosted では原則セルフホストランナー前提）。
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: "Eval suite name"
+        required: true
+        default: "beir_scifact"
+      query_limit:
+        description: "Number of queries to evaluate; 0 uses the suite default"
+        required: true
+        default: "100"
+      corpus_limit:
+        description: "Number of corpus documents to ingest; 0 uses the full corpus"
+        required: true
+        default: "0"
   schedule:
     - cron: "0 18 * * *"  # 03:00 JST
 
 jobs:
   full-eval:
     runs-on: [self-hosted, Windows, rag]
+    env:
+      EVAL_SUITE: ${{ inputs.suite || 'beir_scifact' }}
+      QUERY_LIMIT: ${{ inputs.query_limit || '100' }}
+      CORPUS_LIMIT: ${{ inputs.corpus_limit || '0' }}
     defaults:
       run:
         shell: powershell
     steps:
       - uses: actions/checkout@v6
       - name: Prepare report directory
-        run: New-Item -ItemType Directory -Force -Path artifacts/rag-eval | Out-Null
+        run: |
+          New-Item -ItemType Directory -Force -Path "artifacts/rag-eval/$env:EVAL_SUITE" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/eval-assets/$env:EVAL_SUITE" | Out-Null
       - name: Bring up full stack (rebuild rag to bake eval/)
         run: docker compose --profile worker up -d --build rag
+      - name: Prepare public dataset
+        run: |
+          docker compose exec -T rag uv run python -m eval prepare-beir `
+            --suite $env:EVAL_SUITE `
+            --assets-dir "/data/eval-assets/$env:EVAL_SUITE" `
+            --golden-out "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+            --query-limit $env:QUERY_LIMIT `
+            --corpus-limit $env:CORPUS_LIMIT
       - name: Ingest golden documents
-        run: docker compose exec -T rag uv run python -m eval ingest
+        run: |
+          docker compose exec -T rag uv run python -m eval ingest `
+            --suite $env:EVAL_SUITE `
+            --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+            --files-dir "/data/eval-assets/$env:EVAL_SUITE"
       - name: Run evaluation with gate
         run: |
           docker compose exec -T rag uv run python -m eval run `
-            --gate --baseline eval/baselines/agentic_rag.json `
-            --out /data/eval-reports/eval-report.json `
-            | Tee-Object -FilePath artifacts/rag-eval/eval-report.md
+            --suite $env:EVAL_SUITE `
+            --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+            --gate `
+            --out "/data/eval-reports/$env:EVAL_SUITE/eval-report.json" `
+            | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
           exit $LASTEXITCODE
       - name: Publish report summary
         if: always()
         run: |
-          if (Test-Path artifacts/rag-eval/eval-report.md) {
-            Get-Content artifacts/rag-eval/eval-report.md | Add-Content $env:GITHUB_STEP_SUMMARY
+          $report = "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
+          if (Test-Path $report) {
+            "# Suite: $env:EVAL_SUITE" | Add-Content $env:GITHUB_STEP_SUMMARY
+            Get-Content $report | Add-Content $env:GITHUB_STEP_SUMMARY
           }
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: eval-report
-          path: artifacts/rag-eval/*
+          name: eval-report-${{ env.EVAL_SUITE }}
+          path: artifacts/rag-eval/${{ env.EVAL_SUITE }}/*
