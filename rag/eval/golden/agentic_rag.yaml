@@ -1,0 +1,72 @@
+suite: agentic_rag_demo
+owner_user_id: __eval__
+documents:
+  - 04-cross-page-table-semantic-loss.pdf
+  - 05-image-grounding-cooling-line.pdf
+  - 06-multi-file-requirement-request.pdf
+  - 07-multi-file-security-policy.pdf
+  - 08-multi-file-vendor-quotes.pdf
+  - 09-query-rewrite-acronym-runbook.pdf
+  - 10-exception-latest-rule-conflict.pdf
+thresholds:
+  recall_at_5: 0.80
+  fact_coverage: 0.70
+cases:
+  - id: case1-cross-page-table
+    query: "MX-17は即時停止すべき？点検表の計測値、注記コード、本文の例外条件を分けて説明して"
+    top_k: 6
+    relevant_documents:
+      - 04-cross-page-table-semantic-loss.pdf
+    key_facts:
+      - any: ["N9"]
+      - any: ["翌営業日AM", "翌営業日"]
+      - any: ["0.91"]
+  - id: case2-image-grounding
+    query: "T2温度上昇とF1流量低下が同時に出た場合、図面上どの部品を第一候補で点検すべき？"
+    top_k: 6
+    relevant_documents:
+      - 05-image-grounding-cooling-line.pdf
+    key_facts:
+      - any: ["V-12", "Ｖ-12"]
+      - any: ["バイパス弁"]
+      - any: ["HX-7"]
+  - id: case3-edge-gateway-select
+    query: "エッジAIゲートウェイを1つ選ぶならどれ？要求仕様・規程・見積を照合して不採用理由も"
+    top_k: 6
+    relevant_documents:
+      - 06-multi-file-requirement-request.pdf
+      - 07-multi-file-security-policy.pdf
+      - 08-multi-file-vendor-quotes.pdf
+    key_facts:
+      - any: ["AlphaGate X2", "AlphaGate"]
+      - any: ["2026-06-05"]
+      - any: ["BetaEdge Mini", "BetaEdge"]
+  - id: case4-query-rewrite-acronym
+    query: "RED routeでP2 chatterが出ている。何を確認し、暫定対応と恒久対応は？"
+    top_k: 6
+    relevant_documents:
+      - 09-query-rewrite-acronym-runbook.pdf
+    key_facts:
+      - any: ["Kafka consumer lag", "consumer lag"]
+      - any: ["dedupe window", "180秒"]
+      - any: ["idempotency key", "idempotency"]
+  - id: case5-exception-latest-rule
+    query: "2026-05-25にカスタマーサクセス部が低リスク顧客へAI回答する場合、部長承認・レビュー・保存期間は？"
+    top_k: 6
+    relevant_documents:
+      - 10-exception-latest-rule-conflict.pdf
+    key_facts:
+      - any: ["EX-44"]
+      - any: ["部長承認", "承認"]
+      - any: ["180日"]
+  - id: case6-negative-reason
+    query: "GammaVision Cloudを採用できない理由を要求仕様とセキュリティ規程の両方から説明して"
+    top_k: 6
+    relevant_documents:
+      - 06-multi-file-requirement-request.pdf
+      - 07-multi-file-security-policy.pdf
+      - 08-multi-file-vendor-quotes.pdf
+    key_facts:
+      - any: ["ローカル推論", "ローカル"]
+      - any: ["海外リージョン", "海外"]
+      - any: ["90日"]

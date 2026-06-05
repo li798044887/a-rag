@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/artifacts/
 
 # playwright (e2e artifacts)
 /test-results/
@@ -60,3 +61,8 @@ rag/__pycache__/
 /storybook-static
 /outputs
 /.playwright-mcp
+
+# observatory（観測ツールのスナップショット。実データ由来なのでコミットしない）
+tools/observatory/snapshots/
+# Vite のキャッシュ（ツールを別ポートで動かすと生成される）
+tools/**/node_modules/

@@ -1,0 +1,5 @@
+{
+  "name": "observatory",
+  "private": true,
+  "type": "module"
+}

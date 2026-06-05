@@ -1,0 +1,39 @@
+name: rag-eval-full
+
+# 既定オフ。手動 or 夜間のみ（実 BGE-M3 + Qdrant + HF キャッシュが必要なため
+# GitHub-hosted では原則セルフホストランナー前提）。
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *"  # 03:00 JST
+
+jobs:
+  full-eval:
+    runs-on: [self-hosted, rag]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prepare report directory
+        run: mkdir -p artifacts/rag-eval
+      - name: Bring up full stack (rebuild rag to bake eval/)
+        run: docker compose --profile worker up -d --build rag
+      - name: Ingest golden documents
+        run: docker compose exec -T rag uv run python -m eval ingest
+      - name: Run evaluation with gate
+        run: |
+          set -o pipefail
+          docker compose exec -T rag uv run python -m eval run \
+          --gate --baseline eval/baselines/agentic_rag.json \
+          --out /data/eval-reports/eval-report.json \
+            | tee artifacts/rag-eval/eval-report.md
+      - name: Publish report summary
+        if: always()
+        run: |
+          if [ -f artifacts/rag-eval/eval-report.md ]; then
+            cat artifacts/rag-eval/eval-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-report
+          path: artifacts/rag-eval/*

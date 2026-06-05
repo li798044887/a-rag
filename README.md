@@ -130,7 +130,7 @@ curl -s localhost:8000/health
 ### GPU（NVIDIA + nvidia-container-toolkit が必要）
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml --profile worker up -d --build
 ```
 
 `/health` で `"device": "cuda"` が返ることを確認:

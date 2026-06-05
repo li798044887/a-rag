@@ -4,7 +4,7 @@
  * fullStream のパーツと、retrieve ツールが StepBus に流すサブステップを
  * 統合して AgentEvent として yield する。引用は CitationRegistry で番号統合。 */
 
-import { streamText, stepCountIs, type LanguageModelUsage, type ModelMessage } from "ai";
+import { streamText, stepCountIs, type LanguageModel, type LanguageModelUsage, type ModelMessage } from "ai";
 import { resolveModels, DEFAULT_MODEL_ID } from "@/lib/agent/models";
 import { buildTools, type ToolCallMeta } from "@/lib/agent/tools";
 import { CitationRegistry } from "@/lib/agent/citations";
@@ -25,6 +25,10 @@ export interface RunInput {
   modelId?: string;
   locale?: Locale;
   agentCfg?: AgentCfg;
+  /** dev 観測ツール用シーム。未指定なら本番挙動と完全一致。 */
+  observe?: {
+    wrap: (model: LanguageModel, hint: "chat" | "rewrite") => LanguageModel;
+  };
 }
 
 
@@ -36,7 +40,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
 }
 
 async function pump(
-  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds, locale, agentCfg }: RunInput,
+  { query, ownerUserId, threadId, history, modelId, attachments, attachmentDocIds, locale, agentCfg, observe }: RunInput,
   bus: StepBus,
 ): Promise<void> {
   // pump の本体は何が throw しても必ず bus.close() する。これを欠くと runAgent の
@@ -57,12 +61,16 @@ async function pump(
       return;
     }
 
+    // dev 観測時のみモデルを包む（未指定なら素通し＝挙動不変）。
+    const chatModel = observe ? observe.wrap(resolution.models.chat, "chat") : resolution.models.chat;
+    const rewriteModel = observe ? observe.wrap(resolution.models.rewrite, "rewrite") : resolution.models.rewrite;
+
     const registry = new CitationRegistry();
     const meta = new Map<string, ToolCallMeta>();
     const tools = buildTools({
       registry, ownerUserId, meta, bus, attachmentDocIds, prompts,
       concurrency: cfg.parallelTools, topK: cfg.topK, candidateK: cfg.candidateK,
-      gradeModel: resolution.models.rewrite, gradeThreshold: cfg.gradeThreshold,
+      gradeModel: rewriteModel, gradeThreshold: cfg.gradeThreshold,
       maxRetrieveRetries: cfg.maxRetrieveRetries,
     });
 
@@ -70,7 +78,7 @@ async function pump(
     const messages: ModelMessage[] = [...(history ?? []), { role: "user", content: userContent }];
 
     const result = streamText({
-      model: resolution.models.chat,
+      model: chatModel,
       system: buildSystemPrompt(cfg, locale ?? DEFAULT_LOCALE),
       messages,
       tools,
@@ -182,7 +190,7 @@ async function pump(
       } });
       const v = await verifyAnswer({
         query, answer, sources: registry.listSources(),
-        model: resolution.models.rewrite, prompts, maxRevisions: cfg.maxRevisions,
+        model: rewriteModel, prompts, maxRevisions: cfg.maxRevisions,
       });
       // 検証ステップに未裏付け主張の一覧を載せ、検証内容を展開して確認できるようにする。
       bus.push({ type: "step", step: {

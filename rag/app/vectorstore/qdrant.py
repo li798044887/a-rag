@@ -8,9 +8,15 @@ DENSE = "dense"
 SPARSE = "lexical"
 
 
+def default_collection_name() -> str:
+    # 設定で明示がなければ embedder からコレクション名を導出。モデル毎に別コレクションとし、
+    # 埋め込みモデル更新時はブルーグリーンで新コレクションへ再インデックスする。
+    return settings.qdrant_collection or f"arag_chunks__{settings.embedder}"
+
+
 class QdrantStore:
-    def __init__(self, collection: str = "arag_chunks", dim: int = 1024):
-        self.collection = collection
+    def __init__(self, collection: str | None = None, dim: int = 1024):
+        self.collection = collection or default_collection_name()
         self.dim = dim
         self.client = QdrantClient(url=settings.qdrant_url, timeout=30)
 

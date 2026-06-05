@@ -12,7 +12,9 @@
     "test:storybook": "vitest --project storybook run",
     "e2e": "playwright test",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "observe": "node tools/observatory/server.mts",
+    "observe:test": "vitest --config tools/observatory/vitest.config.ts run"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.79",
