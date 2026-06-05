@@ -36,6 +36,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "artifacts/rag-eval/$env:EVAL_SUITE" | Out-Null
           New-Item -ItemType Directory -Force -Path "artifacts/eval-assets/$env:EVAL_SUITE" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/eval-cache" | Out-Null
       - name: Bring up full stack (rebuild rag to bake eval/)
         run: docker compose --profile worker up -d --build rag
       - name: Prepare public dataset
