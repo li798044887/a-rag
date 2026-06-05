@@ -12,8 +12,9 @@
         --accent: #c0562b; --chat: #2563eb; --tool: #7c3aed; --ok: #15803d; --err: #b91c1c;
       }
       * { box-sizing: border-box; }
-      body { font-family: var(--sans); font-size: 13px; line-height: 1.55; margin: 0; color: var(--ink);
-             display: grid; grid-template-columns: 360px 1fr; height: 100vh; background: var(--bg); }
+      body { font-family: var(--sans); font-size: 13px; line-height: 1.55; margin: 0; color: var(--ink); background: var(--bg); }
+      /* グリッドは #root に当てる（React は #root 内に描画するため body だと崩れる）。 */
+      #root { display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
       .left { padding: 14px; border-right: 1px solid var(--line); overflow: auto; background: var(--panel); }
       .right { padding: 16px; overflow: auto; }
       h4 { margin: 16px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
