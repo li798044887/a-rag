@@ -1,0 +1,12 @@
+{
+  "suite": "agentic_rag_demo",
+  "note": "暫定値。初回フルスタック実評価後に実測へ差し替えること。",
+  "aggregate": {
+    "recall_at_5": 0.80,
+    "recall_at_k": 0.80,
+    "precision_at_k": 0.30,
+    "mrr": 0.80,
+    "ndcg_at_k": 0.80,
+    "fact_coverage": 0.70
+  }
+}
