@@ -26,7 +26,7 @@ jobs:
           docker compose exec -T rag uv run python -m eval run `
             --gate --baseline eval/baselines/agentic_rag.json `
             --out /data/eval-reports/eval-report.json `
-            2>&1 | Tee-Object -FilePath artifacts/rag-eval/eval-report.md
+            | Tee-Object -FilePath artifacts/rag-eval/eval-report.md
           exit $LASTEXITCODE
       - name: Publish report summary
         if: always()
