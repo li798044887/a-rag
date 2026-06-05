@@ -12,13 +12,13 @@
 
 ```mermaid
 flowchart LR
-  G[golden/agentic_rag.yaml<br/>質問・正解文書・期待事実] --> R[runner.run_suite]
-  C[corpus.py<br/>取り込み・filename解決] -.前提.-> R
-  R -->|retrieve注入| RS[app.retrieval.service.retrieve<br/>BGE-M3 + Qdrant + rerank]
+  G["golden/agentic_rag.yaml<br>質問・正解文書・期待事実"] --> R["runner.run_suite"]
+  C["corpus.py<br>取り込み・filename解決"] -. 前提 .-> R
+  R -->|"retrieve注入"| RS["app.retrieval.service.retrieve<br>BGE-M3 + Qdrant + rerank"]
   RS --> R
-  R --> M[metrics.py<br/>recall@k / fact_coverage 他]
-  M --> RP[report.py<br/>JSON / Markdown / 閾値ゲート / ベースライン差分]
-  RP --> OUT[eval-report.json + 標準出力テーブル]
+  R --> M["metrics.py<br>recall@k / fact_coverage 他"]
+  M --> RP["report.py<br>JSON / Markdown / 閾値ゲート / ベースライン差分"]
+  RP --> OUT["eval-report.json + 標準出力テーブル"]
 ```
 
 **設計の肝**: `runner.run_suite(suite, retrieve_fn)` は `retrieve_fn` を**注入**で受ける。
