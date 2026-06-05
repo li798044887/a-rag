@@ -27,7 +27,7 @@ repo には公開データセット本体をコミットしない。CI または
 
 - `rag/eval/suites/agentic_rag_demo/golden.yaml`
 - `rag/eval/suites/agentic_rag_demo/baselines/bge-m3__bge.json`
-- `docs/eval-assets/agentic_rag_demo/*.pdf`
+- `rag/eval/assets/agentic_rag_demo/*.pdf`
 
 ## 2. ローカル実行
 

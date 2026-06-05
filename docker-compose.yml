@@ -44,7 +44,7 @@ services:
     volumes:
       - "uploads:/data/uploads"
       - "modelcache:/root/.cache"
-      - "./docs/eval-assets:/data/repo-eval-assets:ro"
+      - "./rag/eval/assets:/data/repo-eval-assets:ro"
       - "./artifacts/eval-assets:/data/eval-assets"
       - "./artifacts/rag-eval:/data/eval-reports"
       - "./artifacts/eval-cache:/data/eval-cache"

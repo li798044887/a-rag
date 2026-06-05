@@ -55,10 +55,12 @@ def run_suite(suite: GoldenSuite, retrieve_fn: RetrieveFn) -> dict[str, Any]:
             "precision_at_k": precision_at_k(ranked, relevant, case.top_k),
             "mrr": mrr(ranked, relevant),
             "ndcg_at_k": ndcg_at_k(ranked, relevant, case.top_k),
-            "fact_coverage": fact_coverage(corpus, facts),
+            "fact_coverage": fact_coverage(corpus, facts) if facts else None,
         })
 
-    keys = ["recall_at_5", "recall_at_k", "precision_at_k",
-            "mrr", "ndcg_at_k", "fact_coverage"]
-    aggregate = {k: _mean([c[k] for c in cases]) for k in keys}
+    always_keys = ["recall_at_5", "recall_at_k", "precision_at_k", "mrr", "ndcg_at_k"]
+    aggregate = {k: _mean([c[k] for c in cases]) for k in always_keys}
+    fc_values = [c["fact_coverage"] for c in cases if c["fact_coverage"] is not None]
+    if fc_values:
+        aggregate["fact_coverage"] = _mean(fc_values)
     return {"suite": suite.suite, "cases": cases, "aggregate": aggregate}

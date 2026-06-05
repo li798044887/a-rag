@@ -21,7 +21,7 @@ flowchart LR
   PB --> BA["artifacts/eval-assets/<suite>/*.txt"]
   PB --> BG["artifacts/rag-eval/<suite>/golden.yaml"]
   RG["rag/eval/suites/<suite>/golden.yaml<br>repo golden"] --> IN
-  RA["docs/eval-assets/<suite>/*<br>repo assets"] --> IN
+  RA["rag/eval/assets/<suite>/*<br>repo assets"] --> IN
   BA --> IN["ingest"]
   BG --> IN
   IN --> Q["Qdrant index"]
@@ -49,7 +49,7 @@ flowchart LR
 | suite | 目的 | 資産の置き場所 |
 | --- | --- | --- |
 | `beir_scifact` | 公開データセットによる外部説明しやすい検索評価 | `rag/eval/suites/beir_scifact/suite.yaml` と `artifacts/` |
-| `agentic_rag_demo` | 業務難所・エッジケース評価 | `rag/eval/suites/agentic_rag_demo/golden.yaml` と `docs/eval-assets/agentic_rag_demo/` |
+| `agentic_rag_demo` | 業務難所・エッジケース評価 | `rag/eval/suites/agentic_rag_demo/golden.yaml` と `rag/eval/assets/agentic_rag_demo/` |
 
 `beir_scifact` は BEIR SciFact の公式 zip から生成します。生成物は `artifacts/` 配下に置き、
 repo にはコミットしません。
@@ -89,7 +89,7 @@ rag/tests/test_qdrant_collection_name.py
 rag/eval/suites/<suite>/suite.yaml
 rag/eval/suites/<suite>/golden.yaml
 rag/eval/suites/<suite>/baselines/<embedder>__<reranker>.json
-docs/eval-assets/<suite>/
+rag/eval/assets/<suite>/
 artifacts/eval-assets/<suite>/
 artifacts/eval-cache/
 artifacts/rag-eval/<suite>/
@@ -98,7 +98,7 @@ artifacts/rag-eval/<suite>/
 使い分けは次のとおりです。
 
 - `rag/eval/suites/<suite>/`: 評価定義、golden、baseline。repo 管理する。
-- `docs/eval-assets/<suite>/`: 専用 golden の小さな評価資産。必要なものだけ repo 管理する。
+- `rag/eval/assets/<suite>/`: 専用 golden の小さな評価資産。必要なものだけ repo 管理する。
 - `artifacts/eval-assets/<suite>/`: 公開データセットから生成した評価資産。repo には入れない。
 - `artifacts/eval-cache/`: 公開データセット zip などの cache。repo には入れない。
 - `artifacts/rag-eval/<suite>/`: report と generated golden。repo には入れない。

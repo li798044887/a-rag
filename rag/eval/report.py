@@ -11,7 +11,9 @@ def gate_failures(result: dict[str, Any], thresholds: Thresholds) -> list[str]:
     for key, minimum in checks.items():
         if minimum is None:
             continue
-        actual = agg.get(key, 0.0)
+        if key not in agg:
+            continue
+        actual = agg[key]
         if actual < minimum:
             failures.append(
                 f"{key}: {actual:.3f} < 閾値 {minimum:.3f}")
@@ -29,10 +31,12 @@ def to_markdown(result: dict[str, Any]) -> str:
              "| id | recall@5 | recall@k | prec@k | mrr | ndcg@k | facts | n |",
              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for c in result["cases"]:
+        fc = c["fact_coverage"]
+        fc_str = f"{fc:.2f}" if fc is not None else "—"
         lines.append(
             f"| {c['id']} | {c['recall_at_5']:.2f} | {c['recall_at_k']:.2f} | "
             f"{c['precision_at_k']:.2f} | {c['mrr']:.2f} | {c['ndcg_at_k']:.2f} | "
-            f"{c['fact_coverage']:.2f} | {c['n_retrieved']} |")
+            f"{fc_str} | {c['n_retrieved']} |")
     agg = result["aggregate"]
     lines += ["", "## 集計（平均）", ""]
     for k, v in agg.items():
