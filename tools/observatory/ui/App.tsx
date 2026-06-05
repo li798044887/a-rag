@@ -32,6 +32,7 @@ export function App() {
   const [owner, setOwner] = useState("");
   const [retrieveMode, setRetrieveMode] = useState<"live" | "replay">("replay");
   const [traces, setTraces] = useState<Trace[]>([]);
+  const [meta, setMeta] = useState<{ ownerUserId: string; model: string | null; retrieveMode: string } | null>(null);
   const [events, setEvents] = useState<unknown[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
@@ -44,7 +45,7 @@ export function App() {
   }, [locale]);
 
   async function runIt() {
-    setTraces([]); setEvents([]); setError(""); setRunning(true);
+    setTraces([]); setEvents([]); setMeta(null); setError(""); setRunning(true);
     try {
       const res = await fetch("/api/run", {
         method: "POST",
@@ -64,7 +65,9 @@ export function App() {
           const line = p.replace(/^data: /, "");
           if (!line) continue;
           const msg = JSON.parse(line);
-          if (msg.kind === "trace") {
+          if (msg.kind === "meta") {
+            setMeta(msg.meta);
+          } else if (msg.kind === "trace") {
             setTraces((t) => [...t.filter((x) => x.seq !== msg.trace.seq), msg.trace].sort((a, b) => a.seq - b.seq));
           } else if (msg.kind === "event") {
             setEvents((e) => [...e, msg.event]);
@@ -135,6 +138,11 @@ export function App() {
       </div>
 
       <div className="right">
+        {meta && (
+          <div style={{ background: "#eee", padding: "4px 8px", borderRadius: 4, marginBottom: 8 }}>
+            実行設定: owner=<b>{meta.ownerUserId}</b> / model={meta.model ?? "(既定)"} / retrieve={meta.retrieveMode}
+          </div>
+        )}
         <h4>実行トレース（{traces.length}）</h4>
         {traces.map((t) => (
           <div className="trace" key={t.seq}>

@@ -77,6 +77,8 @@ const http = createHttpServer((req, res) => {
         overrides,
         onTrace: (t: LlmTrace) => send({ kind: "trace", trace: t }),
       });
+      // 実際に使う実行設定を最初に返す（どの owner/model で検索したかを UI で明示）。
+      send({ kind: "meta", meta: { ownerUserId, model: model ?? null, locale, retrieveMode } });
       ragClient.setRagTransport(createReplayTransport({ mode: retrieveMode, dir: SNAP_DIR }));
       try {
         for await (const ev of run.runAgent({
