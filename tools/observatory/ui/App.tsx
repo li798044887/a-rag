@@ -3,6 +3,15 @@ import { useEffect, useState } from "react";
 type Role = "chat" | "grade" | "queryRewrite" | "verify" | "revise";
 const ROLES: Role[] = ["chat", "grade", "queryRewrite", "verify", "revise"];
 
+// アプリの設定>モデルと同じ id（src/lib/data.ts）。プロバイダのキーが要る点に注意。
+const MODELS = [
+  { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5 (ANTHROPIC_API_KEY)" },
+  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5 (ANTHROPIC_API_KEY)" },
+  { id: "gpt-4o", label: "GPT-4o (OPENAI_API_KEY)" },
+  { id: "deepseek-flash", label: "DeepSeek Flash (DEEPSEEK_API_KEY)" },
+  { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro (DEEPSEEK_API_KEY)" },
+];
+
 interface Trace {
   seq: number;
   role: string;
@@ -18,6 +27,7 @@ export function App() {
   const [defaults, setDefaults] = useState<Record<string, string>>({});
   const [overrides, setOverrides] = useState<Partial<Record<Role, string>>>({});
   const [query, setQuery] = useState("");
+  const [model, setModel] = useState(MODELS[0].id);
   const [locale, setLocale] = useState("ja");
   const [retrieveMode, setRetrieveMode] = useState<"live" | "replay">("replay");
   const [traces, setTraces] = useState<Trace[]>([]);
@@ -35,7 +45,7 @@ export function App() {
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query, locale, retrieveMode, overrides }),
+        body: JSON.stringify({ query, model, locale, retrieveMode, overrides }),
       });
       const reader = res.body!.getReader();
       const dec = new TextDecoder();
@@ -78,6 +88,13 @@ export function App() {
         <div className="row">
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="質問" style={{ flex: 1 }} />
           <button disabled={running || !query} onClick={runIt}>{running ? "実行中…" : "▶ Run"}</button>
+        </div>
+        <div className="row">
+          <label style={{ flex: 1 }}>model
+            <select value={model} onChange={(e) => setModel(e.target.value)} style={{ width: "100%" }}>
+              {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </label>
         </div>
         <div className="row">
           <label>locale
