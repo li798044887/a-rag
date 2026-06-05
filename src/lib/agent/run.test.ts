@@ -83,6 +83,17 @@ test("runAgent runs tool loop, streams answer, finishes with sources+citationMap
   expect(done.citationMap[1]).toMatchObject({ sourceId: "d1", sectionId: "c1" });
 });
 
+test("observe.wrap が chat と rewrite の両モデルに対して呼ばれる", async () => {
+  const hints: string[] = [];
+  const wrap = vi.fn((m: unknown, hint: "chat" | "rewrite") => { hints.push(hint); return m; });
+  for await (const _ of runAgent({
+    query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja",
+    observe: { wrap: wrap as never },
+  })) { void _; }
+  expect(hints).toContain("chat");
+  expect(hints).toContain("rewrite");
+});
+
 test("runAgent surfaces only the sources actually cited in the answer", async () => {
   // retrieve は 2 件返すが、回答は [1] のみ引用する → d2 はパネルに出さない。
   vi.mocked(retrieveChunksStream).mockImplementationOnce(async () => [
