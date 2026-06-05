@@ -13,7 +13,7 @@ from app.vectorstore.qdrant import QdrantStore
 
 logger = logging.getLogger(__name__)
 server_logger = logging.getLogger("uvicorn.error")
-DEFAULT_CANDIDATE_K = 50
+DEFAULT_CANDIDATE_K = 10
 
 
 def _log_info(message: str, *args) -> None:
