@@ -1,0 +1,10 @@
+suite: hotpot_dev
+adapter: hotpot
+split: dev
+source_url: http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json
+owner_user_id: __eval_hotpot_dev__
+query_limit: 100
+# 多ホップ検索＋answer 部分一致による fact_coverage。初回は実測してから再ベースライン推奨。
+thresholds:
+  recall_at_5: 0.40
+  fact_coverage: 0.50

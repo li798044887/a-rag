@@ -51,12 +51,18 @@ jobs:
               --golden-out "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
               --query-limit $env:QUERY_LIMIT `
               --corpus-limit $env:CORPUS_LIMIT
+          } elseif ($env:EVAL_SUITE.StartsWith("hotpot_")) {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval prepare-hotpot `
+              --suite $env:EVAL_SUITE `
+              --assets-dir "/data/eval-assets/$env:EVAL_SUITE" `
+              --golden-out "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+              --query-limit $env:QUERY_LIMIT
           } else {
             "Suite $env:EVAL_SUITE uses repository eval assets; skipping public dataset preparation."
           }
       - name: Ingest golden documents
         run: |
-          if ($env:EVAL_SUITE.StartsWith("beir_")) {
+          if ($env:EVAL_SUITE.StartsWith("beir_") -or $env:EVAL_SUITE.StartsWith("hotpot_")) {
             docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval ingest `
               --suite $env:EVAL_SUITE `
               --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
@@ -66,7 +72,7 @@ jobs:
           }
       - name: Run evaluation with gate
         run: |
-          if ($env:EVAL_SUITE.StartsWith("beir_")) {
+          if ($env:EVAL_SUITE.StartsWith("beir_") -or $env:EVAL_SUITE.StartsWith("hotpot_")) {
             docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval run `
               --suite $env:EVAL_SUITE `
               --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
