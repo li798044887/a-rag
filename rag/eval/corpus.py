@@ -3,6 +3,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.embedding.base import Embedder
 from app.models import Content, Document, IngestJob
 from app.parsing.dispatch import parse_document
@@ -34,20 +35,29 @@ def ingest_files(session: Session, store: QdrantStore, embedder: Embedder,
                  owner: str, files_dir: str | Path, filenames: list[str]) -> None:
     """原本を owner で取り込む。既存 content/document は冪等スキップ。実 parse を同期実行。"""
     files_dir = Path(files_dir)
+    upload_dir = Path(settings.upload_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
     for filename in filenames:
         path = files_dir / filename
         data = path.read_bytes()
         content_hash = hashlib.sha256(data).hexdigest()
 
+        # MinerU は raw_path の隣に <stem>_mineru/ を書き出すため、raw_path は書込可能な
+        # upload_dir 配下に置く（read-only マウントの原本を直接指さない）。本番アップロードと同じ。
+        raw_path = upload_dir / f"{content_hash}{path.suffix}"
+        if not raw_path.exists():
+            raw_path.write_bytes(data)
+
         content = session.get(Content, content_hash)
         if content is None:
-            # eval は原本（docs/demo-files/）を複製せず直接 raw_path に指す。run_ingest が
-            # content.raw_path を parse 入力に使うため、解析時にアクセス可能であること。
             content = Content(content_hash=content_hash, mime="application/pdf",
-                              size=len(data), raw_path=str(path),
+                              size=len(data), raw_path=str(raw_path),
                               status="queued", ref_count=0)
             session.add(content)
             session.flush()
+        elif content.raw_path != str(raw_path):
+            # 旧 raw_path（read-only マウント等）を書込可能パスへ補正してから再取り込み。
+            content.raw_path = str(raw_path)
 
         doc = (session.query(Document)
                .filter_by(owner_user_id=owner, content_hash=content_hash)

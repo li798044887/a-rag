@@ -37,7 +37,7 @@ flowchart LR
 | `eval/corpus.py` | filename→document 解決 + 同期取り込み（**DB/Qdrant に触る唯一の層**） | app.worker, app.models 等 |
 | `eval/__main__.py` | CLI: `ingest` / `run` サブコマンド | 上記全部 + app.* |
 | `eval/golden/agentic_rag.yaml` | ゴールデンセット（デモ8ケース母体、現状6ケース） | — |
-| `eval/baselines/agentic_rag.json` | メトリクス基準値（回帰検出）。**暫定値**（実測未取得） | — |
+| `eval/baselines/agentic_rag.json` | メトリクス基準値（回帰検出）。**2026-06-05 実測**（recall@5=1.0, fact_coverage=0.833） | — |
 
 テスト: `tests/test_eval_{metrics,dataset,runner,report,corpus}.py`, `tests/test_qdrant_collection_name.py`
 
@@ -147,8 +147,9 @@ uv run python -m eval run --out eval-report.json
 
 ## 6. ベースラインの更新
 
-`baselines/agentic_rag.json` は現状**暫定値**（実測未取得、`note` 参照）。
-初回フルスタック実評価で実測したら置き換える:
+`baselines/agentic_rag.json` は **2026-06-05 の初回フルスタック実評価で実測値に更新済み**
+（recall@5=1.0 / MRR=1.0 / nDCG=0.995 / precision@k=0.278 / fact_coverage=0.833）。
+以後、意図的な品質変化のときだけ更新する:
 
 ```bash
 # run --out で出した eval-report.json の aggregate を baseline へ反映してコミット
@@ -195,5 +196,8 @@ Qdrant 既定コレクション名を `arag_chunks` 固定から
   faithfulness / answer-correctness / citation-precision を測る設計のみ提示済み。
   本フェーズの `fact_coverage` は「**生成なしで測れる回答可能性プロキシ**」。
 - ゴールデンは現状6ケース（デモ母体）。`eval reindex` の完全実装は未了（方針 + フックのみ）。
+- **実測で検出済みのギャップ**: `case2-image-grounding` は recall@5=1.0（正解PDFは取得）だが
+  fact_coverage=0.0。図面由来の事実（`V-12`/`バイパス弁` 等）は**画像チャンクが索引外**のため
+  テキスト検索で拾えない。画像グラウンディング/faithfulness 評価が次フェーズで要る定量的根拠。
 - 同一ゴールデン YAML を TS 側評価でも共有の出所にする（`key_facts`=正確性、
   `relevant_documents`=引用妥当性）。

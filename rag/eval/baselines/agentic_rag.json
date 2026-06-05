@@ -1,12 +1,12 @@
 {
   "suite": "agentic_rag_demo",
-  "note": "暫定値。初回フルスタック実評価後に実測へ差し替えること。",
+  "note": "2026-06-05 初回フルスタック実評価の実測値（embedder=bge-m3, reranker=bge）。意図的な品質変化のときのみ更新する。case2-image-grounding の fact_coverage=0 は画像由来事実がテキスト索引外であることの既知ギャップ。",
   "aggregate": {
-    "recall_at_5": 0.80,
-    "recall_at_k": 0.80,
-    "precision_at_k": 0.30,
-    "mrr": 0.80,
-    "ndcg_at_k": 0.80,
-    "fact_coverage": 0.70
+    "recall_at_5": 1.0,
+    "recall_at_k": 1.0,
+    "precision_at_k": 0.278,
+    "mrr": 1.0,
+    "ndcg_at_k": 0.995,
+    "fact_coverage": 0.833
   }
 }
