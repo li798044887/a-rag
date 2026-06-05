@@ -64,6 +64,32 @@ export function App() {
   const [events, setEvents] = useState<unknown[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState<"idle" | "ok" | "fail">("idle");
+
+  // トレース全体を JSON でクリップボードへ。成否をボタン文言で短時間フィードバックする。
+  async function copyTrace() {
+    const text = JSON.stringify({ meta, traces, events }, null, 2);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // セキュアコンテキスト外など clipboard API 不在時のフォールバック。
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (!ok) throw new Error("execCommand failed");
+      }
+      setCopied("ok");
+    } catch {
+      setCopied("fail");
+    }
+    setTimeout(() => setCopied("idle"), 1500);
+  }
 
   useEffect(() => {
     fetch(`/api/defaults?locale=${locale}`).then((r) => r.json()).then((d) => {
@@ -250,8 +276,8 @@ export function App() {
           ? <div className="md"><ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown></div>
           : <div className="md" style={{ color: "#9aa1ab" }}>(まだありません)</div>}
         <div style={{ marginTop: 10 }}>
-          <button onClick={() => navigator.clipboard.writeText(JSON.stringify({ meta, traces, events }, null, 2))}>
-            トレース全体をコピー
+          <button onClick={copyTrace}>
+            {copied === "ok" ? "コピーしました" : copied === "fail" ? "コピーに失敗しました" : "トレース全体をコピー"}
           </button>
         </div>
       </div>
