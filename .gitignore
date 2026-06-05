@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/artifacts/
 
 # playwright (e2e artifacts)
 /test-results/

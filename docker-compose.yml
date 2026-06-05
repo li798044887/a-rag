@@ -45,6 +45,7 @@ services:
       - "uploads:/data/uploads"
       - "modelcache:/root/.cache"
       - "./docs/demo-files:/data/demo-files:ro"
+      - "./artifacts/rag-eval:/data/eval-reports"
     depends_on:
       postgres: { condition: service_healthy }
       qdrant: { condition: service_started }
