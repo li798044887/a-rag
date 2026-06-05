@@ -24,6 +24,7 @@ jobs:
         run: >
           uv run pytest --noconftest
           tests/test_eval_beir.py
+          tests/test_eval_hotpot.py
           tests/test_eval_metrics.py
           tests/test_eval_dataset.py
           tests/test_eval_runner.py

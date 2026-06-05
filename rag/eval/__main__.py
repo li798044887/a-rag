@@ -11,6 +11,7 @@ from app.retrieval.service import retrieve as retrieve_service
 from app.vectorstore.qdrant import QdrantStore
 from eval.beir import load_beir_config, prepare_beir_suite
 from eval.corpus import ingest_files, resolve
+from eval.hotpot import load_hotpot_config, prepare_hotpot_suite
 from eval.dataset import load_suite
 from eval.report import diff_baseline, gate_failures, to_markdown
 from eval.runner import run_suite
@@ -58,6 +59,17 @@ def _cmd_prepare_beir(args) -> int:
     config = replace(config, query_limit=query_limit, corpus_limit=corpus_limit)
     golden = prepare_beir_suite(config, assets_dir, golden_out, args.cache_dir)
     print(f"BEIR suite prepared: {config.suite} -> {golden}")
+    return 0
+
+
+def _cmd_prepare_hotpot(args) -> int:
+    config = load_hotpot_config(_suite_dir(args.suite) / "suite.yaml")
+    assets_dir = Path(args.assets_dir) if args.assets_dir else DEFAULT_ASSETS_ROOT / config.suite
+    golden_out = Path(args.golden_out) if args.golden_out else DEFAULT_REPORT_ROOT / config.suite / "golden.yaml"
+    query_limit = args.query_limit if args.query_limit is not None else config.query_limit
+    config = replace(config, query_limit=query_limit)
+    golden = prepare_hotpot_suite(config, assets_dir, golden_out, args.cache_dir)
+    print(f"HotpotQA suite prepared: {config.suite} -> {golden}")
     return 0
 
 
@@ -127,6 +139,14 @@ def main() -> int:
     p_prep.add_argument("--query-limit", type=int, default=None)
     p_prep.add_argument("--corpus-limit", type=int, default=None)
     p_prep.set_defaults(func=_cmd_prepare_beir)
+
+    p_hot = sub.add_parser("prepare-hotpot", help="HotpotQA から評価 suite を生成")
+    p_hot.add_argument("--suite", default="hotpot_dev")
+    p_hot.add_argument("--assets-dir", default=None)
+    p_hot.add_argument("--golden-out", default=None)
+    p_hot.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
+    p_hot.add_argument("--query-limit", type=int, default=None)
+    p_hot.set_defaults(func=_cmd_prepare_hotpot)
 
     p_ing = sub.add_parser("ingest", help="ゴールデン文書を取り込む")
     p_ing.add_argument("--suite", default=DEFAULT_SUITE)
