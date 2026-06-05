@@ -35,6 +35,10 @@ flowchart LR
   RP --> OUT["eval-report.json / eval-report.md / GitHub Step Summary"]
 ```
 
+図は `beir_scifact` を例にしています。`hotpot_dev` も同じ流れですが、`prepare-beir` の代わりに
+`prepare-hotpot` を使い、外部ダウンロードではなく**同梱 gz**（`source_path`）から generated golden と
+text assets を作る点だけが異なります。
+
 設計の肝は `runner.run_suite(suite, retrieve_fn)` が `retrieve_fn` を**注入**で受けることです。
 
 - 本番評価では、`retrieve_fn` が `app.retrieval.service.retrieve(...)` を呼びます。
@@ -44,15 +48,27 @@ flowchart LR
 
 ## 2. 評価 suite の種類
 
-現在は 2 層構成です。
+現在は次の 3 suite です。
 
 | suite | 目的 | 資産の置き場所 |
 | --- | --- | --- |
 | `beir_scifact` | 公開データセットによる外部説明しやすい検索評価 | `rag/eval/suites/beir_scifact/suite.yaml` と `artifacts/` |
+| `hotpot_dev` | 多ホップ検索 + `answer` 部分一致で `fact_coverage` が埋まる公開評価 | `rag/eval/suites/hotpot_dev/suite.yaml` と同梱 `*.json.gz` |
 | `agentic_rag_demo` | 業務難所・エッジケース評価 | `rag/eval/suites/agentic_rag_demo/golden.yaml` と `rag/eval/assets/agentic_rag_demo/` |
 
 `beir_scifact` は BEIR SciFact の公式 zip から生成します。生成物は `artifacts/` 配下に置き、
 repo にはコミットしません。
+
+`hotpot_dev` は HotpotQA（dev distractor）から生成します。BEIR は事実注釈を持たないため
+`fact_coverage`（facts 列）が常に「—」になりますが、HotpotQA は各設問に `answer` があるため、
+「正解文字列を含む本文を top-k に引けたか」という意味のある `fact_coverage` が測れます。
+また supporting_facts が複数文書にまたがる**多ホップ検索**の回帰もカバーします。
+
+> **取得方法に注意**: HotpotQA 公式ホスト `curtis.ml.cmu.edu` は現在死亡しており（http=空応答 /
+> https=SSL エラー）、rag コンテナからは Hugging Face も遮断されています。そのため実行時ダウンロードは
+> 行わず、**HF parquet から元スキーマへ変換した先頭 200 問を `rag/eval/suites/hotpot_dev/` に
+> gzip 同梱（約 440KB）**しています。これにより外部ホスト非依存・オフライン可・CI 決定的になります。
+> 全件で回したい場合のみ `suite.yaml` の `source_url`（不安定なフォールバック）を使います。
 
 `agentic_rag_demo` は自前で用意したものです。専用 golden と baseline は repo 管理します。
 
@@ -61,13 +77,16 @@ repo にはコミットしません。
 | ファイル | 責務 | 依存 |
 | --- | --- | --- |
 | `rag/eval/beir.py` | BEIR 形式の zip から text assets と generated golden を作る | urllib, zipfile, yaml |
+| `rag/eval/hotpot.py` | HotpotQA から generated golden を作る。`context` を共有コーパス化し `answer` を `key_facts` 化 | gzip, json, yaml, `eval.beir._download` |
 | `rag/eval/dataset.py` | golden の pydantic model、YAML loader、検証 | pyyaml, pydantic |
 | `rag/eval/metrics.py` | `normalize_text` / `recall_at_k` / `precision_at_k` / `mrr` / `ndcg_at_k` / `fact_coverage` | I/O なし |
 | `rag/eval/runner.py` | `retrieve` 注入式 runner。ケースごとに検索を実行して集計 | dataset, metrics |
 | `rag/eval/report.py` | JSON / Markdown report、閾値 gate、baseline diff | dataset |
 | `rag/eval/corpus.py` | filename から原本を解決し、通常の ingest 経路へ流す | app.worker, app.models など |
-| `rag/eval/__main__.py` | CLI: `prepare-beir` / `ingest` / `run` | 上記全部 + app.* |
+| `rag/eval/__main__.py` | CLI: `prepare-beir` / `prepare-hotpot` / `ingest` / `run` | 上記全部 + app.* |
 | `rag/eval/suites/beir_scifact/suite.yaml` | BEIR SciFact の取得元、split、閾値、実行規模 | - |
+| `rag/eval/suites/hotpot_dev/suite.yaml` | HotpotQA の入力（同梱 gz の `source_path`）、split、閾値、実行規模 | - |
+| `rag/eval/suites/hotpot_dev/hotpot_dev_distractor_sample.json.gz` | 同梱した先頭 200 問サブセット（HF parquet から元スキーマへ変換） | - |
 | `rag/eval/suites/agentic_rag_demo/golden.yaml` | 専用 golden set | - |
 | `rag/eval/suites/<suite>/baselines/<embedder>__<reranker>.json` | baseline。意図しない品質低下の検出に使う | - |
 
@@ -75,6 +94,7 @@ repo にはコミットしません。
 
 ```text
 rag/tests/test_eval_beir.py
+rag/tests/test_eval_hotpot.py
 rag/tests/test_eval_dataset.py
 rag/tests/test_eval_metrics.py
 rag/tests/test_eval_runner.py
@@ -188,6 +208,7 @@ cases:
 cd rag
 uv run pytest --noconftest \
   tests/test_eval_beir.py \
+  tests/test_eval_hotpot.py \
   tests/test_eval_metrics.py \
   tests/test_eval_dataset.py \
   tests/test_eval_runner.py \
@@ -244,7 +265,40 @@ docker compose exec -T rag uv run python -m eval run \
 `corpus-limit 0` は full corpus を意味します。Windows の self-hosted runner では時間がかかるため、
 日常確認では `corpus-limit 1000` などで縮小し、正式評価や夜間評価で full を回す運用が現実的です。
 
-### 7.3 専用 golden 評価: `agentic_rag_demo`
+### 7.3 公開データセット評価: `hotpot_dev`
+
+HotpotQA は同梱 gz を使うため**ダウンロードは発生しません**。`prepare-hotpot` は同梱データから
+generated golden と text assets を作るだけです（`--corpus-limit` は持ちません）。
+
+Docker Compose 上で実スタック評価する例です。
+
+```bash
+docker compose --profile worker up -d --build rag
+
+docker compose exec -T rag uv run python -m eval prepare-hotpot \
+  --suite hotpot_dev \
+  --assets-dir /data/eval-assets/hotpot_dev \
+  --golden-out /data/eval-reports/hotpot_dev/golden.yaml \
+  --query-limit 100
+
+docker compose exec -T rag uv run python -m eval ingest \
+  --suite hotpot_dev \
+  --golden /data/eval-reports/hotpot_dev/golden.yaml \
+  --files-dir /data/eval-assets/hotpot_dev
+
+docker compose exec -T rag uv run python -m eval run \
+  --suite hotpot_dev \
+  --golden /data/eval-reports/hotpot_dev/golden.yaml \
+  --gate \
+  --out /data/eval-reports/hotpot_dev/eval-report.json
+```
+
+`query-limit` は使う設問数です。`0` は同梱データ全件（先頭 200 問）を意味します。コーパスは
+**選んだ設問の `context` の和集合**（タイトルで一意化した共有コーパス）として自動決定されるため、
+BEIR のような `corpus-limit` はありません。yes/no・空答えの設問は部分一致が無意味なので
+`fact_coverage` 対象外（`key_facts` 空）になります。
+
+### 7.4 専用 golden 評価: `agentic_rag_demo`
 
 以前の独自テストを残した suite です。
 
@@ -262,13 +316,15 @@ docker compose exec -T rag uv run python -m eval run \
 
 `agentic_rag_demo` は `golden.yaml` 側に `files_dir` を持つため、通常は `--files-dir` を指定しなくてよいです。
 
-### 7.4 CLI option
+### 7.5 CLI option
 
 | サブコマンド / フラグ | 意味 | 既定 |
 | --- | --- | --- |
 | `prepare-beir --suite <name>` | `suite.yaml` を読み、BEIR 形式から generated golden を作る | `beir_scifact` |
 | `prepare-beir --query-limit <n>` | query 数を制限する。`0` は制限なし | suite 設定 |
 | `prepare-beir --corpus-limit <n>` | corpus 文書数を制限する。`0` は制限なし | suite 設定 |
+| `prepare-hotpot --suite <name>` | `suite.yaml` を読み、HotpotQA（同梱 gz）から generated golden を作る | `hotpot_dev` |
+| `prepare-hotpot --query-limit <n>` | 設問数を制限する。`0` は同梱全件（200 問） | suite 設定 |
 | `ingest --suite <name>` | suite を指定して取り込む | `beir_scifact` |
 | `ingest --golden <yaml>` | golden YAML を明示指定する | suite から自動解決 |
 | `ingest --files-dir <dir>` | 原本ファイルの所在を明示指定する | golden の `files_dir` |
@@ -328,28 +384,60 @@ CI は 2 層です。
 
 | Workflow | 目的 | 実行環境 |
 | --- | --- | --- |
-| `.github/workflows/rag-eval-smoke.yml` | ハーネスの単体テスト。モデル・DB・Qdrant 不要 | GitHub-hosted |
-| `.github/workflows/rag-eval-full.yml` | 実 BGE-M3 + Qdrant で検索評価 | self-hosted Windows runner |
+| `.github/workflows/rag-eval-smoke.yml` | ハーネスの単体テスト。モデル・DB・Qdrant 不要 | GitHub-hosted（ubuntu） |
+| `.github/workflows/rag-eval-full.yml` | 実 BGE-M3 + Qdrant で検索評価 | self-hosted Windows runner（GPU） |
 
-full eval は `workflow_dispatch` の input で suite と規模を選べます。
+smoke は `pull_request` で `rag/eval/**` などを変更したときに**自動実行**されます。full eval は
+`workflow_dispatch`（手動）と夜間 cron で動きます。
+
+full eval の `workflow_dispatch` input は次のとおりです。
 
 | input | 例 | 意味 |
 | --- | --- | --- |
-| `suite` | `beir_scifact` / `agentic_rag_demo` | 実行する suite |
-| `query_limit` | `100` | BEIR の query 数。専用 golden では実質使わない |
-| `corpus_limit` | `1000` / `0` | BEIR の corpus 数。`0` は full |
+| `suite` | `beir_scifact` / `hotpot_dev` / `agentic_rag_demo` | 実行する suite |
+| `query_limit` | `100` / `0` | 設問数。`0` は full（hotpot は同梱 200 問が上限）。専用 golden では実質使わない |
+| `corpus_limit` | `1000` / `0` | BEIR の corpus 数。`0` は full。**hotpot / 専用 golden では無視される** |
 
-GitHub Actions 画面では次の順で確認します。
+### 10.1 full eval を GitHub Actions から実行する
 
-1. GitHub repo を開く。
-2. `Actions` tab を開く。
-3. `rag-eval-full` を選ぶ。
-4. 対象 run を開く。
-5. `Summary` で Markdown report を見る。
-6. `Artifacts` から `eval-report-<suite>` を download し、JSON / Markdown / generated golden を確認する。
+push（またはマージ）後、ブラウザから手動起動します。runner 機（Windows）で手動 pull する必要は
+ありません。runner が自分で対象コミットを checkout します。
 
-runner は self-hosted のため、今の構成ではあなたの Windows 上で動きます。
-PC、Docker Desktop、runner process が止まっていると job は queue で待機します。
+1. GitHub repo → `Actions` tab を開く。
+2. 左の workflow 一覧から `rag-eval-full` を選ぶ。
+3. 右上の `Run workflow` を押す。
+4. `Use workflow from` で実行したい branch を選ぶ（既定は `main`）。
+   workflow 定義もコードもこの branch のものが使われる。
+5. `suite` に対象 suite 名（例 `hotpot_dev`）を入力。必要なら `query_limit` / `corpus_limit` を調整。
+6. `Run workflow` を押すと、self-hosted runner が拾って checkout → `docker compose up --build` →
+   prepare → ingest → run の順で実行する。
+
+結果の確認手順は次のとおりです。
+
+1. 対象 run を開く。
+2. `Summary` で Markdown report（aggregate score）を見る。軽い確認はこれで足りる。
+3. 詳細は `Artifacts` の `eval-report-<suite>` を download し、JSON / Markdown / generated golden を見る。
+
+失敗時も `always()` で artifact upload と Step Summary 出力は走るため、gate 不合格やエラーの原因は
+そこで確認できます。失敗ステップのログは run 画面の各 step、または `gh run view <id> --log-failed` で見られます。
+
+### 10.2 GitHub Actions 実行時の注意点
+
+- **self-hosted runner が起動していないと queue で待つ。** full eval は `[self-hosted, Windows, rag, gpu]`
+  ラベルの runner で動く。PC・Docker Desktop・runner サービスが止まっていると job は実行されず待機する。
+- **full は PR では走らない。** `workflow_dispatch` か夜間 cron のみ。PR で回るのは smoke（ubuntu, モデル無し）だけ。
+- **公開 suite と repo golden で workflow 内の分岐が違う。** prepare / ingest / run の各 step は suite 名の
+  prefix で処理を分けている（`beir_` → `prepare-beir` / `hotpot_` → `prepare-hotpot` / それ以外 → repo golden 扱い）。
+  新しい公開 suite を足すときは、この 3 step の分岐に追加しないと「repo golden 扱い」に落ちて失敗する。
+- **smoke のテストは固定リスト。** `rag-eval-smoke.yml` は流すテストファイルを列挙している。eval 配下に
+  テストを足しても自動では拾われないので、リストへ追記する。
+- **hotpot は外部ダウンロード不要。** 同梱 gz を読むため、CMU 公式ホスト死亡や HF 遮断の影響を受けない。
+  逆に `suite.yaml` で `source_url` 方式に戻すと、不安定ホストに依存して prepare が落ちうる。
+- **rag イメージは焼き込み式。** `eval/` はビルド時 `COPY` される（ソースマウントではない）。
+  `prepare-*` や評価コード、同梱データを変えたら `--build` で rag を再ビルドする必要がある。
+  full eval の workflow は `up -d --build rag` を含むので CI 上は自動で反映される。
+- **CUDA チェックがある。** full eval は冒頭で rag コンテナ内の `torch.cuda.is_available()` を検証する。
+  GPU が見えないと早期に失敗する（GPU runner 前提）。
 
 ## 11. 埋め込みモデル更新と Blue-Green
 
