@@ -49,13 +49,12 @@ flowchart LR
 | suite | 目的 | 資産の置き場所 |
 | --- | --- | --- |
 | `beir_scifact` | 公開データセットによる外部説明しやすい検索評価 | `rag/eval/suites/beir_scifact/suite.yaml` と `artifacts/` |
-| `agentic_rag_demo` | 以前の独自テストを残した、業務難所・エッジケース評価 | `rag/eval/suites/agentic_rag_demo/golden.yaml` と `docs/eval-assets/agentic_rag_demo/` |
+| `agentic_rag_demo` | 業務難所・エッジケース評価 | `rag/eval/suites/agentic_rag_demo/golden.yaml` と `docs/eval-assets/agentic_rag_demo/` |
 
 `beir_scifact` は BEIR SciFact の公式 zip から生成します。生成物は `artifacts/` 配下に置き、
 repo にはコミットしません。
 
-`agentic_rag_demo` は以前のデモ PDF ベースの評価を、`docs/demo-files` ではなく
-`docs/eval-assets/agentic_rag_demo/` に移したものです。専用 golden と baseline は repo 管理します。
+`agentic_rag_demo` は自前で用意したものです。専用 golden と baseline は repo 管理します。
 
 ## 3. ファイル構成と責務
 
