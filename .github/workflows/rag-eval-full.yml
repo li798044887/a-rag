@@ -11,7 +11,7 @@ jobs:
   full-eval:
     runs-on: [self-hosted, rag]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Prepare report directory
         run: mkdir -p artifacts/rag-eval
       - name: Bring up full stack (rebuild rag to bake eval/)
@@ -33,7 +33,7 @@ jobs:
           fi
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eval-report
           path: artifacts/rag-eval/*
