@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import json
 import re
@@ -16,9 +17,11 @@ from eval.dataset import Thresholds
 class HotpotConfig:
     suite: str
     split: str
-    source_url: str
     owner_user_id: str
     thresholds: Thresholds
+    # 入力ソースは2系統。source_path（repo 同梱・絶対パス・.gz 可）を優先、無ければ source_url を DL。
+    source_path: str | None = None
+    source_url: str | None = None
     query_limit: int | None = None
 
 
@@ -28,15 +31,34 @@ _TRIVIAL_ANSWERS = {"", "yes", "no", "noanswer"}
 
 
 def load_hotpot_config(path: str | Path) -> HotpotConfig:
-    data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    path = Path(path)
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    source_path = data.get("source_path")
+    if source_path:
+        # suite.yaml からの相対指定を絶対パスへ解決（同梱データを指す）。
+        source_path = str((path.parent / source_path).resolve())
     return HotpotConfig(
         suite=data["suite"],
         split=data.get("split", "dev"),
-        source_url=data["source_url"],
         owner_user_id=data.get("owner_user_id", f"__eval_{data['suite']}__"),
         thresholds=Thresholds.model_validate(data.get("thresholds", {})),
+        source_path=source_path,
+        source_url=data.get("source_url"),
         query_limit=data.get("query_limit"),
     )
+
+
+def _read_records(config: HotpotConfig, cache_dir: str | Path) -> list[dict[str, Any]]:
+    """source_path（同梱・gz 可）を優先、無ければ source_url を DL して JSON を読む。"""
+    if config.source_path:
+        path = Path(config.source_path)
+    elif config.source_url:
+        path = _download(config.source_url, Path(cache_dir))
+    else:
+        raise ValueError("hotpot: source_path か source_url のいずれかが必要です")
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _title_filename(title: str) -> str:
@@ -117,8 +139,7 @@ def build_hotpot_suite(records: Iterable[dict[str, Any]], config: HotpotConfig,
 
 def prepare_hotpot_suite(config: HotpotConfig, assets_dir: str | Path,
                          golden_out: str | Path, cache_dir: str | Path) -> Path:
-    json_path = _download(config.source_url, Path(cache_dir))
-    records = json.loads(json_path.read_text(encoding="utf-8"))
+    records = _read_records(config, cache_dir)
     suite = build_hotpot_suite(records, config, assets_dir)
     golden = Path(golden_out)
     golden.parent.mkdir(parents=True, exist_ok=True)

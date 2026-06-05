@@ -1,7 +1,16 @@
+import gzip
 import json
+from pathlib import Path
 
 from eval.dataset import Thresholds, load_suite
-from eval.hotpot import HotpotConfig, build_hotpot_suite, prepare_hotpot_suite
+from eval.hotpot import (
+    HotpotConfig,
+    build_hotpot_suite,
+    load_hotpot_config,
+    prepare_hotpot_suite,
+)
+
+_SUITE_YAML = Path(__file__).resolve().parents[1] / "eval/suites/hotpot_dev/suite.yaml"
 
 
 def _config(**overrides):
@@ -86,6 +95,39 @@ def test_prepare_hotpot_suite_from_file_uri(tmp_path):
     )
     suite = load_suite(golden)
     assert suite.cases[0].key_facts[0].any == ["Beta"]
+
+
+def test_prepare_hotpot_suite_from_gzip_source_path(tmp_path):
+    src = tmp_path / "hotpot.json.gz"
+    with gzip.open(src, "wt", encoding="utf-8") as f:
+        json.dump([_record("q1", "Q?", "Beta")], f)
+    golden = prepare_hotpot_suite(
+        _config(source_url=None, source_path=str(src)),
+        tmp_path / "assets",
+        tmp_path / "golden.yaml",
+        tmp_path / "cache",
+    )
+    suite = load_suite(golden)
+    assert suite.cases[0].key_facts[0].any == ["Beta"]
+
+
+def test_vendored_suite_loads_and_builds(tmp_path):
+    # 同梱データ(先頭200問)が元スキーマとして妥当で、fact_coverage 用の key_facts を生むことを検証。
+    config = load_hotpot_config(_SUITE_YAML)
+    assert config.source_path and config.source_path.endswith(".json.gz")
+    suite_dict = build_hotpot_suite(_read_vendored(config), config, tmp_path / "assets")
+    suite = load_suite_from_dict(suite_dict, tmp_path)
+    assert len(suite.cases) == config.query_limit  # query_limit=100 で頭打ち
+    # yes/no 以外の設問では answer が key_fact になり facts 列が埋まる
+    assert any(c.key_facts for c in suite.cases)
+    # 正解文書は必ずコーパスに含まれる
+    for c in suite.cases:
+        assert all(d in suite.documents for d in c.relevant_documents)
+
+
+def _read_vendored(config):
+    with gzip.open(config.source_path, "rt", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def load_suite_from_dict(suite_dict, tmp_path):

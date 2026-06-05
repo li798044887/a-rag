@@ -1,7 +1,10 @@
 suite: hotpot_dev
 adapter: hotpot
 split: dev
-source_url: http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json
+# 公式 CMU ホスト(curtis.ml.cmu.edu)は死んでいるため、HF parquet から元スキーマへ変換した
+# 先頭200問を repo 同梱（HF 非依存・オフライン可・CI 高速化）。全件で回したい場合のみ
+# source_url を使う（公式ホストは不安定なので非推奨）。
+source_path: hotpot_dev_distractor_sample.json.gz
 owner_user_id: __eval_hotpot_dev__
 query_limit: 100
 # 多ホップ検索＋answer 部分一致による fact_coverage。初回は実測してから再ベースライン推奨。
