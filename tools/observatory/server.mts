@@ -55,7 +55,7 @@ const http = createHttpServer((req, res) => {
     const { roleSystems, chatSystemOf } = roleSystemsFor(locale);
     const cfg = cfgMod.AGENT_CFG_DEFAULTS;
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ chat: chatSystemOf(cfg), ...roleSystems, cfg }));
+    res.end(JSON.stringify({ chat: chatSystemOf(cfg), ...roleSystems, cfg, owner: OWNER }));
     return;
   }
 
@@ -63,7 +63,9 @@ const http = createHttpServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", async () => {
-      const { query, model, locale = "ja", cfg, overrides = {}, retrieveMode = "replay" } = JSON.parse(body || "{}");
+      const { query, model, locale = "ja", cfg, overrides = {}, retrieveMode = "replay", owner } = JSON.parse(body || "{}");
+      // owner はリクエスト指定を優先（UI から再起動なしで切替可）。未指定は env 既定。
+      const ownerUserId = typeof owner === "string" && owner.trim() ? owner.trim() : OWNER;
       res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache" });
       const send = (o: unknown) => res.write(`data: ${JSON.stringify(o)}\n\n`);
 
@@ -79,7 +81,7 @@ const http = createHttpServer((req, res) => {
       try {
         for await (const ev of run.runAgent({
           query,
-          ownerUserId: OWNER,
+          ownerUserId,
           threadId: "observe",
           modelId: model,
           locale,

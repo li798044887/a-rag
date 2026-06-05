@@ -17,7 +17,7 @@ interface Trace {
   role: string;
   durationMs: number;
   request: { system: string; messages: unknown; responseFormat?: unknown; overridden: boolean };
-  response: { text: string; toolCalls?: { name: string; input: unknown }[]; usage?: unknown };
+  response: { text: string; reasoning?: string; toolCalls?: { name: string; input: unknown }[]; usage?: unknown };
   error?: string;
 }
 
@@ -29,6 +29,7 @@ export function App() {
   const [query, setQuery] = useState("");
   const [model, setModel] = useState(MODELS[0].id);
   const [locale, setLocale] = useState("ja");
+  const [owner, setOwner] = useState("");
   const [retrieveMode, setRetrieveMode] = useState<"live" | "replay">("replay");
   const [traces, setTraces] = useState<Trace[]>([]);
   const [events, setEvents] = useState<unknown[]>([]);
@@ -36,7 +37,10 @@ export function App() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`/api/defaults?locale=${locale}`).then((r) => r.json()).then(setDefaults).catch(() => {});
+    fetch(`/api/defaults?locale=${locale}`).then((r) => r.json()).then((d) => {
+      setDefaults(d);
+      setOwner((cur) => cur || d.owner || "");
+    }).catch(() => {});
   }, [locale]);
 
   async function runIt() {
@@ -45,7 +49,7 @@ export function App() {
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query, model, locale, retrieveMode, overrides }),
+        body: JSON.stringify({ query, model, locale, retrieveMode, overrides, owner }),
       });
       const reader = res.body!.getReader();
       const dec = new TextDecoder();
@@ -110,6 +114,11 @@ export function App() {
             </select>
           </label>
         </div>
+        <div className="row">
+          <label style={{ flex: 1 }}>owner
+            <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="検索スコープの owner id" style={{ width: "100%" }} />
+          </label>
+        </div>
         {error && <pre className="err">{error}</pre>}
 
         <h4>プロンプト上書き</h4>
@@ -135,6 +144,9 @@ export function App() {
             {t.error && <pre className="err">{t.error}</pre>}
             <details><summary>送信 system</summary><pre>{t.request.system}</pre></details>
             <details><summary>送信 messages</summary><pre>{JSON.stringify(t.request.messages, null, 2)}</pre></details>
+            {t.response.reasoning && (
+              <details open><summary>思考過程（reasoning）</summary><pre>{t.response.reasoning}</pre></details>
+            )}
             <details open><summary>出力</summary><pre>{t.response.text || "(空)"}</pre></details>
             {t.response.toolCalls && t.response.toolCalls.length > 0 && (
               <details><summary>tool-calls</summary><pre>{JSON.stringify(t.response.toolCalls, null, 2)}</pre></details>

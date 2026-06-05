@@ -22,6 +22,8 @@ export interface LlmTrace {
   };
   response: {
     text: string;
+    /** 推論モデルの思考過程（reasoning パート）。無い場合は空。 */
+    reasoning?: string;
     toolCalls?: { name: string; input: unknown }[];
     finishReason?: unknown;
     usage?: unknown;
@@ -112,8 +114,13 @@ export function createObserver(cfg: ObserverConfig) {
               .filter((c) => c.type === "text")
               .map((c) => (c as { text: string }).text)
               .join("");
+            const reasoning = res.content
+              .filter((c) => c.type === "reasoning")
+              .map((c) => (c as { text: string }).text)
+              .join("");
             t.response = {
               text,
+              reasoning,
               toolCalls: res.content
                 .filter((c) => c.type === "tool-call")
                 .map((c) => ({ name: (c as { toolName: string }).toolName, input: (c as { input: unknown }).input })),
@@ -137,6 +144,7 @@ export function createObserver(cfg: ObserverConfig) {
         const t = traces.find((x) => x.seq === (params as { __traceSeq?: number }).__traceSeq);
         const { stream, ...rest } = await doStream();
         let text = "";
+        let reasoning = "";
         const toolCalls: { name: string; input: unknown }[] = [];
         let finishReason: unknown;
         let usage: unknown;
@@ -151,6 +159,7 @@ export function createObserver(cfg: ObserverConfig) {
               usage?: unknown;
             };
             if (p.type === "text-delta" && typeof p.delta === "string") text += p.delta;
+            else if (p.type === "reasoning-delta" && typeof p.delta === "string") reasoning += p.delta;
             else if (p.type === "tool-call") toolCalls.push({ name: p.toolName ?? "", input: p.input });
             else if (p.type === "finish") {
               finishReason = p.finishReason;
@@ -161,7 +170,7 @@ export function createObserver(cfg: ObserverConfig) {
           flush() {
             if (t) {
               t.durationMs = Date.now() - t.startedAt;
-              t.response = { text, toolCalls, finishReason, usage };
+              t.response = { text, reasoning, toolCalls, finishReason, usage };
               cfg.onTrace?.(t);
             }
           },
