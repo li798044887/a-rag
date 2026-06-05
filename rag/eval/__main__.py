@@ -95,8 +95,10 @@ def _cmd_run(args) -> int:
 
     print(to_markdown(result))
     if args.out:
-        Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2),
-                                  encoding="utf-8")
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2),
+                            encoding="utf-8")
     baseline_path = _resolve_baseline(args)
     if baseline_path and baseline_path.exists():
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))

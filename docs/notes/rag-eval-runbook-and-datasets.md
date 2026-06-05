@@ -6,6 +6,11 @@
 
 ## 1. 現行の標準 suite
 
+標準 suite は二段構え。
+
+- `beir_scifact`: 公開ベンチマーク。検索評価の再現性・対外説明用。
+- `agentic_rag_demo`: repo 管理の専用 golden。表・図面・複数文書照合など、プロダクト固有の難所確認用。
+
 既定 suite は `beir_scifact`。
 
 - 設定: `rag/eval/suites/beir_scifact/suite.yaml`
@@ -17,6 +22,12 @@
 
 repo には公開データセット本体をコミットしない。CI またはローカル実行時に BEIR の
 公式 zip を取得し、text 資産と golden を生成する。
+
+`agentic_rag_demo` は以下を repo 管理する。
+
+- `rag/eval/suites/agentic_rag_demo/golden.yaml`
+- `rag/eval/suites/agentic_rag_demo/baselines/bge-m3__bge.json`
+- `docs/eval-assets/agentic_rag_demo/*.pdf`
 
 ## 2. ローカル実行
 
@@ -38,6 +49,17 @@ docker compose exec -T rag uv run python -m eval run \
   --golden /data/eval-reports/beir_scifact/golden.yaml \
   --gate \
   --out /data/eval-reports/beir_scifact/eval-report.json
+```
+
+専用 golden を回す場合:
+
+```bash
+docker compose --profile worker up -d --build rag
+docker compose exec -T rag uv run python -m eval ingest --suite agentic_rag_demo
+docker compose exec -T rag uv run python -m eval run \
+  --suite agentic_rag_demo \
+  --gate \
+  --out /data/eval-reports/agentic_rag_demo/eval-report.json
 ```
 
 小さく試す場合:

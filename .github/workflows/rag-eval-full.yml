@@ -41,26 +41,42 @@ jobs:
         run: docker compose --profile worker up -d --build rag
       - name: Prepare public dataset
         run: |
-          docker compose exec -T rag uv run python -m eval prepare-beir `
-            --suite $env:EVAL_SUITE `
-            --assets-dir "/data/eval-assets/$env:EVAL_SUITE" `
-            --golden-out "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
-            --query-limit $env:QUERY_LIMIT `
-            --corpus-limit $env:CORPUS_LIMIT
+          if ($env:EVAL_SUITE.StartsWith("beir_")) {
+            docker compose exec -T rag uv run python -m eval prepare-beir `
+              --suite $env:EVAL_SUITE `
+              --assets-dir "/data/eval-assets/$env:EVAL_SUITE" `
+              --golden-out "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+              --query-limit $env:QUERY_LIMIT `
+              --corpus-limit $env:CORPUS_LIMIT
+          } else {
+            "Suite $env:EVAL_SUITE uses repository eval assets; skipping public dataset preparation."
+          }
       - name: Ingest golden documents
         run: |
-          docker compose exec -T rag uv run python -m eval ingest `
-            --suite $env:EVAL_SUITE `
-            --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
-            --files-dir "/data/eval-assets/$env:EVAL_SUITE"
+          if ($env:EVAL_SUITE.StartsWith("beir_")) {
+            docker compose exec -T rag uv run python -m eval ingest `
+              --suite $env:EVAL_SUITE `
+              --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+              --files-dir "/data/eval-assets/$env:EVAL_SUITE"
+          } else {
+            docker compose exec -T rag uv run python -m eval ingest --suite $env:EVAL_SUITE
+          }
       - name: Run evaluation with gate
         run: |
-          docker compose exec -T rag uv run python -m eval run `
-            --suite $env:EVAL_SUITE `
-            --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
-            --gate `
-            --out "/data/eval-reports/$env:EVAL_SUITE/eval-report.json" `
-            | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
+          if ($env:EVAL_SUITE.StartsWith("beir_")) {
+            docker compose exec -T rag uv run python -m eval run `
+              --suite $env:EVAL_SUITE `
+              --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+              --gate `
+              --out "/data/eval-reports/$env:EVAL_SUITE/eval-report.json" `
+              | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
+          } else {
+            docker compose exec -T rag uv run python -m eval run `
+              --suite $env:EVAL_SUITE `
+              --gate `
+              --out "/data/eval-reports/$env:EVAL_SUITE/eval-report.json" `
+              | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
+          }
           exit $LASTEXITCODE
       - name: Publish report summary
         if: always()

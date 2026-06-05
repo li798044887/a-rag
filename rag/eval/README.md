@@ -4,6 +4,7 @@
 
 ## 構成
 - `suites/<suite>/suite.yaml` … 公開データセットアダプタ設定
+- `suites/<suite>/golden.yaml` … repo 管理の専用 golden（業務・デモ・回帰用）
 - `metrics.py` … 純関数メトリクス / `runner.py` … 実行 / `report.py` … レポート・ゲート
 - `beir.py` … BEIR 形式（corpus / queries / qrels）から golden とテキスト資産を生成
 - `corpus.py` … 取り込み・解決 / `__main__.py` … CLI
@@ -21,6 +22,16 @@ docker compose exec -T rag uv run python -m eval ingest \
 docker compose exec -T rag uv run python -m eval run \
   --golden /data/eval-reports/beir_scifact/golden.yaml \
   --gate --out /data/eval-reports/beir_scifact/eval-report.json
+```
+
+repo 管理の専用 golden を回す場合:
+
+```bash
+docker compose --profile worker up -d --build rag
+docker compose exec -T rag uv run python -m eval ingest --suite agentic_rag_demo
+docker compose exec -T rag uv run python -m eval run \
+  --suite agentic_rag_demo \
+  --gate --out /data/eval-reports/agentic_rag_demo/eval-report.json
 ```
 
 ## ベースライン更新
