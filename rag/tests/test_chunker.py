@@ -108,38 +108,26 @@ def test_pptx_list_body_survives_normalize_and_chunking():
                and c.block_type == "text" for c in chunks)
 
 
-def test_image_with_ocr_emits_ocr_chunk():
+def test_image_block_emits_single_image_chunk_with_caption():
     blocks = [
         title("図", 1),
-        ParsedBlock(type="image", image_path="images/a.jpg",
-                    caption="冷却図", page=3, ocr_text="図1: 冷却システム\n流入 出口"),
+        ParsedBlock(type="image", image_path="images/a.jpg", caption="冷却図", page=3),
     ]
     chunks = chunk_blocks(blocks, target_tokens=1000)
-    assert len(chunks) == 2
     image_chunks = [c for c in chunks if c.block_type == "image"]
-    ocr_chunks = [c for c in chunks if c.block_type == "image_ocr"]
     assert len(image_chunks) == 1
-    assert len(ocr_chunks) == 1
     assert image_chunks[0].text == "![冷却図](images/a.jpg)"
-    assert ocr_chunks[0].text == "[image: images/a.jpg]\n図1: 冷却システム\n流入 出口"
-    assert ocr_chunks[0].heading_path == "図"
-    assert ocr_chunks[0].page_start == 3
+    # image_ocr 型は廃止済み。
+    assert all(c.block_type != "image_ocr" for c in chunks)
 
 
-def test_image_without_ocr_does_not_emit_ocr_chunk():
+def test_figure_text_as_text_block_is_chunked_as_text():
+    # hybrid の図表解析がテキストを独立 text ブロックで返すケース。
     blocks = [
-        ParsedBlock(type="image", image_path="images/b.png", page=0, ocr_text=None),
+        title("図", 1),
+        ParsedBlock(type="image", image_path="images/a.jpg", caption="図1", page=0),
+        ParsedBlock(type="text", text="図1: 冷却システム 流入 出口", page=0),
     ]
     chunks = chunk_blocks(blocks, target_tokens=1000)
-    types = {c.block_type for c in chunks}
-    assert "image_ocr" not in types
-    assert len(chunks) == 1
-
-
-def test_image_with_empty_ocr_text_does_not_emit_ocr_chunk():
-    blocks = [
-        ParsedBlock(type="image", image_path="images/c.png", page=0, ocr_text=""),
-    ]
-    chunks = chunk_blocks(blocks, target_tokens=1000)
-    types = {c.block_type for c in chunks}
-    assert "image_ocr" not in types
+    assert any(c.block_type == "text" and "冷却システム" in c.text for c in chunks)
+    assert all(c.block_type != "image_ocr" for c in chunks)

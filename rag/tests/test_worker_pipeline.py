@@ -105,7 +105,6 @@ def test_run_ingest_marks_all_owners_activity():
 
 
 def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.worker.ocr_images", lambda blocks, images_dir: blocks)
     mineru_dir = tmp_path / "mineru"
     (mineru_dir / "images").mkdir(parents=True)
     (mineru_dir / "images" / "a.png").write_bytes(b"\x89PNG\r\n")
@@ -142,53 +141,6 @@ def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path, monkeypatc
 
     _cleanup(session, store, h, owner)
 
-
-def test_run_ingest_indexes_image_ocr_chunks(tmp_path, monkeypatch):
-    """image_ocr chunk は Qdrant に索引され、元の image chunk は除外されたまま。"""
-    monkeypatch.setattr("app.worker.ocr_images", lambda blocks, images_dir: blocks)
-
-    mineru_dir = tmp_path / "mineru"
-    (mineru_dir / "images").mkdir(parents=True)
-    (mineru_dir / "images" / "a.png").write_bytes(b"\x89PNG\r\n")
-    raw = tmp_path / "doc.pdf"
-    raw.write_bytes(b"%PDF-1.7")
-
-    def parse_with_image(path, out_dir):
-        return ParsedDocument(
-            blocks=[ParsedBlock(type="title", text="章", level=1),
-                    ParsedBlock(type="text", text="本文です。", page=0),
-                    ParsedBlock(type="image", image_path="images/a.png",
-                                caption="図", page=0,
-                                ocr_text="画像内の文字列")],
-            page_count=1, images_dir=str(mineru_dir),
-        )
-
-    session = SessionLocal()
-    owner = "u_" + uuid.uuid4().hex
-    h = "h_" + uuid.uuid4().hex
-    content, _, job = _mk(session, owner, h, str(raw))
-
-    emb = RecordingEmbedder(dim=8)
-    coll = "test_ingest_ocr_" + uuid.uuid4().hex[:8]
-    store = QdrantStore(collection=coll, dim=8)
-    run_ingest(session, store, emb, parse_with_image, h, job.id)
-
-    chunks = session.query(Chunk).filter_by(content_hash=h).all()
-    types = {c.block_type for c in chunks}
-    assert "image" in types
-    assert "image_ocr" in types
-
-    # image_ocr chunk は embedding される
-    assert any("画像内の文字列" in t for t in emb.seen)
-
-    # image chunk の markdown は embedding されない
-    assert not any("![" in t for t in emb.seen)
-
-    # Qdrant には image_ocr のみ格納
-    n_index = sum(1 for c in chunks if c.block_type != "image")
-    assert store.count() == n_index
-
-    _cleanup(session, store, h, owner)
 
 
 async def test_ingest_document_marks_error_when_model_setup_fails(monkeypatch):
