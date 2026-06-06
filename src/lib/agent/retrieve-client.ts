@@ -63,6 +63,8 @@ export interface RetrieveStageEvent {
   status: "start" | "done" | "error";
   /** 多ホップ検索の hop 番号。hop-1 には付かず、hop-2 以降のみ付与される。 */
   hop?: number;
+  /** hop-2 以降で実際に検索した PRF 展開クエリ。元クエリと異なることを UI で示すため。 */
+  query?: string;
   ms?: number;
   count?: number;
   message?: string;

@@ -110,6 +110,13 @@ def test_retrieve_multihop_stream_relays_and_fuses(monkeypatch):
     # hop-1 の embed（hop 印なし）, hop-2 の embed（hop=2）, 最終 result
     assert any(e.get("stage") == "embed" and "hop" not in e for e in evs)
     assert any(e.get("stage") == "embed" and e.get("hop") == 2 for e in evs)
+    # hop-2 のステージには実際に検索した PRF 展開クエリが載る（hop-1 とは別物）
+    hop2 = [e for e in evs if e.get("hop") == 2]
+    assert hop2
+    assert all("Brown County" in e.get("query", "") for e in hop2)
+    assert all(e["query"] != "Brown State Fishing Lake のある郡の人口は?" for e in hop2)
+    # hop-1 のステージには query を載せない（元クエリ＝エージェントクエリが UI 側で出る）
+    assert all("query" not in e for e in evs if e.get("stage") != "result" and e.get("hop") != 2)
     result = [e for e in evs if e.get("stage") == "result"]
     assert len(result) == 1
     titles = [c.document_title for c in result[0]["chunks"]]

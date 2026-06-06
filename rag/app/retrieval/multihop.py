@@ -125,7 +125,10 @@ def retrieve_multihop_stream(session: Session, store: QdrantStore, embedder: Emb
             if ev.get("stage") == "result":
                 hop2 = ev["chunks"]
             else:
-                yield {**ev, "hop": 2}
+                # hop-2 のステージには実際に検索した PRF 展開クエリを載せる。
+                # 呼び出し側 UI は元クエリしか持たないため、これが無いと hop-2 が
+                # hop-1 と同じクエリで検索したように見えてしまう。
+                yield {**ev, "hop": 2, "query": prf}
     except Exception:
         yield {"stage": "result", "chunks": hop1}
         return
