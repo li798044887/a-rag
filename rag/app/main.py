@@ -22,6 +22,13 @@ async def lifespan(app: FastAPI):
             _state["models_loaded"] = True
         except Exception as exc:  # noqa: BLE001
             print(f"[lifespan] model preload failed, continuing with lazy load: {exc}")
+        # OCR モデルも他モデルと同様に事前取得し、共有 modelcache へ落とす（worker が再利用）。
+        # best-effort: 失敗しても models_loaded は維持し、worker 側で遅延ロードを再試行する。
+        try:
+            from app.parsing.ocr import _build_ocr
+            _build_ocr()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[lifespan] OCR preload failed, will lazy-load in worker: {exc}")
     yield
 
 

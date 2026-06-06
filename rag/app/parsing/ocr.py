@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 
+from app.config import settings
 from app.parsing.types import ParsedBlock
 
 logger = logging.getLogger(__name__)
@@ -10,6 +11,8 @@ logger = logging.getLogger(__name__)
 # プロジェクトがサポートする全言語を OCR 対象にする。
 # ユーザーの UI 言語に関わらず、文書内の全文字を認識する。
 _OCR_LANGS = ["ch_sim", "en", "ja"]
+# 他モデル（BGE-M3/reranker/MinerU）と同様 modelcache ボリュームに永続化する。
+# 起動時 PRELOAD で未取得なら DL し、以降は rag↔worker 共有のキャッシュから読む。
 _DEFAULT_MODEL_DIR = Path.home() / ".cache" / "easyocr" / "model"
 
 _reader = None
@@ -22,7 +25,11 @@ def _build_ocr():
         import easyocr
         model_dir = Path(os.getenv("EASYOCR_MODEL_DIR", str(_DEFAULT_MODEL_DIR))).expanduser()
         model_dir.mkdir(parents=True, exist_ok=True)
-        _reader = easyocr.Reader(_OCR_LANGS, model_storage_directory=str(model_dir))
+        _reader = easyocr.Reader(
+            _OCR_LANGS,
+            model_storage_directory=str(model_dir),
+            gpu=settings.device == "cuda",
+        )
     return _reader
 
 

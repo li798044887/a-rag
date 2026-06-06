@@ -109,7 +109,7 @@ def test_build_ocr_uses_cache_dir_from_env(tmp_path, monkeypatch):
     assert calls == [
         (
             ["ch_sim", "en", "ja"],
-            {"model_storage_directory": str(model_dir)},
+            {"model_storage_directory": str(model_dir), "gpu": False},
         )
     ]
     assert model_dir.is_dir()
