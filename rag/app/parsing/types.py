@@ -12,6 +12,7 @@ class ParsedBlock:
     latex: str | None = None  # equation の LaTeX
     caption: str | None = None  # table/image のキャプション
     image_path: str | None = None  # image の相対パス（例 "images/x.jpg"）
+    ocr_text: str | None = None  # OCR による画像内文字認識結果
 
 
 @dataclass
