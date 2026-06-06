@@ -1,21 +1,23 @@
+# 本番(CUDA/GPU)用 overlay。
+# 使い方:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build
 services:
   rag:
+    build:
+      context: ./rag
+      args:
+        VARIANT: gpu
     environment:
       DEVICE: cuda
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      MINERU_BACKEND: hybrid-auto-engine
+    gpus: all
+
   rag-worker:
+    build:
+      context: ./rag
+      args:
+        VARIANT: gpu
     environment:
       DEVICE: cuda
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      MINERU_BACKEND: hybrid-auto-engine
+    gpus: all
