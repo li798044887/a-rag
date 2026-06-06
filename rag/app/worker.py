@@ -12,6 +12,7 @@ from app.embedding.base import Embedder
 from app.embedding.factory import get_embedder
 from app.models import Chunk, Content, Document, IngestJob
 from app.parsing.dispatch import parse_document
+from app.parsing.ocr import ocr_images
 from app.parsing.types import ParsedDocument
 from app.queue import redis_settings
 from app.vectorstore.qdrant import QdrantStore
@@ -70,6 +71,9 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
         parsed = parse_fn(content.raw_path, out_dir)
         content.page_count = parsed.page_count
         _copy_assets(parsed, content.raw_path)
+
+        # OCR: 画像内の文字を認識して ParsedBlock.ocr_text に書き込む
+        parsed.blocks = ocr_images(parsed.blocks, images_dir=assets_dir_for(content.raw_path))
 
         _set(job, content, session, status="chunking", progress=40, detail="チャンク化")
         chunks = chunk_blocks(parsed.blocks)
@@ -142,7 +146,7 @@ async def requeue_interrupted_jobs(ctx: dict) -> None:
     try:
         jobs = (
             session.query(IngestJob)
-            .filter(IngestJob.status.in_(("queued", "parsing", "chunking", "embedding", "indexing")))
+            .filter(IngestJob.status.in_(("parsing", "chunking", "embedding", "indexing")))
             .all()
         )
         for job in jobs:
@@ -168,9 +172,8 @@ class WorkerSettings:
     functions = [ingest_document]
     on_startup = requeue_interrupted_jobs
     redis_settings = redis_settings()
-    # MinerU / embedding / Qdrant upsert are CPU- and memory-heavy.
-    # Keep local ingestion stable by processing documents one at a time.
-    max_jobs = 1
+    # MinerU 解析は CPU 主体、embedding は GPU。2 並列でスループット向上。
+    max_jobs = 2
     # CPU での MinerU 解析 + BGE-M3 埋め込みは数分かかるため、arq 既定の 300s を大幅に延長。
     # max_tries=1: 長時間ジョブのタイムアウト自動再試行による二重実行を避ける（再試行は /jobs/{id}/retry で明示的に行う）。
     job_timeout = 3600
