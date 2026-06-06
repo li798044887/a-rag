@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     reranker: str = "bge"
     rag_internal_token: str = "dev-internal-token"
     upload_dir: str = "/data/uploads"
-    ocr_lang: str = "ch"
     # 空なら embedder からコレクション名を導出（バージョニング: モデル毎に別コレクション）。
     qdrant_collection: str = ""
 
