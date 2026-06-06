@@ -8,7 +8,7 @@ from app.models import Chunk, Content, Document, IngestJob, WorkspaceActivity
 from app.parsing.types import ParsedBlock, ParsedDocument
 from app.embedding.factory import StubEmbedder
 from app.vectorstore.qdrant import QdrantStore
-from app.worker import ingest_document, run_ingest
+from app.worker import ingest_document, requeue_interrupted_jobs, run_ingest
 
 COLL = "test_ingest_" + uuid.uuid4().hex[:8]
 
@@ -104,7 +104,8 @@ def test_run_ingest_marks_all_owners_activity():
     session.close()
 
 
-def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path):
+def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.worker.ocr_images", lambda blocks, images_dir: blocks)
     mineru_dir = tmp_path / "mineru"
     (mineru_dir / "images").mkdir(parents=True)
     (mineru_dir / "images" / "a.png").write_bytes(b"\x89PNG\r\n")
@@ -142,6 +143,54 @@ def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path):
     _cleanup(session, store, h, owner)
 
 
+def test_run_ingest_indexes_image_ocr_chunks(tmp_path, monkeypatch):
+    """image_ocr chunk は Qdrant に索引され、元の image chunk は除外されたまま。"""
+    monkeypatch.setattr("app.worker.ocr_images", lambda blocks, images_dir: blocks)
+
+    mineru_dir = tmp_path / "mineru"
+    (mineru_dir / "images").mkdir(parents=True)
+    (mineru_dir / "images" / "a.png").write_bytes(b"\x89PNG\r\n")
+    raw = tmp_path / "doc.pdf"
+    raw.write_bytes(b"%PDF-1.7")
+
+    def parse_with_image(path, out_dir):
+        return ParsedDocument(
+            blocks=[ParsedBlock(type="title", text="章", level=1),
+                    ParsedBlock(type="text", text="本文です。", page=0),
+                    ParsedBlock(type="image", image_path="images/a.png",
+                                caption="図", page=0,
+                                ocr_text="画像内の文字列")],
+            page_count=1, images_dir=str(mineru_dir),
+        )
+
+    session = SessionLocal()
+    owner = "u_" + uuid.uuid4().hex
+    h = "h_" + uuid.uuid4().hex
+    content, _, job = _mk(session, owner, h, str(raw))
+
+    emb = RecordingEmbedder(dim=8)
+    coll = "test_ingest_ocr_" + uuid.uuid4().hex[:8]
+    store = QdrantStore(collection=coll, dim=8)
+    run_ingest(session, store, emb, parse_with_image, h, job.id)
+
+    chunks = session.query(Chunk).filter_by(content_hash=h).all()
+    types = {c.block_type for c in chunks}
+    assert "image" in types
+    assert "image_ocr" in types
+
+    # image_ocr chunk は embedding される
+    assert any("画像内の文字列" in t for t in emb.seen)
+
+    # image chunk の markdown は embedding されない
+    assert not any("![" in t for t in emb.seen)
+
+    # Qdrant には image_ocr のみ格納
+    n_index = sum(1 for c in chunks if c.block_type != "image")
+    assert store.count() == n_index
+
+    _cleanup(session, store, h, owner)
+
+
 async def test_ingest_document_marks_error_when_model_setup_fails(monkeypatch):
     session = SessionLocal()
     owner = "u_" + uuid.uuid4().hex
@@ -172,3 +221,34 @@ async def test_ingest_document_marks_error_when_model_setup_fails(monkeypatch):
         check.query(Content).filter_by(content_hash=h).delete()
         check.commit()
         check.close()
+
+
+async def test_requeue_interrupted_jobs_reenqueues_queued_jobs():
+    session = SessionLocal()
+    owner = "u_" + uuid.uuid4().hex
+    h = "h_" + uuid.uuid4().hex
+    _content, _doc, job = _mk(session, owner, h, "/tmp/x.pdf")
+    job_id = job.id
+    session.close()
+
+    class FakeRedis:
+        def __init__(self):
+            self.enqueued = []
+
+        async def enqueue_job(self, name, content_hash, queued_job_id, **kwargs):
+            self.enqueued.append((name, content_hash, queued_job_id, kwargs))
+
+    redis = FakeRedis()
+    try:
+        await requeue_interrupted_jobs({"redis": redis})
+
+        assert ("ingest_document", h, job_id, {"_job_id": job_id}) in redis.enqueued
+    finally:
+        cleanup = SessionLocal()
+        try:
+            cleanup.query(IngestJob).filter_by(content_hash=h).delete()
+            cleanup.query(Document).filter_by(content_hash=h).delete()
+            cleanup.query(Content).filter_by(content_hash=h).delete()
+            cleanup.commit()
+        finally:
+            cleanup.close()

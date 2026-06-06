@@ -13,6 +13,7 @@ from app.embedding.base import Embedder
 from app.embedding.factory import get_embedder
 from app.models import Chunk, Content, Document, IngestJob
 from app.parsing.dispatch import parse_document
+from app.parsing.ocr import ocr_images
 from app.parsing.types import ParsedDocument
 from app.queue import redis_settings
 from app.vectorstore.qdrant import QdrantStore
@@ -71,6 +72,9 @@ def run_ingest(session: Session, store: QdrantStore, embedder: Embedder,
         parsed = parse_fn(content.raw_path, out_dir)
         content.page_count = parsed.page_count
         _copy_assets(parsed, content.raw_path)
+
+        # OCR: 画像内の文字を認識して ParsedBlock.ocr_text に書き込む
+        parsed.blocks = ocr_images(parsed.blocks, images_dir=assets_dir_for(content.raw_path))
 
         _set(job, content, session, status="chunking", progress=40, detail="チャンク化")
         chunks = chunk_blocks(parsed.blocks)

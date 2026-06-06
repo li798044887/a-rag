@@ -38,6 +38,7 @@ services:
       # transformers が起動時に huggingface.co を叩く（mistral 判定の model_info）のを防ぐ。
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
+      EASYOCR_MODEL_DIR: /root/.cache/easyocr/model
     ports: ["8000:8000"]
     # modelcache: BGE-M3 / reranker / MinerU の重みを永続化し rag↔worker で共有
     # （再作成のたびに数 GB を再ダウンロードしない）。
@@ -75,6 +76,7 @@ services:
       # transformers が huggingface.co を叩く（mistral 判定の model_info）のを防ぐ。
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
+      EASYOCR_MODEL_DIR: /root/.cache/easyocr/model
     volumes: ["uploads:/data/uploads", "modelcache:/root/.cache"]
     depends_on:
       postgres: { condition: service_healthy }
