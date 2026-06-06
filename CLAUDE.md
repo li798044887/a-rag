@@ -61,6 +61,21 @@ pnpm dev                                              # http://localhost:3000
 
 `docker-compose.override.yml` によりホスト側 Postgres は **5433**。`.env.local` の `DATABASE_URL` は `postgres://arag:arag@localhost:5433/arag` にする。
 
+### パースバックエンド（CPU/GPU）
+
+MinerU の解析方式は環境変数 `MINERU_BACKEND` で切替える。
+
+- dev（Mac/Docker・CPU）: 既定 `pipeline`。図中テキストは取り込まない。vllm 不要。
+- prod（CUDA/GPU）: `hybrid-auto-engine`。VLM(MinerU2.5) が `--image-analysis` で図表を解釈する。
+
+GPU 起動（nvidia-container-toolkit 前提。VLM 重みは初回オンライン取得 → 以降 `HF_HUB_OFFLINE=1` でキャッシュ）:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build
+```
+
+GPU 用イメージは Dockerfile の `--build-arg VARIANT=gpu` で vllm を含めて構築される（dev は既定 `cpu`）。
+
 ### 開発・検証
 
 ```bash
