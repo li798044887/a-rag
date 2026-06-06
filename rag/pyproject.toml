@@ -15,8 +15,11 @@ dependencies = [
   "arq>=0.26",
   "tenacity>=9.0",
   "pyyaml>=6.0",
-  "easyocr",
 ]
+
+[project.optional-dependencies]
+# GPU(CUDA) 本番用。MinerU の VLM バックエンド(hybrid/vlm)に必要な vllm 等を追加で導入する。
+gpu = ["mineru[vllm]"]
 
 [dependency-groups]
 dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "httpx>=0.27"]
