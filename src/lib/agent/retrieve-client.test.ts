@@ -30,6 +30,28 @@ test("retrieveChunks sends candidate_k when provided", async () => {
   expect(JSON.parse(init!.body as string).candidate_k).toBe(10);
 });
 
+test("multiHop を渡すと body に multi_hop: true を送る", async () => {
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ chunks: [] }), { status: 200 }));
+  process.env.RAG_SERVICE_URL = "http://rag:8000";
+
+  await retrieveChunks({ query: "q", ownerUserId: "u1", multiHop: true });
+
+  const [, init] = spy.mock.calls[0];
+  expect(JSON.parse(init!.body as string).multi_hop).toBe(true);
+});
+
+test("multiHop 未指定なら multi_hop を送らない", async () => {
+  const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ chunks: [] }), { status: 200 }));
+  process.env.RAG_SERVICE_URL = "http://rag:8000";
+
+  await retrieveChunks({ query: "q", ownerUserId: "u1" });
+
+  const [, init] = spy.mock.calls[0];
+  expect("multi_hop" in JSON.parse(init!.body as string)).toBe(false);
+});
+
 test("fetchDocument posts to rag /documents/{id}/chunks and maps chunks", async () => {
   const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(JSON.stringify({ document_id: "d1", document_title: "設計.pdf",

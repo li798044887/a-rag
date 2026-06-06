@@ -35,6 +35,7 @@ export async function retrieveChunks(input: {
   topK?: number;
   candidateK?: number;
   documentIds?: string[];
+  multiHop?: boolean;
 }): Promise<RetrievedChunk[]> {
   const res = await ragFetch("/retrieve", {
     method: "POST",
@@ -46,6 +47,7 @@ export async function retrieveChunks(input: {
       top_k: input.topK ?? 6,
       candidate_k: input.candidateK ?? undefined,
       document_ids: input.documentIds ?? null,
+      multi_hop: input.multiHop ?? undefined,
     }),
   });
   if (!res.ok) {
@@ -87,6 +89,7 @@ export async function retrieveChunksStream(input: {
   topK?: number;
   candidateK?: number;
   documentIds?: string[];
+  multiHop?: boolean;
   onStage: (ev: RetrieveStageEvent) => void;
 }): Promise<RetrievedChunk[]> {
   const res = await ragFetch("/retrieve/stream", {
@@ -99,6 +102,7 @@ export async function retrieveChunksStream(input: {
       top_k: input.topK ?? 6,
       candidate_k: input.candidateK ?? undefined,
       document_ids: input.documentIds ?? null,
+      multi_hop: input.multiHop ?? undefined,
     }),
   });
   if (!res.ok || !res.body) {
