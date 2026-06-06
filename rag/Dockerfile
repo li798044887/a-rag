@@ -14,7 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 ENV PATH="/app/.venv/bin:$PATH"
-RUN uv sync --no-dev --frozen
+# VARIANT=cpu(既定/dev): pipeline のみ。VARIANT=gpu(prod): vllm を含む gpu extra も導入。
+ARG VARIANT=cpu
+RUN if [ "$VARIANT" = "gpu" ]; then \
+        uv sync --no-dev --frozen --extra gpu; \
+    else \
+        uv sync --no-dev --frozen; \
+    fi
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
