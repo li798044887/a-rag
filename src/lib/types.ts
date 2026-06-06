@@ -250,6 +250,8 @@ export interface AgentCfg {
   maxRevisions: number;
   /** 生成後の根拠検証フェーズを有効にするか */
   verify: boolean;
+  /** 決定論的テキスト PRF 多ホップ検索（rag 側）を有効にするか（既定 false） */
+  multiHop: boolean;
 }
 
 // ── Tweaks (persisted display preferences) ──────────────────────────────────

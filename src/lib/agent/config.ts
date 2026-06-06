@@ -16,6 +16,7 @@ export const AGENT_CFG_DEFAULTS: AgentCfg = {
   gradeThreshold: 0.5,
   maxRevisions: 1,
   verify: true,
+  multiHop: false,
 };
 
 export const MAX_STEPS_MIN = 1;
@@ -72,6 +73,7 @@ export function clampAgentCfg(raw: unknown): AgentCfg {
     gradeThreshold: clampFloat(o.gradeThreshold, GRADE_THRESHOLD_MIN, GRADE_THRESHOLD_MAX, AGENT_CFG_DEFAULTS.gradeThreshold),
     maxRevisions: clampInt(o.maxRevisions, REVISIONS_MIN, REVISIONS_MAX, AGENT_CFG_DEFAULTS.maxRevisions),
     verify: asBool(o.verify, AGENT_CFG_DEFAULTS.verify),
+    multiHop: asBool(o.multiHop, AGENT_CFG_DEFAULTS.multiHop),
   };
 }
 
