@@ -6,12 +6,15 @@ from app.parsing.types import ParsedBlock
 logger = logging.getLogger(__name__)
 
 
-def _build_ocr(lang: str):
+# プロジェクトがサポートする全言語を OCR 対象にする。
+# ユーザーの UI 言語に関わらず、文書内の全文字を認識する。
+_OCR_LANGS = ["ch_sim", "en", "ja"]
+
+
+def _build_ocr():
     """EasyOCR Reader インスタンスを生成（遅延インポートで起動時ロードを回避）。"""
     import easyocr
-    # lang が "ch" の場合は簡体字中国語＋英語の既定組合せを使う
-    langs = ["ch_sim", "en"] if lang == "ch" else [lang]
-    return easyocr.Reader(langs)
+    return easyocr.Reader(_OCR_LANGS)
 
 
 def ocr_images(
@@ -21,7 +24,7 @@ def ocr_images(
 ) -> list[ParsedBlock]:
     """image 型ブロックの画像に対し OCR を実行し ocr_text に書き込む。
 
-    ocr が未指定の場合は EasyOCR Reader を生成する。
+    ocr が未指定の場合は EasyOCR Reader を生成する（中日英 3 言語）。
     単一画像の OCR 失敗はログに残してスキップし、後続は続行する。
     """
     image_blocks = [b for b in blocks if b.type == "image" and b.image_path]
@@ -29,8 +32,7 @@ def ocr_images(
         return blocks
 
     if ocr is None:
-        from app.config import settings
-        ocr = _build_ocr(settings.ocr_lang)
+        ocr = _build_ocr()
 
     base = Path(images_dir)
 
