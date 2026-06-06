@@ -2,6 +2,12 @@ from eval.dataset import Thresholds
 from eval.report import diff_baseline, gate_failures, to_markdown
 
 
+def test_baseline_name_selects_multihop():
+    from eval.__main__ import _baseline_name, DEFAULT_BASELINE, MULTIHOP_BASELINE
+    assert _baseline_name(False) == DEFAULT_BASELINE
+    assert _baseline_name(True) == MULTIHOP_BASELINE
+
+
 def _result():
     return {
         "suite": "t",

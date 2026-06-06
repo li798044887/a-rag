@@ -7,6 +7,7 @@ from pathlib import Path
 from app.db import SessionLocal
 from app.embedding.factory import get_embedder
 from app.reranker.factory import get_reranker
+from app.retrieval.multihop import retrieve_multihop
 from app.retrieval.service import retrieve as retrieve_service
 from app.vectorstore.qdrant import QdrantStore
 from eval.beir import load_beir_config, prepare_beir_suite
@@ -23,6 +24,11 @@ DEFAULT_ASSETS_ROOT = Path("/data/eval-assets")
 DEFAULT_REPORT_ROOT = Path("/data/eval-reports")
 DEFAULT_CACHE_DIR = Path("/data/eval-cache")
 DEFAULT_BASELINE = "bge-m3__bge.json"
+MULTIHOP_BASELINE = "bge-m3__bge__multihop.json"
+
+
+def _baseline_name(multi_hop: bool) -> str:
+    return MULTIHOP_BASELINE if multi_hop else DEFAULT_BASELINE
 
 
 def _suite_dir(name: str) -> Path:
@@ -46,7 +52,7 @@ def _resolve_files_dir(args, suite) -> Path:
 def _resolve_baseline(args) -> Path | None:
     if args.baseline:
         return Path(args.baseline)
-    path = _suite_dir(args.suite) / "baselines" / DEFAULT_BASELINE
+    path = _suite_dir(args.suite) / "baselines" / _baseline_name(getattr(args, "multi_hop", False))
     return path if path.exists() else None
 
 
@@ -98,6 +104,9 @@ def _cmd_run(args) -> int:
         resolve(session, suite.owner_user_id, suite.documents)  # 取り込み済み検証
 
         def retrieve_fn(query: str, owner: str, top_k: int):
+            if args.multi_hop:
+                return retrieve_multihop(session, store, embedder, reranker,
+                                         query=query, owner_user_id=owner, top_k=top_k)
             return retrieve_service(session, store, embedder, reranker,
                                     query=query, owner_user_id=owner, top_k=top_k)
 
@@ -160,6 +169,8 @@ def main() -> int:
     p_run.add_argument("--out", default=None, help="レポート JSON 出力先")
     p_run.add_argument("--baseline", default=None, help="ベースライン JSON")
     p_run.add_argument("--gate", action="store_true", help="閾値未達で非ゼロ終了")
+    p_run.add_argument("--multi-hop", dest="multi_hop", action="store_true",
+                       help="決定論的テキスト PRF 多ホップで検索する")
     p_run.set_defaults(func=_cmd_run)
 
     args = parser.parse_args()
