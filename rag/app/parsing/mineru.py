@@ -55,10 +55,12 @@ def _join(value) -> str | None:
 def parse(file_path: str, out_dir: str) -> ParsedDocument:
     """MinerU CLI を実行し content_list.json を正規化して返す。"""
     Path(out_dir).mkdir(parents=True, exist_ok=True)
-    # -b pipeline: 従来のレイアウト解析バックエンド（content_list.json を出力し CPU で動作）。
-    # 既定の hybrid/VLM バックエンドは別途 VLM モデルと GPU が前提のため明示的に回避する。
+    # -b: settings.parse_backend で切替。
+    #   pipeline … CPU/レイアウト解析のみ（dev 既定）。content_list.json を出力。
+    #   hybrid-auto-engine … VLM + 構造解析（prod/CUDA）。--image-analysis(既定有効) で図表も解釈。
     subprocess.run(
-        ["mineru", "-p", file_path, "-o", out_dir, "-d", settings.device, "-b", "pipeline"],
+        ["mineru", "-p", file_path, "-o", out_dir,
+         "-d", settings.device, "-b", settings.parse_backend],
         check=True,
     )
     files = sorted(Path(out_dir).rglob("*_content_list.json"))
