@@ -10,11 +10,16 @@ logger = logging.getLogger(__name__)
 # ユーザーの UI 言語に関わらず、文書内の全文字を認識する。
 _OCR_LANGS = ["ch_sim", "en", "ja"]
 
+_reader = None
+
 
 def _build_ocr():
-    """EasyOCR Reader インスタンスを生成（遅延インポートで起動時ロードを回避）。"""
-    import easyocr
-    return easyocr.Reader(_OCR_LANGS)
+    """EasyOCR Reader インスタンスを取得（モジュールレベルでキャッシュ）。"""
+    global _reader
+    if _reader is None:
+        import easyocr
+        _reader = easyocr.Reader(_OCR_LANGS)
+    return _reader
 
 
 def ocr_images(

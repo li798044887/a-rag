@@ -109,14 +109,17 @@ def chunk_blocks(
 
         # 画像に OCR テキストがあれば image_ocr chunk も生成
         if block.type == "image" and block.ocr_text and block.ocr_text.strip():
+            body = block.ocr_text.strip()
+            if block.image_path:
+                body = f"[image: {block.image_path}]\n{body}"
             chunks.append(Chunk(
                 ordinal=ordinal,
                 heading_path=_heading_path(stack),
                 page_start=block.page,
                 page_end=block.page,
                 block_type="image_ocr",
-                text=block.ocr_text.strip(),
-                token_len=estimate_tokens(block.ocr_text.strip()),
+                text=body,
+                token_len=estimate_tokens(body),
             ))
             ordinal += 1
 

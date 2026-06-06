@@ -121,7 +121,7 @@ def test_image_with_ocr_emits_ocr_chunk():
     assert len(image_chunks) == 1
     assert len(ocr_chunks) == 1
     assert image_chunks[0].text == "![冷却図](images/a.jpg)"
-    assert ocr_chunks[0].text == "図1: 冷却システム\n流入 出口"
+    assert ocr_chunks[0].text == "[image: images/a.jpg]\n図1: 冷却システム\n流入 出口"
     assert ocr_chunks[0].heading_path == "図"
     assert ocr_chunks[0].page_start == 3
 
