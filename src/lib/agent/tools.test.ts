@@ -92,6 +92,33 @@ test("retrieve tool は渡した topK / candidateK を検索へ透過する", as
     expect.objectContaining({ topK: 8, candidateK: 30 }));
 });
 
+test("retrieve tool は multiHop を検索へ透過する", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({
+    registry: reg, ownerUserId: "u1", meta, bus: new StepBus(),
+    prompts: getAgentPrompts("ja"), multiHop: true,
+  });
+
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-mh", messages: [] } as never);
+
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenLastCalledWith(
+    expect.objectContaining({ multiHop: true }));
+});
+
+test("retrieve tool は multiHop 未指定なら透過しない（既定挙動）", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({
+    registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja"),
+  });
+
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-no-mh", messages: [] } as never);
+
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenLastCalledWith(
+    expect.objectContaining({ multiHop: undefined }));
+});
+
 test("fetch_document resolves a citation ref to the real document/chunk ids", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();

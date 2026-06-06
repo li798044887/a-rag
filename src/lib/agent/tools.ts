@@ -37,6 +37,8 @@ export interface BuildToolsInput {
   gradeThreshold?: number;
   /** 関連不足時の再検索の最大回数。未指定なら 0（再検索しない）。 */
   maxRetrieveRetries?: number;
+  /** 決定論的テキスト PRF 多ホップ検索を有効にするか。未指定なら無効（従来挙動）。 */
+  multiHop?: boolean;
 }
 
 /** done 時の段階別 summary を prompts から組み立てる。 */
@@ -99,7 +101,7 @@ function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, p
   return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummaryOf(prompts, ev.stage, ev.count) } };
 }
 
-export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency, topK, candidateK, gradeModel, gradeThreshold, maxRetrieveRetries }: BuildToolsInput): ToolSet {
+export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency, topK, candidateK, gradeModel, gradeThreshold, maxRetrieveRetries, multiHop }: BuildToolsInput): ToolSet {
   const sema = new Semaphore(concurrency ?? AGENT_CFG_DEFAULTS.parallelTools);
   const resolvedTopK = topK ?? AGENT_CFG_DEFAULTS.topK;
   const resolvedCandidateK = candidateK ?? AGENT_CFG_DEFAULTS.candidateK;
@@ -119,6 +121,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
         const runRetrieveAttempt = (attempt: number, parentId: string, showAttemptLabel = true) => retrieveChunksStream({
           query: q, rewritten: attempt > 0 ? q : undefined, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
+          multiHop: multiHop ? true : undefined,
           onStage: (ev) => bus.push(stageToEvent(ev, parentId, q, prompts, attempt, showAttemptLabel)),
         });
         let chunks = await runRetrieveAttempt(0, activeParentId);
