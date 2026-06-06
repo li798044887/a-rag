@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     reranker: str = "bge"
     rag_internal_token: str = "dev-internal-token"
     upload_dir: str = "/data/uploads"
+    ocr_lang: str = "ch"
 
 
 settings = Settings()
