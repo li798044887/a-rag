@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     upload_dir: str = "/data/uploads"
     # 空なら embedder からコレクション名を導出（バージョニング: モデル毎に別コレクション）。
     qdrant_collection: str = ""
+    # MinerU パースバックエンド。dev/CPU は "pipeline"、prod/CUDA は "hybrid-auto-engine"。
+    # hybrid/vlm は VLM(MinerU2.5) + vllm を要し GPU 前提。
+    parse_backend: str = Field(default="pipeline", validation_alias="MINERU_BACKEND")
 
     @field_validator("device")
     @classmethod
@@ -30,6 +33,18 @@ class Settings(BaseSettings):
             return "cuda" if torch.cuda.is_available() else "cpu"
         except Exception:
             return "cpu"
+
+    @field_validator("parse_backend")
+    @classmethod
+    def _check_parse_backend(cls, v: str) -> str:
+        """許容するバックエンドのみ通す。"""
+        v = v.strip()
+        allowed = {"pipeline", "hybrid-auto-engine", "vlm-auto-engine"}
+        if v not in allowed:
+            raise ValueError(
+                f"MINERU_BACKEND は {sorted(allowed)} のいずれか。受領: {v!r}"
+            )
+        return v
 
 
 settings = Settings()
