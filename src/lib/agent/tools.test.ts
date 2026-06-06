@@ -238,7 +238,7 @@ test("hop-2 の stage は hop-1 と別 id・hop ラベル付きでサブステ�
   expect(labels.filter((l) => l.includes("ホップ"))).toHaveLength(1);
 });
 
-test("hop-2 の検索ステップは実 PRF クエリを表示し、長文は省略される", async () => {
+test("hop-2 の検索ステップは実 PRF クエリ全文を input に保持する（表示の省略は描画側の責務）", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
   const bus = new StepBus();
@@ -267,12 +267,9 @@ test("hop-2 の検索ステップは実 PRF クエリを表示し、長文は省
   const hop2 = vs.find((s) => s.id.includes(":hop2"))!;
   // hop-1 は元クエリ
   expect((hop1.input as { query: string }).query).toBe("認証");
-  // hop-2 は PRF クエリ（元クエリとは別物）かつ省略される
+  // hop-2 は PRF クエリ全文（元クエリとは別物・切り詰めない。hover 全文表示のため）
   const q = (hop2.input as { query: string }).query;
-  expect(q).not.toBe("認証");
-  expect(q.startsWith("認証 ")).toBe(true);
-  expect(q.length).toBeLessThan(prf.length);
-  expect(q.endsWith("…")).toBe(true);
+  expect(q).toBe(prf);
 });
 
 test("retrieve tool pushes nested sub-steps with parentId to the bus", async () => {

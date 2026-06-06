@@ -55,19 +55,15 @@ function stageDoneSummaryOf(prompts: AgentPrompts, stage: string, count?: number
 }
 
 /** done 時の段階別 input を組み立てる。 */
-/** hop-2 以降は rag が実 PRF クエリ（ev.query）を載せてくるのでそれを優先表示する。
- *  PRF クエリは hop-1 本文を連結した長文なので、UI 表示用に先頭だけ省略表示する。 */
-const PRF_QUERY_DISPLAY_MAX = 160;
-function displayQuery(ev: RetrieveStageEvent, query: string): string {
-  const q = ev.query ?? query;
-  return q.length > PRF_QUERY_DISPLAY_MAX ? q.slice(0, PRF_QUERY_DISPLAY_MAX) + "…" : q;
-}
-
 function stageInput(ev: RetrieveStageEvent, query: string): Record<string, unknown> {
+  // hop-2 以降は rag が実 PRF クエリ（ev.query）を載せてくるのでそれを優先する。
+  // PRF クエリは hop-1 本文を連結した長文だが、全文を input に保持し、表示の省略
+  // （視覚的クランプ＋hover 全文）は描画側（tool-steps.tsx）に委ねる。
+  const q = ev.query ?? query;
   switch (ev.stage) {
     case "embed": return ev.model ? { model: ev.model } : {};
-    case "vector_search": return { mode: "dense", query: displayQuery(ev, query) };
-    case "bm25_search": return { mode: "sparse", query: displayQuery(ev, query) };
+    case "vector_search": return { mode: "dense", query: q };
+    case "bm25_search": return { mode: "sparse", query: q };
     case "rerank": return { model: ev.model ?? null, top_n: ev.top_n ?? null };
     default: return {};
   }
