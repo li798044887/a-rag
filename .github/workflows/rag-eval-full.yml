@@ -1,0 +1,103 @@
+name: rag-eval-full
+
+# 既定オフ。手動 or 夜間のみ（実 BGE-M3 + Qdrant + HF キャッシュが必要なため
+# GitHub-hosted では原則セルフホストランナー前提）。
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Eval suite name"
+        required: true
+        default: "beir_scifact"
+      query_limit:
+        description: "Number of queries to evaluate; 0 uses the suite default"
+        required: true
+        default: "100"
+      corpus_limit:
+        description: "Number of corpus documents to ingest; 0 uses the full corpus"
+        required: true
+        default: "0"
+  schedule:
+    - cron: "0 18 * * *"  # 03:00 JST
+
+jobs:
+  full-eval:
+    runs-on: [self-hosted, Windows, rag, gpu]
+    env:
+      EVAL_SUITE: ${{ inputs.suite || 'beir_scifact' }}
+      QUERY_LIMIT: ${{ inputs.query_limit || '100' }}
+      CORPUS_LIMIT: ${{ inputs.corpus_limit || '0' }}
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prepare report directory
+        run: |
+          New-Item -ItemType Directory -Force -Path "artifacts/rag-eval/$env:EVAL_SUITE" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/eval-assets/$env:EVAL_SUITE" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/eval-cache" | Out-Null
+      - name: Bring up full stack (rebuild rag to bake eval/)
+        run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build rag
+      - name: Verify CUDA in rag container
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -c "import torch; assert torch.cuda.is_available(), 'CUDA is not available in the rag container'; print(torch.cuda.get_device_name(0))"
+      - name: Prepare public dataset
+        run: |
+          if ($env:EVAL_SUITE.StartsWith("beir_")) {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval prepare-beir `
+              --suite $env:EVAL_SUITE `
+              --assets-dir "/data/eval-assets/$env:EVAL_SUITE" `
+              --golden-out "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+              --query-limit $env:QUERY_LIMIT `
+              --corpus-limit $env:CORPUS_LIMIT
+          } elseif ($env:EVAL_SUITE.StartsWith("hotpot_")) {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval prepare-hotpot `
+              --suite $env:EVAL_SUITE `
+              --assets-dir "/data/eval-assets/$env:EVAL_SUITE" `
+              --golden-out "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+              --query-limit $env:QUERY_LIMIT
+          } else {
+            "Suite $env:EVAL_SUITE uses repository eval assets; skipping public dataset preparation."
+          }
+      - name: Ingest golden documents
+        run: |
+          if ($env:EVAL_SUITE.StartsWith("beir_") -or $env:EVAL_SUITE.StartsWith("hotpot_")) {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval ingest `
+              --suite $env:EVAL_SUITE `
+              --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+              --files-dir "/data/eval-assets/$env:EVAL_SUITE"
+          } else {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval ingest --suite $env:EVAL_SUITE
+          }
+      - name: Run evaluation with gate
+        run: |
+          if ($env:EVAL_SUITE.StartsWith("beir_") -or $env:EVAL_SUITE.StartsWith("hotpot_")) {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval run `
+              --suite $env:EVAL_SUITE `
+              --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+              --gate `
+              --out "/data/eval-reports/$env:EVAL_SUITE/eval-report.json" `
+              | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
+          } else {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval run `
+              --suite $env:EVAL_SUITE `
+              --gate `
+              --out "/data/eval-reports/$env:EVAL_SUITE/eval-report.json" `
+              | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
+          }
+          exit $LASTEXITCODE
+      - name: Publish report summary
+        if: always()
+        run: |
+          $report = "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
+          if (Test-Path $report) {
+            "# Suite: $env:EVAL_SUITE" | Add-Content $env:GITHUB_STEP_SUMMARY
+            Get-Content $report | Add-Content $env:GITHUB_STEP_SUMMARY
+          }
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-report-${{ env.EVAL_SUITE }}
+          path: artifacts/rag-eval/${{ env.EVAL_SUITE }}/*

@@ -1,0 +1,32 @@
+name: rag-eval-smoke
+
+on:
+  pull_request:
+    paths:
+      - "rag/eval/**"
+      - "rag/app/vectorstore/**"
+      - ".github/workflows/rag-eval-smoke.yml"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rag
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+      - name: Sync deps
+        run: uv sync
+      - name: Run harness unit tests (no models / no services)
+        # --noconftest: autouse fixture 経由の app/DB import を避け、純粋に eval/* のみ検証する。
+        run: >
+          uv run pytest --noconftest
+          tests/test_eval_beir.py
+          tests/test_eval_hotpot.py
+          tests/test_eval_metrics.py
+          tests/test_eval_dataset.py
+          tests/test_eval_runner.py
+          tests/test_eval_report.py
+          -v

@@ -41,7 +41,13 @@ services:
     ports: ["8000:8000"]
     # modelcache: BGE-M3 / reranker / MinerU の重みを永続化し rag↔worker で共有
     # （再作成のたびに数 GB を再ダウンロードしない）。
-    volumes: ["uploads:/data/uploads", "modelcache:/root/.cache"]
+    volumes:
+      - "uploads:/data/uploads"
+      - "modelcache:/root/.cache"
+      - "./rag/eval/assets:/data/repo-eval-assets:ro"
+      - "./artifacts/eval-assets:/data/eval-assets"
+      - "./artifacts/rag-eval:/data/eval-reports"
+      - "./artifacts/eval-cache:/data/eval-cache"
     depends_on:
       postgres: { condition: service_healthy }
       qdrant: { condition: service_started }
