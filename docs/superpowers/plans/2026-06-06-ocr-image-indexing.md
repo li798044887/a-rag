@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 对 MinerU 提取的图片执行 PaddleOCR，将识别文字作为 image_ocr chunk 参与向量索引，使图片中的文字可被检索。
+**Goal:** 对 MinerU 提取的图片执行 EasyOCR，将识别文字作为 image_ocr chunk 参与向量索引，使图片中的文字可被检索。
 
-**Architecture:** 新增 `ocr.py` 模块封装 PaddleOCR；`ParsedBlock` 增加 `ocr_text` 字段；`chunker.py` 的 `emit_atomic` 为有 OCR 文字的 image block 额外生成 `block_type="image_ocr"` 的 chunk；`worker.py` 在 `copy_assets` 后调用 OCR。`worker.py:87` 的过滤逻辑无需改动。
+**Architecture:** 新增 `ocr.py` 模块封装 EasyOCR；`ParsedBlock` 增加 `ocr_text` 字段；`chunker.py` 的 `emit_atomic` 为有 OCR 文字的 image block 额外生成 `block_type="image_ocr"` 的 chunk；`worker.py` 在 `copy_assets` 后调用 OCR。`worker.py:87` 的过滤逻辑无需改动。
 
-**Tech Stack:** Python 3.11, PaddleOCR, PaddlePaddle (CPU)
+**Tech Stack:** Python 3.11, EasyOCR, torch/torchvision
 
 ---
 
@@ -49,36 +49,20 @@ git commit -m "feat: ParsedBlock に ocr_text フィールドを追加"
 
 ---
 
-### Task 2: OCR 設定を config.py に追加
+### Task 2: OCR 言語とモデルキャッシュ方針を固定
 
 **Files:**
-- Modify: `rag/app/config.py`
+- No code change
 
-- [ ] **Step 1: ocr_lang を追加**
+- [ ] **Step 1: 設定方針を確認**
 
-```python
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    database_url: str = "postgresql+psycopg://arag:arag@localhost:5432/arag"
-    qdrant_url: str = "http://localhost:6333"
-    redis_url: str = "redis://localhost:6379"
-    device: str = "cpu"
-    embedder: str = "bge-m3"
-    reranker: str = "bge"
-    rag_internal_token: str = "dev-internal-token"
-    upload_dir: str = "/data/uploads"
-    ocr_lang: str = "ch"
-```
+OCR はプロジェクト対応言語に合わせて `["ch_sim", "en", "ja"]` 固定。`config.py` に `ocr_lang` は追加しない。
+EasyOCR モデル保存先は `EASYOCR_MODEL_DIR` で上書き可能にし、既定は `/root/.cache/easyocr/model` 相当にして既存 `modelcache:/root/.cache` volume に乗せる。
 
 - [ ] **Step 2: Commit**
 
 ```bash
-git add rag/app/config.py
-git commit -m "feat: OCR 言語設定 ocr_lang を追加"
+git commit --allow-empty -m "refactor: OCR 言語を全プロジェクト対応言語（中日英）に固定"
 ```
 
 ---
@@ -176,6 +160,7 @@ Expected: FAIL (ModuleNotFoundError: No module named 'app.parsing.ocr')
 ```python
 # app/parsing/ocr.py
 import logging
+import os
 from pathlib import Path
 
 from app.parsing.types import ParsedBlock
@@ -183,10 +168,20 @@ from app.parsing.types import ParsedBlock
 logger = logging.getLogger(__name__)
 
 
-def _build_ocr(lang: str):
-    """PaddleOCR インスタンスを生成（遅延インポートで起動時ロードを回避）。"""
-    from paddleocr import PaddleOCR
-    return PaddleOCR(lang=lang)
+_OCR_LANGS = ["ch_sim", "en", "ja"]
+_DEFAULT_MODEL_DIR = Path.home() / ".cache" / "easyocr" / "model"
+_reader = None
+
+
+def _build_ocr():
+    """EasyOCR Reader インスタンスを取得（モジュールレベルでキャッシュ）。"""
+    global _reader
+    if _reader is None:
+        import easyocr
+        model_dir = Path(os.getenv("EASYOCR_MODEL_DIR", str(_DEFAULT_MODEL_DIR))).expanduser()
+        model_dir.mkdir(parents=True, exist_ok=True)
+        _reader = easyocr.Reader(_OCR_LANGS, model_storage_directory=str(model_dir))
+    return _reader
 
 
 def ocr_images(
@@ -196,16 +191,19 @@ def ocr_images(
 ) -> list[ParsedBlock]:
     """image 型ブロックの画像に対し OCR を実行し ocr_text に書き込む。
 
-    ocr が未指定の場合は PaddleOCR(lang="ch") を生成する。
-    単一画像の OCR 失敗はログに残してスキップし、後続は続行する。
+    ocr が未指定の場合は EasyOCR Reader を生成する。
+    Reader 初期化失敗または単一画像の OCR 失敗はログに残してスキップし、後続は続行する。
     """
     image_blocks = [b for b in blocks if b.type == "image" and b.image_path]
     if not image_blocks:
         return blocks
 
     if ocr is None:
-        from app.config import settings
-        ocr = _build_ocr(settings.ocr_lang)
+        try:
+            ocr = _build_ocr()
+        except Exception:
+            logger.warning("OCR initialization failed; skipping image OCR", exc_info=True)
+            return blocks
 
     base = Path(images_dir)
 
@@ -215,13 +213,11 @@ def ocr_images(
             logger.warning("OCR: image file not found: %s", img_path)
             continue
         try:
-            result = ocr.ocr(str(img_path))
+            result = ocr.readtext(str(img_path))
             lines: list[str] = []
-            if result and result[0]:
-                for line in result[0]:
-                    text = line[1][0]
-                    if text.strip():
-                        lines.append(text.strip())
+            for (_bbox, text, _conf) in result:
+                if text.strip():
+                    lines.append(text.strip())
             if lines:
                 b.ocr_text = "\n".join(lines)
         except Exception:
@@ -236,13 +232,13 @@ def ocr_images(
 cd rag && uv run pytest tests/test_ocr.py -v --noconftest
 ```
 
-Expected: 5 PASS
+Expected: 全 PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add rag/app/parsing/ocr.py rag/tests/test_ocr.py
-git commit -m "feat: PaddleOCR による画像内文字認識モジュールを追加"
+git commit -m "feat: EasyOCR による画像内文字認識モジュールを追加"
 ```
 
 ---
@@ -391,7 +387,7 @@ def test_run_ingest_copies_assets_and_excludes_image_chunks(tmp_path, monkeypatc
 
 def test_run_ingest_indexes_image_ocr_chunks(tmp_path, monkeypatch):
     """image_ocr chunk は Qdrant に索引され、元の image chunk は除外されたまま。"""
-    # PaddleOCR 非依存で通すため ocr_images を no-op に差し替え。
+    # EasyOCR 非依存で通すため ocr_images を no-op に差し替え。
     # テスト用 parse_fn が ocr_text を直接注入するため、OCR ステップは不要。
     monkeypatch.setattr("app.worker.ocr_images", lambda blocks, images_dir: blocks)
 
@@ -489,9 +485,8 @@ git commit -m "feat: worker の ingest パイプラインに OCR ステップを
 
 **Files:**
 - Modify: `rag/pyproject.toml`
-- Modify: `rag/Dockerfile`
 
-- [ ] **Step 1: pyproject.toml に PaddleOCR 依存を追加**
+- [ ] **Step 1: pyproject.toml に EasyOCR 依存を追加**
 
 ```toml
 dependencies = [
@@ -506,21 +501,14 @@ dependencies = [
   "qdrant-client>=1.12",
   "arq>=0.26",
   "tenacity>=9.0",
-  "paddlepaddle",
-  "paddleocr",
+  "easyocr",
 ]
 ```
 
-- [ ] **Step 2: Dockerfile に PaddleOCR システム依存を追加**
+- [ ] **Step 2: EasyOCR モデルキャッシュ方針を確認**
 
-`libreoffice-impress` の後、`fonts-noto-cjk` の前に以下を追加：
-
-```dockerfile
-        libgl1 libglib2.0-0 libxcb1 libsm6 libxext6 libxrender1 \
-        libgomp1 \
-```
-
-（`libgomp1` は PaddlePaddle の実行時依存。実際には既存の `libgl1` 等と重複するが明示しておく）
+`ocr.py` は `EASYOCR_MODEL_DIR` 未指定時に `/root/.cache/easyocr/model` 相当を使用する。
+既存 compose の `modelcache:/root/.cache` volume で永続化されるため、Dockerfile の追加システム依存は不要。
 
 - [ ] **Step 3: uv.lock を更新**
 
@@ -539,8 +527,8 @@ Expected: 全 PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add rag/pyproject.toml rag/uv.lock rag/Dockerfile
-git commit -m "chore: PaddleOCR 依存を追加"
+git add rag/pyproject.toml rag/uv.lock
+git commit -m "chore: EasyOCR 依存を追加"
 ```
 
 ---

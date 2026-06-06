@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 from app.parsing.types import ParsedBlock
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 # プロジェクトがサポートする全言語を OCR 対象にする。
 # ユーザーの UI 言語に関わらず、文書内の全文字を認識する。
 _OCR_LANGS = ["ch_sim", "en", "ja"]
+_DEFAULT_MODEL_DIR = Path.home() / ".cache" / "easyocr" / "model"
 
 _reader = None
 
@@ -18,7 +20,9 @@ def _build_ocr():
     global _reader
     if _reader is None:
         import easyocr
-        _reader = easyocr.Reader(_OCR_LANGS)
+        model_dir = Path(os.getenv("EASYOCR_MODEL_DIR", str(_DEFAULT_MODEL_DIR))).expanduser()
+        model_dir.mkdir(parents=True, exist_ok=True)
+        _reader = easyocr.Reader(_OCR_LANGS, model_storage_directory=str(model_dir))
     return _reader
 
 
@@ -37,7 +41,11 @@ def ocr_images(
         return blocks
 
     if ocr is None:
-        ocr = _build_ocr()
+        try:
+            ocr = _build_ocr()
+        except Exception:
+            logger.warning("OCR initialization failed; skipping image OCR", exc_info=True)
+            return blocks
 
     base = Path(images_dir)
 

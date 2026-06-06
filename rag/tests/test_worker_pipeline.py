@@ -8,7 +8,7 @@ from app.models import Chunk, Content, Document, IngestJob, WorkspaceActivity
 from app.parsing.types import ParsedBlock, ParsedDocument
 from app.embedding.factory import StubEmbedder
 from app.vectorstore.qdrant import QdrantStore
-from app.worker import ingest_document, run_ingest
+from app.worker import ingest_document, requeue_interrupted_jobs, run_ingest
 
 COLL = "test_ingest_" + uuid.uuid4().hex[:8]
 
@@ -221,3 +221,34 @@ async def test_ingest_document_marks_error_when_model_setup_fails(monkeypatch):
         check.query(Content).filter_by(content_hash=h).delete()
         check.commit()
         check.close()
+
+
+async def test_requeue_interrupted_jobs_reenqueues_queued_jobs():
+    session = SessionLocal()
+    owner = "u_" + uuid.uuid4().hex
+    h = "h_" + uuid.uuid4().hex
+    _content, _doc, job = _mk(session, owner, h, "/tmp/x.pdf")
+    job_id = job.id
+    session.close()
+
+    class FakeRedis:
+        def __init__(self):
+            self.enqueued = []
+
+        async def enqueue_job(self, name, content_hash, queued_job_id, **kwargs):
+            self.enqueued.append((name, content_hash, queued_job_id, kwargs))
+
+    redis = FakeRedis()
+    try:
+        await requeue_interrupted_jobs({"redis": redis})
+
+        assert ("ingest_document", h, job_id, {"_job_id": job_id}) in redis.enqueued
+    finally:
+        cleanup = SessionLocal()
+        try:
+            cleanup.query(IngestJob).filter_by(content_hash=h).delete()
+            cleanup.query(Document).filter_by(content_hash=h).delete()
+            cleanup.query(Content).filter_by(content_hash=h).delete()
+            cleanup.commit()
+        finally:
+            cleanup.close()

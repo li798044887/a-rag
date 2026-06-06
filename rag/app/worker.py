@@ -147,7 +147,7 @@ async def requeue_interrupted_jobs(ctx: dict) -> None:
     try:
         jobs = (
             session.query(IngestJob)
-            .filter(IngestJob.status.in_(("parsing", "chunking", "embedding", "indexing")))
+            .filter(IngestJob.status.in_(("queued", "parsing", "chunking", "embedding", "indexing")))
             .all()
         )
         for job in jobs:

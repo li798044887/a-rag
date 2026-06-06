@@ -19,17 +19,18 @@ MinerU 解析 PDF/Office 文档时，嵌入的图片被归类为 `type="image"`�
 上传文档 (PDF/Word/PPT/Excel/Image)
   → MinerU 解析 (content_list.json + images/)
   → Copy Assets (images/ → _assets/images/)
-  → OCR (PaddleOCR 识别每张图片中的文字) [新增]
+  → OCR (EasyOCR 识别每张图片中的文字) [新增]
   → Chunk (image → image chunk + image_ocr chunk)
   → Embed → Qdrant (image_ocr 参与索引，image 保留在 PG 不参与)
 ```
 
 ### OCR 引擎
 
-- **引擎**: PaddleOCR
-- **语言**: `ocr_lang: str = "ch"`（默认中文，可配置）
+- **引擎**: EasyOCR
+- **语言**: 固定 `["ch_sim", "en", "ja"]`（项目支持语言：简体中文、英文、日文）
 - **调用时机**: `copy_assets` 之后、`chunk_blocks` 之前
-- **失败策略**: 单张图片 OCR 失败不影响整体，记录 warning 并跳过
+- **模型缓存**: `EASYOCR_MODEL_DIR` 指定；默认 `/root/.cache/easyocr/model`，由现有 `modelcache:/root/.cache` volume 持久化
+- **失败策略**: OCR Reader 初始化失败或单张图片 OCR 失败都不影响整体，记录 warning 并跳过 OCR
 
 ### ParsedBlock 新增字段
 
@@ -44,7 +45,7 @@ class ParsedBlock:
 
 ```python
 def ocr_images(blocks: list[ParsedBlock], images_dir: str) -> list[ParsedBlock]:
-    """image 型 block に対し PaddleOCR を実行し ocr_text に書き込む"""
+    """image 型 block に対し EasyOCR を実行し ocr_text に書き込む"""
 ```
 
 ### Chunker 改动
@@ -72,17 +73,16 @@ blocks = ocr_images(blocks, images_dir=assets_dir)
 
 ### 配置
 
-```python
-# config.py
-ocr_lang: str = "ch"
-```
+OCR 默认启用，不新增 `config.py` 字段。不需要 `ocr_enabled` 开关。
+模型目录可通过环境变量覆盖：
 
-OCR 默认启用，不作为可选功能。不需要 `ocr_enabled` 开关。
+```bash
+EASYOCR_MODEL_DIR=/root/.cache/easyocr/model
+```
 
 ### 依赖
 
-- `paddlepaddle` (CPU 版)
-- `paddleocr`
+- `easyocr`
 
 ### 适用文件类型
 
@@ -92,21 +92,20 @@ OCR 默认启用，不作为可选功能。不需要 `ocr_enabled` 开关。
 
 | 文件 | 改动 |
 |------|------|
-| `rag/app/config.py` | 新增 `ocr_lang` |
 | `rag/app/parsing/types.py` | `ParsedBlock` 新增 `ocr_text` 字段 |
-| `rag/app/parsing/ocr.py` | **新文件** — PaddleOCR 封装 |
+| `rag/app/parsing/ocr.py` | **新文件** — EasyOCR 封装 |
 | `rag/app/chunking/chunker.py` | image block → image_ocr chunk |
 | `rag/app/worker.py` | 编排：copy_assets 后调用 OCR |
 | `rag/pyproject.toml` | 新增依赖 |
-| `rag/Dockerfile` | PaddleOCR 系统依赖 |
 | `rag/tests/` | 单元测试 + 集成测试 |
 
 ## 错误处理
 
 | 场景 | 处理 |
 |------|------|
+| EasyOCR Reader 初始化失败 | warning 日志，跳过本次 OCR，ingest 继续 |
 | 单张图片 OCR 失败 | warning 日志，跳过该图片 |
-| PaddleOCR 模型未缓存 | 首次运行时自动下载，worker 启动时预热 |
+| EasyOCR 模型未缓存 | 首次运行尝试下载；失败则跳过 OCR，后续可通过 modelcache 预置模型 |
 | 图片文件损坏/格式异常 | 捕获异常，跳过 |
 | OCR 结果为空 | 不生成 image_ocr chunk |
 
