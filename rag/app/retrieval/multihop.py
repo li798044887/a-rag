@@ -93,3 +93,40 @@ def retrieve_multihop(session: Session, store: QdrantStore, embedder: Embedder,
         result = _rrf_fuse(result, hopn, top_k=top_k)
         current = hopn
     return result
+
+
+def retrieve_multihop_stream(session: Session, store: QdrantStore, embedder: Embedder,
+                             reranker: Reranker, *, query: str, owner_user_id: str,
+                             top_k: int = 6, candidate_k: int = DEFAULT_CANDIDATE_K,
+                             document_ids: list[str] | None = None,
+                             max_hops: int = 1) -> Iterator[dict]:
+    """ストリーム版（深さ1）。hop-1 の stage を中継し、hop-2 の stage には hop=2 を
+    付与して中継、最後に融合結果を result として emit する。"""
+    hop1: list[RetrievedChunk] = []
+    for ev in retrieve_stream(session, store, embedder, reranker, query=query,
+                              owner_user_id=owner_user_id, top_k=top_k,
+                              candidate_k=candidate_k, document_ids=document_ids):
+        if ev.get("stage") == "result":
+            hop1 = ev["chunks"]
+        else:
+            yield ev
+    if not hop1 or max_hops <= 0:
+        yield {"stage": "result", "chunks": hop1}
+        return
+    prf = _prf_query(query, hop1)
+    if prf == query:
+        yield {"stage": "result", "chunks": hop1}
+        return
+    hop2: list[RetrievedChunk] = []
+    try:
+        for ev in retrieve_stream(session, store, embedder, reranker, query=prf,
+                                  owner_user_id=owner_user_id, top_k=top_k,
+                                  candidate_k=candidate_k, document_ids=document_ids):
+            if ev.get("stage") == "result":
+                hop2 = ev["chunks"]
+            else:
+                yield {**ev, "hop": 2}
+    except Exception:
+        yield {"stage": "result", "chunks": hop1}
+        return
+    yield {"stage": "result", "chunks": _rrf_fuse(hop1, hop2, top_k=top_k)}

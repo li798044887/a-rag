@@ -87,3 +87,30 @@ def test_retrieve_multihop_empty_hop1_returns_empty(monkeypatch):
     out = mh.retrieve_multihop(None, None, None, None, query="q",
                                owner_user_id="u1", top_k=6)
     assert out == []
+
+
+def test_retrieve_multihop_stream_relays_and_fuses(monkeypatch):
+    lake = _mk("lake-1", "Brown State Fishing Lake")
+    lake.text = lake.expanded_text = "located in Brown County, Kansas"
+    county = _mk("county-1", "Brown County, Kansas")
+    county.text = county.expanded_text = "population was 9,508"
+
+    def fake_stream(session, store, embedder, reranker, *, query, owner_user_id,
+                    top_k=6, candidate_k=50, document_ids=None):
+        yield {"stage": "embed", "status": "done", "ms": 1}
+        if "Brown County" in query:
+            yield {"stage": "result", "chunks": [county]}
+        else:
+            yield {"stage": "result", "chunks": [lake]}
+
+    monkeypatch.setattr(mh, "retrieve_stream", fake_stream)
+    evs = list(mh.retrieve_multihop_stream(None, None, None, None,
+               query="Brown State Fishing Lake のある郡の人口は?",
+               owner_user_id="u1", top_k=6))
+    # hop-1 の embed（hop 印なし）, hop-2 の embed（hop=2）, 最終 result
+    assert any(e.get("stage") == "embed" and "hop" not in e for e in evs)
+    assert any(e.get("stage") == "embed" and e.get("hop") == 2 for e in evs)
+    result = [e for e in evs if e.get("stage") == "result"]
+    assert len(result) == 1
+    titles = [c.document_title for c in result[0]["chunks"]]
+    assert "Brown County, Kansas" in titles
