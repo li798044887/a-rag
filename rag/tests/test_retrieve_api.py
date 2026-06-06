@@ -74,3 +74,10 @@ def test_retrieve_accepts_document_ids(monkeypatch):
                             "top_k": 5, "document_ids": ["docA"]})
     assert res.status_code == 200
     assert captured["document_ids"] == ["docA"]
+
+
+def test_retrieve_request_multi_hop_defaults_false():
+    req = RetrieveRequest(query="x", owner_user_id="u1")
+    assert req.multi_hop is False
+    req2 = RetrieveRequest(query="x", owner_user_id="u1", multi_hop=True)
+    assert req2.multi_hop is True
