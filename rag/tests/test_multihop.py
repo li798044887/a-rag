@@ -1,5 +1,6 @@
 from app.schemas import RetrievedChunk
 from app.retrieval.multihop import _rrf_fuse, _prf_query
+from app.retrieval import multihop as mh
 
 
 def _mk(cid: str, title: str = "") -> RetrievedChunk:
@@ -44,3 +45,45 @@ def test_prf_query_truncates_body():
     c.text = c.expanded_text = "x" * 1000
     q = _prf_query("q", [c], n_docs=1, char_budget=50)
     assert q.count("x") == 50
+
+
+def _make_fake_retrieve(calls):
+    lake = _mk("lake-1", "Brown State Fishing Lake")
+    lake.text = lake.expanded_text = "located in Brown County, Kansas (no population here)"
+    county = _mk("county-1", "Brown County, Kansas")
+    county.text = county.expanded_text = "population was 9,508"
+
+    def fake_retrieve(session, store, embedder, reranker, *, query, owner_user_id,
+                      top_k=6, candidate_k=50, document_ids=None):
+        calls.append(query)
+        return [county] if "Brown County" in query else [lake]
+    return fake_retrieve
+
+
+def test_retrieve_multihop_recovers_answer_via_hop2(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(mh, "retrieve", _make_fake_retrieve(calls))
+    out = mh.retrieve_multihop(None, None, None, None,
+                               query="Brown State Fishing Lake のある郡の人口は?",
+                               owner_user_id="u1", top_k=6)
+    titles = [c.document_title for c in out]
+    assert "Brown County, Kansas" in titles
+    assert len(calls) == 2  # hop-1 + hop-2
+
+
+def test_retrieve_multihop_max_hops_zero_skips_hop2(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(mh, "retrieve", _make_fake_retrieve(calls))
+    out = mh.retrieve_multihop(None, None, None, None, query="q",
+                               owner_user_id="u1", top_k=6, max_hops=0)
+    assert len(calls) == 1
+    assert [c.chunk_id for c in out] == ["lake-1"]
+
+
+def test_retrieve_multihop_empty_hop1_returns_empty(monkeypatch):
+    def fake_retrieve(*a, **k):
+        return []
+    monkeypatch.setattr(mh, "retrieve", fake_retrieve)
+    out = mh.retrieve_multihop(None, None, None, None, query="q",
+                               owner_user_id="u1", top_k=6)
+    assert out == []

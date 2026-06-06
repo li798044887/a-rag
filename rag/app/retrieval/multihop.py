@@ -62,3 +62,34 @@ def _rrf_fuse(hop1: list[RetrievedChunk], hop2: list[RetrievedChunk], *,
     kept_set = set(kept)
     final_ids = kept + [cid for cid in reserved if cid not in kept_set]
     return [by_id[cid] for cid in final_ids[:top_k]]
+
+
+def retrieve_multihop(session: Session, store: QdrantStore, embedder: Embedder,
+                      reranker: Reranker, *, query: str, owner_user_id: str,
+                      top_k: int = 6, candidate_k: int = DEFAULT_CANDIDATE_K,
+                      document_ids: list[str] | None = None,
+                      max_hops: int = 1) -> list[RetrievedChunk]:
+    """決定論的テキスト PRF 多ホップ。multi_hop 有効時は hop-1 が非空である限り
+    無条件で hop-2 を実行（設計判断: 橋渡しは hop-1 高品質ゆえ条件分岐で取りこぼす）。"""
+    hop1 = retrieve(session, store, embedder, reranker, query=query,
+                    owner_user_id=owner_user_id, top_k=top_k, candidate_k=candidate_k,
+                    document_ids=document_ids)
+    if not hop1 or max_hops <= 0:
+        return hop1
+    result = hop1
+    current = hop1
+    for _ in range(max_hops):
+        prf = _prf_query(query, current)
+        if prf == query:
+            break
+        try:
+            hopn = retrieve(session, store, embedder, reranker, query=prf,
+                            owner_user_id=owner_user_id, top_k=top_k, candidate_k=candidate_k,
+                            document_ids=document_ids)
+        except Exception:
+            break
+        if not hopn:
+            break
+        result = _rrf_fuse(result, hopn, top_k=top_k)
+        current = hopn
+    return result
