@@ -437,6 +437,13 @@ export function SettingsModal({
                     label={t.modals.agentAdmitUnknownLabel}
                   />
                 </Field>
+                <Field label={t.modals.agentMultiHopLabel} hint={t.modals.agentMultiHopHint}>
+                  <Switch
+                    on={agentCfg.multiHop}
+                    onToggle={() => setAgentCfg("multiHop", !agentCfg.multiHop)}
+                    label={t.modals.agentMultiHopLabel}
+                  />
+                </Field>
               </div>
             )}
 
