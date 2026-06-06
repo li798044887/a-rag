@@ -37,6 +37,8 @@ export interface BuildToolsInput {
   gradeThreshold?: number;
   /** 関連不足時の再検索の最大回数。未指定なら 0（再検索しない）。 */
   maxRetrieveRetries?: number;
+  /** 決定論的テキスト PRF 多ホップ検索を有効にするか。未指定なら無効（従来挙動）。 */
+  multiHop?: boolean;
 }
 
 /** done 時の段階別 summary を prompts から組み立てる。 */
@@ -54,10 +56,14 @@ function stageDoneSummaryOf(prompts: AgentPrompts, stage: string, count?: number
 
 /** done 時の段階別 input を組み立てる。 */
 function stageInput(ev: RetrieveStageEvent, query: string): Record<string, unknown> {
+  // hop-2 以降は rag が実 PRF クエリ（ev.query）を載せてくるのでそれを優先する。
+  // PRF クエリは hop-1 本文を連結した長文だが、全文を input に保持し、表示の省略
+  // （視覚的クランプ＋hover 全文）は描画側（tool-steps.tsx）に委ねる。
+  const q = ev.query ?? query;
   switch (ev.stage) {
     case "embed": return ev.model ? { model: ev.model } : {};
-    case "vector_search": return { mode: "dense", query };
-    case "bm25_search": return { mode: "sparse", query };
+    case "vector_search": return { mode: "dense", query: q };
+    case "bm25_search": return { mode: "sparse", query: q };
     case "rerank": return { model: ev.model ?? null, top_n: ev.top_n ?? null };
     default: return {};
   }
@@ -83,12 +89,17 @@ function attemptLabel(label: string, attempt: number): string {
 function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, prompts: AgentPrompts, attempt: number, showAttemptLabel = true): AgentEvent {
   // start と done は同一 id を共有し、reducer が id マージで running→done に更新する（衝突ではなく意図）。
   // ただし CRAG の再検索では同じ stage が複数回流れるため、検索試行ごとに id を分ける。
+  // 多ホップでは hop-2 以降の同名 stage が hop-1 と衝突するため、hop で id を分け、ラベルに hop を付す。
   const stageKey = ev.stage as keyof AgentPrompts["stageLabels"];
+  const hop = ev.hop ?? 1;
+  const hopIdSuffix = hop > 1 ? `:hop${hop}` : "";
+  const baseLabel = prompts.stageLabels[stageKey] ?? ev.stage;
+  const labelWithHop = hop > 1 ? `${baseLabel}${prompts.stageHopSuffix(hop)}` : baseLabel;
   const base = {
-    id: `${parentId}:retrieve-${attempt}:${ev.stage}`,
+    id: `${parentId}:retrieve-${attempt}:${ev.stage}${hopIdSuffix}`,
     name: ev.stage as ToolName,
     parentId,
-    label: showAttemptLabel ? attemptLabel(prompts.stageLabels[stageKey] ?? ev.stage, attempt) : (prompts.stageLabels[stageKey] ?? ev.stage),
+    label: showAttemptLabel ? attemptLabel(labelWithHop, attempt) : labelWithHop,
   };
   if (ev.status === "start") {
     return { type: "step", step: { ...base, status: "running", durationMs: 0, input: {}, output: null, summary: prompts.stageRunning[stageKey] ?? prompts.stageDefaultRunning } };
@@ -99,7 +110,7 @@ function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, p
   return { type: "step", step: { ...base, status: "done", durationMs: ev.ms ?? 0, input: stageInput(ev, query), output: stageOutput(ev), summary: stageDoneSummaryOf(prompts, ev.stage, ev.count) } };
 }
 
-export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency, topK, candidateK, gradeModel, gradeThreshold, maxRetrieveRetries }: BuildToolsInput): ToolSet {
+export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds, prompts, concurrency, topK, candidateK, gradeModel, gradeThreshold, maxRetrieveRetries, multiHop }: BuildToolsInput): ToolSet {
   const sema = new Semaphore(concurrency ?? AGENT_CFG_DEFAULTS.parallelTools);
   const resolvedTopK = topK ?? AGENT_CFG_DEFAULTS.topK;
   const resolvedCandidateK = candidateK ?? AGENT_CFG_DEFAULTS.candidateK;
@@ -119,6 +130,7 @@ export function buildTools({ registry, ownerUserId, meta, bus, attachmentDocIds,
         const runRetrieveAttempt = (attempt: number, parentId: string, showAttemptLabel = true) => retrieveChunksStream({
           query: q, rewritten: attempt > 0 ? q : undefined, ownerUserId, topK: resolvedTopK, candidateK: resolvedCandidateK,
           documentIds: attachmentDocIds && attachmentDocIds.length ? attachmentDocIds : undefined,
+          multiHop: multiHop ? true : undefined,
           onStage: (ev) => bus.push(stageToEvent(ev, parentId, q, prompts, attempt, showAttemptLabel)),
         });
         let chunks = await runRetrieveAttempt(0, activeParentId);

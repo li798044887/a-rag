@@ -27,6 +27,8 @@ export const modals: typeof zhModals = {
   agentRequireCitationsLabel: "引用の必須化",
   agentRequireCitationsHint: "回答中の各事実に引用を付けることを強制",
   agentAdmitUnknownLabel: '未知の場合に "わからない" と返す',
+  agentMultiHopLabel: "多ホップ検索",
+  agentMultiHopHint: "決定論的テキスト PRF 多ホップ。hop-1 のヒットでクエリを補強してもう一度検索し、橋渡し型の問いの再現率を上げる（有効時は検索コストが約2倍）",
   agentTopKLabel: "返却チャンク数",
   agentTopKHint: "リランク後に回答へ渡す最終チャンク数（top_k）",
   agentCandidateKLabel: "候補プール件数",

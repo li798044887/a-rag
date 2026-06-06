@@ -35,6 +35,7 @@ export async function retrieveChunks(input: {
   topK?: number;
   candidateK?: number;
   documentIds?: string[];
+  multiHop?: boolean;
 }): Promise<RetrievedChunk[]> {
   const res = await ragFetch("/retrieve", {
     method: "POST",
@@ -46,6 +47,7 @@ export async function retrieveChunks(input: {
       top_k: input.topK ?? 6,
       candidate_k: input.candidateK ?? undefined,
       document_ids: input.documentIds ?? null,
+      multi_hop: input.multiHop ?? undefined,
     }),
   });
   if (!res.ok) {
@@ -59,6 +61,10 @@ export async function retrieveChunks(input: {
 export interface RetrieveStageEvent {
   stage: string;
   status: "start" | "done" | "error";
+  /** 多ホップ検索の hop 番号。hop-1 には付かず、hop-2 以降のみ付与される。 */
+  hop?: number;
+  /** hop-2 以降で実際に検索した PRF 展開クエリ。元クエリと異なることを UI で示すため。 */
+  query?: string;
   ms?: number;
   count?: number;
   message?: string;
@@ -87,6 +93,7 @@ export async function retrieveChunksStream(input: {
   topK?: number;
   candidateK?: number;
   documentIds?: string[];
+  multiHop?: boolean;
   onStage: (ev: RetrieveStageEvent) => void;
 }): Promise<RetrievedChunk[]> {
   const res = await ragFetch("/retrieve/stream", {
@@ -99,6 +106,7 @@ export async function retrieveChunksStream(input: {
       top_k: input.topK ?? 6,
       candidate_k: input.candidateK ?? undefined,
       document_ids: input.documentIds ?? null,
+      multi_hop: input.multiHop ?? undefined,
     }),
   });
   if (!res.ok || !res.body) {

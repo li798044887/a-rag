@@ -29,6 +29,8 @@ export const modals = {
   agentRequireCitationsLabel: "强制引用",
   agentRequireCitationsHint: "要求回答中每条事实都附带引用",
   agentAdmitUnknownLabel: '对未知内容回答"不知道"',
+  agentMultiHopLabel: "多跳检索",
+  agentMultiHopHint: "确定性文本 PRF 多跳：用首跳命中的片段扩展查询再检索一次，提升桥接型问题的召回（开启后检索成本约翻倍）",
   agentTopKLabel: "返回片段数",
   agentTopKHint: "重排序后传入回答的最终片段数（top_k）",
   agentCandidateKLabel: "候选池大小",

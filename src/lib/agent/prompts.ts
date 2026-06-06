@@ -32,6 +32,8 @@ export interface AgentPrompts {
   };
   stageErrorSummary: string;
   stageDefaultRunning: string;
+  /** 多ホップ検索の hop 番号をステージラベルへ付与する接尾辞（hop>=2 のみ使用）。 */
+  stageHopSuffix: (hop: number) => string;
   /** 回答生成ステップ。 */
   answerStep: { label: string; running: string; done: string };
   /** rewrite_query ステップ。 */
@@ -151,6 +153,7 @@ const JA: AgentPrompts = {
   },
   stageErrorSummary: "段階に失敗",
   stageDefaultRunning: "実行中…",
+  stageHopSuffix: (hop) => `（${hop} ホップ目）`,
   answerStep: { label: "回答生成", running: "回答を生成中…", done: "回答を生成" },
   rewriteLabel: "クエリ正規化",
   rewriteSummary: (r) => `「${r}」に書き換え`,
@@ -268,6 +271,7 @@ const ZH: AgentPrompts = {
   },
   stageErrorSummary: "阶段失败",
   stageDefaultRunning: "执行中…",
+  stageHopSuffix: (hop) => `（第 ${hop} 跳）`,
   answerStep: { label: "生成回答", running: "正在生成回答…", done: "回答已生成" },
   rewriteLabel: "查询规范化",
   rewriteSummary: (r) => `已改写为「${r}」`,

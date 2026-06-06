@@ -228,7 +228,7 @@ function ToolInputBlock({ step, t }: { step: ToolCall; t: Dictionary }) {
         {typeof step.input.query === "string" && (
           <div className="rounded-lg border-[0.5px] border-divider bg-code-bg px-3 py-2.5">
             <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted-2">query</div>
-            <div className="text-[12.5px] leading-[1.5] text-fg">{step.input.query}</div>
+            <div title={step.input.query} className="line-clamp-3 break-words text-[12.5px] leading-[1.5] text-fg [overflow-wrap:anywhere]">{step.input.query}</div>
           </div>
         )}
       </div>

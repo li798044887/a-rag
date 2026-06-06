@@ -92,6 +92,33 @@ test("retrieve tool は渡した topK / candidateK を検索へ透過する", as
     expect.objectContaining({ topK: 8, candidateK: 30 }));
 });
 
+test("retrieve tool は multiHop を検索へ透過する", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({
+    registry: reg, ownerUserId: "u1", meta, bus: new StepBus(),
+    prompts: getAgentPrompts("ja"), multiHop: true,
+  });
+
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-mh", messages: [] } as never);
+
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenLastCalledWith(
+    expect.objectContaining({ multiHop: true }));
+});
+
+test("retrieve tool は multiHop 未指定なら透過しない（既定挙動）", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const tools = buildTools({
+    registry: reg, ownerUserId: "u1", meta, bus: new StepBus(), prompts: getAgentPrompts("ja"),
+  });
+
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-no-mh", messages: [] } as never);
+
+  expect(vi.mocked(retrieveChunksStream)).toHaveBeenLastCalledWith(
+    expect.objectContaining({ multiHop: undefined }));
+});
+
 test("fetch_document resolves a citation ref to the real document/chunk ids", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
@@ -177,6 +204,72 @@ test("stageToEvent populates per-stage input/output detail", async () => {
   expect((rr.output as { selected: unknown[] }).selected).toHaveLength(1);
   const embed = steps.find((s) => s.name === "embed" && s.status === "done")!;
   expect(embed.output).toMatchObject({ dims: 1024 });
+});
+
+test("hop-2 の stage は hop-1 と別 id・hop ラベル付きでサブステップ化される", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const bus = new StepBus();
+  const events: AgentEvent[] = [];
+  const drain = (async () => { for await (const e of bus) events.push(e); })();
+
+  vi.mocked(retrieveChunksStream).mockImplementationOnce(async (input) => {
+    input.onStage({ stage: "embed", status: "done", ms: 1 });           // hop-1（hop 印なし）
+    input.onStage({ stage: "embed", status: "done", ms: 2, hop: 2 });   // hop-2
+    return [];
+  });
+
+  const tools = buildTools({
+    registry: reg, ownerUserId: "u1", meta, bus, prompts: getAgentPrompts("ja"), multiHop: true,
+  });
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-1", messages: [] } as never);
+  bus.close();
+  await drain;
+
+  const embeds = events
+    .filter((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step")
+    .map((e) => e.step)
+    .filter((s) => s.name === "embed");
+  // hop-1 と hop-2 は別 id（マージで潰れない）
+  const ids = new Set(embeds.map((s) => s.id));
+  expect(ids.size).toBe(2);
+  // hop-2 のラベルだけ hop マーカー付き
+  const labels = embeds.map((s) => s.label);
+  expect(labels.filter((l) => l.includes("ホップ"))).toHaveLength(1);
+});
+
+test("hop-2 の検索ステップは実 PRF クエリ全文を input に保持する（表示の省略は描画側の責務）", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const bus = new StepBus();
+  const events: AgentEvent[] = [];
+  const drain = (async () => { for await (const e of bus) events.push(e); })();
+
+  const prf = "認証 " + "x".repeat(300);  // 元クエリ＋hop-1 本文を連結した長い PRF クエリ
+  vi.mocked(retrieveChunksStream).mockImplementationOnce(async (input) => {
+    input.onStage({ stage: "vector_search", status: "done", ms: 1, count: 1 });            // hop-1
+    input.onStage({ stage: "vector_search", status: "done", ms: 2, count: 1, hop: 2, query: prf }); // hop-2
+    return [];
+  });
+
+  const tools = buildTools({
+    registry: reg, ownerUserId: "u1", meta, bus, prompts: getAgentPrompts("ja"), multiHop: true,
+  });
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-1", messages: [] } as never);
+  bus.close();
+  await drain;
+
+  const vs = events
+    .filter((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step")
+    .map((e) => e.step)
+    .filter((s) => s.name === "vector_search" && s.status === "done");
+  const hop1 = vs.find((s) => !s.id.includes(":hop2"))!;
+  const hop2 = vs.find((s) => s.id.includes(":hop2"))!;
+  // hop-1 は元クエリ
+  expect((hop1.input as { query: string }).query).toBe("認証");
+  // hop-2 は PRF クエリ全文（元クエリとは別物・切り詰めない。hover 全文表示のため）
+  const q = (hop2.input as { query: string }).query;
+  expect(q).toBe(prf);
 });
 
 test("retrieve tool pushes nested sub-steps with parentId to the bus", async () => {

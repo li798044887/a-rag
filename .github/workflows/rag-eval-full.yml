@@ -87,6 +87,16 @@ jobs:
               | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
           }
           exit $LASTEXITCODE
+      - name: Run multi-hop comparison (hotpot only)
+        if: startsWith(env.EVAL_SUITE, 'hotpot_')
+        continue-on-error: true
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval run `
+            --suite $env:EVAL_SUITE `
+            --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+            --multi-hop `
+            --out "/data/eval-reports/$env:EVAL_SUITE/eval-report.multihop.json" `
+            | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.multihop.md"
       - name: Publish report summary
         if: always()
         run: |

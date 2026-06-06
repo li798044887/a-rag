@@ -24,6 +24,7 @@ const agentCfg: AgentCfg = {
   gradeThreshold: 0.5,
   maxRevisions: 1,
   verify: true,
+  multiHop: false,
 };
 
 const now = Math.floor(Date.now() / 1000);

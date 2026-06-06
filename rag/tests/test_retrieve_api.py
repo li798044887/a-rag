@@ -74,3 +74,34 @@ def test_retrieve_accepts_document_ids(monkeypatch):
                             "top_k": 5, "document_ids": ["docA"]})
     assert res.status_code == 200
     assert captured["document_ids"] == ["docA"]
+
+
+def test_retrieve_request_multi_hop_defaults_false():
+    req = RetrieveRequest(query="x", owner_user_id="u1")
+    assert req.multi_hop is False
+    req2 = RetrieveRequest(query="x", owner_user_id="u1", multi_hop=True)
+    assert req2.multi_hop is True
+
+
+def _patch_resources(monkeypatch):
+    class _Dummy:
+        dim = 8
+        def close(self):
+            pass
+    monkeypatch.setattr(retrieve_router, "SessionLocal", lambda: _Dummy())
+    monkeypatch.setattr(retrieve_router, "get_embedder", lambda: _Dummy())
+    monkeypatch.setattr(retrieve_router, "get_reranker", lambda: None)
+    monkeypatch.setattr(retrieve_router, "QdrantStore", lambda **k: _Dummy())
+
+
+def test_run_retrieve_branches_on_multi_hop(monkeypatch):
+    _patch_resources(monkeypatch)
+    seen = {}
+    monkeypatch.setattr(retrieve_router, "run_retrieve_service",
+                        lambda *a, **k: seen.update(which="single") or [])
+    monkeypatch.setattr(retrieve_router, "retrieve_multihop",
+                        lambda *a, **k: seen.update(which="multi") or [])
+    retrieve_router._run_retrieve(RetrieveRequest(query="x", owner_user_id="u1"))
+    assert seen["which"] == "single"
+    retrieve_router._run_retrieve(RetrieveRequest(query="x", owner_user_id="u1", multi_hop=True))
+    assert seen["which"] == "multi"
