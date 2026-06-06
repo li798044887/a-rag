@@ -10,6 +10,15 @@ def test_vlm_preload_invoked_for_hybrid(monkeypatch):
     assert calls == ["fetch"]
 
 
+def test_vlm_preload_invoked_for_vlm_auto_engine(monkeypatch):
+    calls = []
+    monkeypatch.setattr(main_module.settings, "parse_backend", "vlm-auto-engine")
+    monkeypatch.setattr(main_module, "_fetch_vlm_model",
+                        lambda: calls.append("fetch"))
+    main_module._maybe_preload_vlm()
+    assert calls == ["fetch"]
+
+
 def test_vlm_preload_skipped_for_pipeline(monkeypatch):
     calls = []
     monkeypatch.setattr(main_module.settings, "parse_backend", "pipeline")
