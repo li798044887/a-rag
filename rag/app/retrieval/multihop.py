@@ -15,6 +15,20 @@ from app.vectorstore.qdrant import QdrantStore
 RRF_K = 60
 
 
+def _prf_query(query: str, hop1: list[RetrievedChunk], *,
+               n_docs: int = 2, char_budget: int = 200) -> str:
+    """元クエリの末尾に hop1 上位 n_docs チャンクの title+heading+本文先頭を連結。
+    橋渡しエンティティ（hop1 本文中の固有名）をクエリへ注入する。hop1 が空 or
+    連結対象が無ければ元クエリをそのまま返す（呼び出し側で hop-2 をスキップ）。"""
+    parts = [query]
+    for c in hop1[:n_docs]:
+        body = (c.expanded_text or c.text or "")[:char_budget]
+        seg = " ".join(x for x in (c.document_title, c.heading_path, body) if x).strip()
+        if seg:
+            parts.append(seg)
+    return " ".join(parts).strip()
+
+
 def _rrf_fuse(hop1: list[RetrievedChunk], hop2: list[RetrievedChunk], *,
               top_k: int, bridge_quota: int = 2) -> list[RetrievedChunk]:
     """既に各クエリでリランク済みの2リストを RRF で融合。chunk_id 重複除去。
