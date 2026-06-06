@@ -61,6 +61,8 @@ export async function retrieveChunks(input: {
 export interface RetrieveStageEvent {
   stage: string;
   status: "start" | "done" | "error";
+  /** 多ホップ検索の hop 番号。hop-1 には付かず、hop-2 以降のみ付与される。 */
+  hop?: number;
   ms?: number;
   count?: number;
   message?: string;

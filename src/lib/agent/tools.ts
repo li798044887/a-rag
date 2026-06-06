@@ -85,12 +85,17 @@ function attemptLabel(label: string, attempt: number): string {
 function stageToEvent(ev: RetrieveStageEvent, parentId: string, query: string, prompts: AgentPrompts, attempt: number, showAttemptLabel = true): AgentEvent {
   // start と done は同一 id を共有し、reducer が id マージで running→done に更新する（衝突ではなく意図）。
   // ただし CRAG の再検索では同じ stage が複数回流れるため、検索試行ごとに id を分ける。
+  // 多ホップでは hop-2 以降の同名 stage が hop-1 と衝突するため、hop で id を分け、ラベルに hop を付す。
   const stageKey = ev.stage as keyof AgentPrompts["stageLabels"];
+  const hop = ev.hop ?? 1;
+  const hopIdSuffix = hop > 1 ? `:hop${hop}` : "";
+  const baseLabel = prompts.stageLabels[stageKey] ?? ev.stage;
+  const labelWithHop = hop > 1 ? `${baseLabel}${prompts.stageHopSuffix(hop)}` : baseLabel;
   const base = {
-    id: `${parentId}:retrieve-${attempt}:${ev.stage}`,
+    id: `${parentId}:retrieve-${attempt}:${ev.stage}${hopIdSuffix}`,
     name: ev.stage as ToolName,
     parentId,
-    label: showAttemptLabel ? attemptLabel(prompts.stageLabels[stageKey] ?? ev.stage, attempt) : (prompts.stageLabels[stageKey] ?? ev.stage),
+    label: showAttemptLabel ? attemptLabel(labelWithHop, attempt) : labelWithHop,
   };
   if (ev.status === "start") {
     return { type: "step", step: { ...base, status: "running", durationMs: 0, input: {}, output: null, summary: prompts.stageRunning[stageKey] ?? prompts.stageDefaultRunning } };

@@ -206,6 +206,38 @@ test("stageToEvent populates per-stage input/output detail", async () => {
   expect(embed.output).toMatchObject({ dims: 1024 });
 });
 
+test("hop-2 の stage は hop-1 と別 id・hop ラベル付きでサブステップ化される", async () => {
+  const reg = new CitationRegistry();
+  const meta = new Map();
+  const bus = new StepBus();
+  const events: AgentEvent[] = [];
+  const drain = (async () => { for await (const e of bus) events.push(e); })();
+
+  vi.mocked(retrieveChunksStream).mockImplementationOnce(async (input) => {
+    input.onStage({ stage: "embed", status: "done", ms: 1 });           // hop-1（hop 印なし）
+    input.onStage({ stage: "embed", status: "done", ms: 2, hop: 2 });   // hop-2
+    return [];
+  });
+
+  const tools = buildTools({
+    registry: reg, ownerUserId: "u1", meta, bus, prompts: getAgentPrompts("ja"), multiHop: true,
+  });
+  await tools.retrieve.execute!({ query: "認証" }, { toolCallId: "call-1", messages: [] } as never);
+  bus.close();
+  await drain;
+
+  const embeds = events
+    .filter((e): e is Extract<AgentEvent, { type: "step" }> => e.type === "step")
+    .map((e) => e.step)
+    .filter((s) => s.name === "embed");
+  // hop-1 と hop-2 は別 id（マージで潰れない）
+  const ids = new Set(embeds.map((s) => s.id));
+  expect(ids.size).toBe(2);
+  // hop-2 のラベルだけ hop マーカー付き
+  const labels = embeds.map((s) => s.label);
+  expect(labels.filter((l) => l.includes("ホップ"))).toHaveLength(1);
+});
+
 test("retrieve tool pushes nested sub-steps with parentId to the bus", async () => {
   const reg = new CitationRegistry();
   const meta = new Map();
