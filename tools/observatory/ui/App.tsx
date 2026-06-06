@@ -204,9 +204,14 @@ export function App() {
           </div>
         </div>
         <div className="row">
-          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <input type="checkbox" checked={multiHop} onChange={(e) => setMultiHop(e.target.checked)} />
-            多ホップ（multi_hop / hop-2 を発火・検索ステップに「2 ホップ目」が出る）
+          <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, cursor: "pointer", fontSize: 12, color: "var(--ink)" }}>
+            <input
+              type="checkbox"
+              checked={multiHop}
+              onChange={(e) => setMultiHop(e.target.checked)}
+              style={{ width: "auto", margin: 0, flex: "none" }}
+            />
+            多ホップ（multi_hop / hop-2 を発火）
           </label>
         </div>
         {error && <pre className="err">{error}</pre>}
