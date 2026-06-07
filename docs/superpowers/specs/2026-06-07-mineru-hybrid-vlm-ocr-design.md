@@ -131,3 +131,63 @@ import）。`pipeline` を選ぶ限り CPU/dev 側で vllm は読み込まれず
 - `vlm-auto-engine`（純 VLM）/ `*-http-client`（別ホスト推論）/ lmdeploy は採用しない。
 - Mac MPS / mlx-engine ネイティブ実行は採用しない。
 - 図表の意味理解を用いた追加メタデータ抽出など、索引化以上の高度化は本設計では扱わない。
+
+---
+
+## 検証結果（2026-06-07 / Windows + RTX 4090・CUDA 実機）
+
+T10 を CUDA 実機（RTX 4090 24GB / driver 596.36 / WSL2 Docker Desktop）で実施。設計の成功基準を
+すべて満たしたが、検証の過程で**実出力が設計の想定と一部異なり、コード/構成の追加修正**を要した。
+
+### 確定した「図表テキストの格納先」（= 設計の唯一の未確定点）
+
+hybrid(VLM) の `*_content_list.json` では、図中テキストは **`image` ブロックの `image_caption`
+（および新規 `content` フィールド）** に格納される。`05-image-grounding-cooling-line.pdf` の実出力例:
+
+- `image_caption`: VLM の自然言語解釈（例「⾚枠はV-12バイパス弁を⽰す。…V-12固着を第⼀候補として点検する。」）
+- `content`（`sub_type=flowchart`）: 図構造の **mermaid 転写**（`P-04 → HX-7 → V-12`、`T2温度上昇センサー 赤枠:交換候補`、`F1`、`BT-3`）
+
+pipeline(CPU) では同じ画像ブロックの `image_caption`/`content` は空で、図中テキストは取り込まれない
+（設計どおり dev は図を画像のまま扱う）。
+
+### 設計の想定とのズレ（要修正だった2点）
+
+設計§「図表テキストの格納先」は「caption に乗るなら現行 image チャンク本文ロジックでそのまま拾える」
+と仮定していたが、実際には次の2点で**索引に到達しなかった**:
+
+1. **キー名不一致**: 正規化（`mineru.py` `_block_from_item`）は `img_caption` を読むが、MinerU 3.1.15 の
+   実キーは `image_caption`（+ 新規 `content`）。caption が `None` に落ちていた。
+2. **image チャンクは索引除外**: `worker.py` は表示専用として `block_type=="image"` を埋め込み・Qdrant
+   登録から除外する。仮に caption を拾っても image チャンク本文では索引化されない。
+
+### 入れた修正
+
+- `rag/app/parsing/mineru.py`:
+  - image ブロックの caption を `image_caption`（fallback `img_caption`）から取り込むよう修正。
+  - hybrid の図表テキスト（`image_caption` + `content`）を、**索引対象の独立 `text` ブロック**として
+    画像直後に展開（`_figure_text`）。図テキストの無い装飾画像は追加ブロックを生成せずノイズを避ける。
+  - 単体テスト2件追加（`test_mineru_backend.py`）。
+- `docker-compose.gpu.yml`:
+  - `gpus: all`（Compose v2.30+ 必須）→ `deploy.resources.reservations.devices`（v2.28 系でも有効）へ置換。
+  - `MINERU_MODEL_SOURCE` をパススルー（既定 huggingface、`MINERU_MODEL_SOURCE=modelscope` で上書き可）。
+- `.gitattributes` 追加: `Dockerfile`/`*.sh` を `eol=lf` 固定（Windows `core.autocrlf=true` 下で CRLF 化すると
+  Dockerfile の multiline `RUN if` が壊れ GPU ビルドが失敗するため）。
+
+### 成功基準の達成状況
+
+1. dev（CPU/pipeline）pytest 一式・既存フロー: **rag テスト 186 passed**（`test_worker_pipeline.py` 5 passed 含む）。
+2. prod（CUDA/hybrid）で図表テキストが索引化され retrieval 向上:
+   - `05` を hybrid 再パース → 図テキストが `block_type=text` チャンク（mermaid `P-04`/`交換候補` 等、本文プローズに
+     無い図固有情報を含む）として **Qdrant 索引済み**。
+   - `case2-image-grounding` クエリの `/retrieve` で当該図チャンクが **score 0.9995 で 1 位**。
+   - eval（`agentic_rag_demo`）: 全ケース recall@5=1.00、**fact_coverage 1.00（ベースライン比 +0.167）**。
+3. `easyocr` 依存・OCR 専用経路の除去: T1〜T9 で完了済み（CPU クリーンビルドで不在確認済み）。
+4. オフライン運用: `HF_HUB_OFFLINE=1` + `MINERU_MODEL_SOURCE=modelscope` で、VLM を modelscope キャッシュ
+   から読み（ログ `replace model_id ... to model_path [...modelscope...]`）、**再ダウンロードなしで hybrid parse 成功**。
+
+### 環境特記（ハマりどころ）
+
+- この環境では huggingface.co の **LFS 大容量配信が停止**し VLM(2.15GB) の取得が進まなかった。**ModelScope**
+  （opendatalab の native ホスト）へ切替えて取得・オフライン運用した。BGE-M3/reranker は HF キャッシュ既存のため影響なし。
+- Docker Compose は **v2.28.1**。`gpus: all` 非対応のため上記 deploy 構文が必須。
+- `core.autocrlf=true` のため checkout 時に Dockerfile が CRLF 化し、最小再現で GPU ビルド失敗を確認 → `.gitattributes` で恒久対処。
