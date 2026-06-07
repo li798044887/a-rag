@@ -1,12 +1,12 @@
 {
   "suite": "hotpot_dev",
-  "note": "2026-06-08 フルスタック実評価の実測値（embedder=bge-m3, reranker=bge / multi-hop = 決定論テキスト PRF + RRF / hotpot 同梱サンプル全 200 問 = query_limit:0）。意図的な品質変化のときのみ更新する。single-hop 比で recall@k 0.965→0.980・fact_coverage 0.956→0.967（2段目の橋渡し回収）だが、RRF 再融合で recall@5/MRR/nDCG は低下（早期順位とのトレードオフ）。",
+  "note": "2026-06-08 フルスタック実評価の実測値（embedder=bge-m3, reranker=bge / multi-hop = 決定論テキスト PRF + 重み付き RRF / hotpot 同梱サンプル全 200 問 = query_limit:0）。意図的な品質変化のときのみ更新する。RRF を hop1 重視（HOP1_WEIGHT=3）+ bridge_quota=1 にチューニング後の値。single-hop 比で recall@k 0.965→0.978・fact_coverage 0.956→0.973（2段目の橋渡し回収）。チューニング前(対称RRF・quota=2)の MRR 0.863/nDCG 0.843 を MRR 0.897/nDCG 0.864 へ改善し早期順位の劣化を解消した。",
   "aggregate": {
-    "recall_at_5": 0.88,
-    "recall_at_k": 0.98,
-    "precision_at_k": 0.196,
-    "mrr": 0.8633,
-    "ndcg_at_k": 0.8427,
-    "fact_coverage": 0.9672
+    "recall_at_5": 0.885,
+    "recall_at_k": 0.9775,
+    "precision_at_k": 0.1955,
+    "mrr": 0.8967,
+    "ndcg_at_k": 0.8641,
+    "fact_coverage": 0.9727
   }
 }
