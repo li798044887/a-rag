@@ -11,8 +11,16 @@ function getMermaid() {
       m.default.initialize({
         startOnLoad: false,
         theme: "dark",
-        securityLevel: "strict",
+        // strict は HTML ラベルを無効化し SVG テキストで描画するため、CJK の文字幅を
+        // 過小評価してノード枠から文字がはみ出す/切れる。antiscript は DOMPurify で
+        // スクリプト・イベントハンドラを除去しつつ HTML ラベル(foreignObject)を許可するので、
+        // ブラウザが実フォントでレイアウトしノードが文字幅に合わせて伸びる。
+        securityLevel: "antiscript",
         fontFamily: "inherit",
+        // htmlLabels はラベル div に max-width=wrappingWidth + white-space:nowrap を付ける。
+        // 既定 200px は CJK ラベルだと容易に超過し、折り返さず枠でクリップされる。
+        // 1 行で収まる幅を広く取り、収まらない場合は折り返す（横長は overflow-x で吸収）。
+        flowchart: { htmlLabels: true, wrappingWidth: 500 },
       });
       return m.default;
     });
