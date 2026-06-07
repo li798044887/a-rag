@@ -9,9 +9,11 @@ documents:
   - 08-multi-file-vendor-quotes.pdf
   - 09-query-rewrite-acronym-runbook.pdf
   - 10-exception-latest-rule-conflict.pdf
+# 2026-06-08 実測（recall@5=1.0 / fact_coverage=1.0）ベースに引き上げ。6 件中 1 件が
+# 完全失敗すると平均 0.833 となり gate を割るため、画像 grounding 等の回帰を検出できる。
 thresholds:
-  recall_at_5: 0.80
-  fact_coverage: 0.70
+  recall_at_5: 0.90
+  fact_coverage: 0.90
 cases:
   - id: case1-cross-page-table
     query: "MX-17は即時停止すべき？点検表の計測値、注記コード、本文の例外条件を分けて説明して"

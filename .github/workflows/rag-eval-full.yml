@@ -10,9 +10,9 @@ on:
         required: true
         default: "beir_scifact"
       query_limit:
-        description: "Number of queries to evaluate; 0 uses the suite default"
+        description: "Number of queries to evaluate; 0 = full set (= suite default, matches committed baselines)"
         required: true
-        default: "100"
+        default: "0"
       corpus_limit:
         description: "Number of corpus documents to ingest; 0 uses the full corpus"
         required: true
@@ -25,7 +25,7 @@ jobs:
     runs-on: [self-hosted, Windows, rag, gpu]
     env:
       EVAL_SUITE: ${{ inputs.suite || 'beir_scifact' }}
-      QUERY_LIMIT: ${{ inputs.query_limit || '100' }}
+      QUERY_LIMIT: ${{ inputs.query_limit || '0' }}
       CORPUS_LIMIT: ${{ inputs.corpus_limit || '0' }}
       # この runner では huggingface.co の LFS 配信が不安定なため、MinerU の VLM(hybrid) は
       # ModelScope キャッシュから読む。docker-compose.gpu.yml の MINERU_MODEL_SOURCE 既定

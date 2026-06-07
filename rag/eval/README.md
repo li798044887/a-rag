@@ -38,6 +38,16 @@ docker compose exec -T rag uv run python -m eval run \
   --gate --out /data/eval-reports/hotpot_dev/eval-report.json
 ```
 
+多ホップ検索（決定論テキスト PRF + RRF・LLM 不使用）の比較を取る場合は `--multi-hop` を付ける。
+single-hop と別レポート・別ベースライン（`__multihop` サフィックス）で扱う。
+2 段目の橋渡し回収で recall@k / fact_coverage が上がる一方、RRF 再融合で recall@5 / MRR は下がる。
+
+```bash
+docker compose exec -T rag uv run python -m eval run \
+  --golden /data/eval-reports/hotpot_dev/golden.yaml \
+  --multi-hop --out /data/eval-reports/hotpot_dev/eval-report.multihop.json
+```
+
 repo 管理の専用 golden を回す場合:
 
 ```bash
@@ -49,8 +59,11 @@ docker compose exec -T rag uv run python -m eval run \
 ```
 
 ## ベースライン更新
-意図的に基準を更新する時のみ `--out` の結果を
+意図的に基準を更新する時のみ `--out` の結果（の `aggregate`）を
 `suites/<suite>/baselines/<embedder>__<reranker>.json` にコピーしてコミットする。
+多ホップ実行（`--multi-hop`）の基準は `<embedder>__<reranker>__multihop.json` に分ける。
+baseline は gate には使わず差分表示専用（gate は `suite.yaml` / `golden.yaml` の `thresholds`）。
+全 suite は `query_limit: 0`（フルセット）で固定し、baseline と CI 実行を再現一致させる。
 
 ## 埋め込みモデル更新（ブルーグリーン）
 1. 新モデルを設定 → コレクション名 `arag_chunks__<model>` が自動で変わる
