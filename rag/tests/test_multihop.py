@@ -26,6 +26,29 @@ def test_rrf_fuse_bridge_quota_keeps_hop2_top():
     assert len(out) == 2
 
 
+def test_rrf_fuse_weight_keeps_hop1_leader_at_head():
+    # hop1 を重く融合すると、hop1 の順位がそのまま頭に保たれ、hop2 専用 doc は後段に回る。
+    # （対称重みだと PRF で drift した hop2 が頭を並べ替えてしまうのを防ぐ狙い）
+    out = _rrf_fuse([_mk("a"), _mk("b")], [_mk("x")], top_k=3, bridge_quota=0,
+                    hop1_weight=3.0, hop2_weight=1.0)
+    assert [c.chunk_id for c in out] == ["a", "b", "x"]
+
+
+def test_rrf_fuse_quota1_evicts_only_lowest_hop1():
+    # bridge_quota=1 は hop1 の最下位 1 件だけを hop2 専用 doc で置換する。
+    out = _rrf_fuse([_mk("a"), _mk("b"), _mk("c")], [_mk("x"), _mk("y")],
+                    top_k=3, bridge_quota=1, hop1_weight=3.0, hop2_weight=1.0)
+    assert [c.chunk_id for c in out] == ["a", "b", "x"]
+
+
+def test_rrf_fuse_quota2_evicts_more_hop1_regression_mechanism():
+    # quota=2 は hop1 を 2 件も追い出す（hop1 が既に持つ gold を落とす自爆の再現）。
+    # quota=1（上のテスト）と比べ b まで消えることを固定し、quota を絞った理由を明示する。
+    out = _rrf_fuse([_mk("a"), _mk("b"), _mk("c")], [_mk("x"), _mk("y")],
+                    top_k=3, bridge_quota=2, hop1_weight=3.0, hop2_weight=1.0)
+    assert [c.chunk_id for c in out] == ["a", "x", "y"]
+
+
 def test_prf_query_appends_top_doc_text():
     hop1 = [_mk("a", "Brown State Fishing Lake")]
     hop1[0].text = "located in Brown County, Kansas"

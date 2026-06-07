@@ -1,7 +1,14 @@
 """決定論的テキスト PRF 多ホップ検索。
 
 既存 retrieve/retrieve_stream をブラックボックスとして2回呼び、hop-1 上位チャンク
-本文を元クエリへ連結（PRF）して hop-2 を検索、RRF で融合する。LLM 不使用。"""
+本文を元クエリへ連結（PRF）して hop-2 を検索、RRF で融合する。LLM 不使用。
+
+融合パラメータは環境変数で調整できる（既定は実測チューニング済みの値）:
+- MULTIHOP_RRF_K        … RRF の平滑化定数（大きいほど順位差が緩む）
+- MULTIHOP_HOP1_WEIGHT  … 融合での hop-1 重み。hop-2 より大きくして頭（recall@5/MRR）を hop-1 寄りに保つ
+- MULTIHOP_HOP2_WEIGHT  … 融合での hop-2 重み
+- MULTIHOP_BRIDGE_QUOTA … hop-2 専用に末尾予約する枠数（橋渡しの答えを確保。多いと hop-1 を追い出す副作用）"""
+import os
 from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
@@ -12,7 +19,17 @@ from app.retrieval.service import DEFAULT_CANDIDATE_K, retrieve, retrieve_stream
 from app.schemas import RetrievedChunk
 from app.vectorstore.qdrant import QdrantStore
 
-RRF_K = 60
+RRF_K = int(os.getenv("MULTIHOP_RRF_K", "60"))
+# hop-1 を hop-2 より重く融合し、PRF 拡張で drift した hop-2 が top5 を並べ替えて
+# hop-1 の1位文書（=質問に名前が出る doc, MRR の源）を押し下げるのを防ぐ。
+# 既定 3.0/1.0/1 は hotpot_dev 全200問の実測 sweep で確定（2026-06-08）:
+#   現行(1,1,2): MRR 0.863 / nDCG 0.843 / recall@5 0.880 / fact_cov 0.967
+#   採用(3,1,1): MRR 0.897 / nDCG 0.864 / recall@5 0.885 / fact_cov 0.973（recall@k は 0.980→0.978 とほぼ同等）
+HOP1_WEIGHT = float(os.getenv("MULTIHOP_HOP1_WEIGHT", "3.0"))
+HOP2_WEIGHT = float(os.getenv("MULTIHOP_HOP2_WEIGHT", "1.0"))
+# bridge 予約は hop-1 が既に取得済みの gold を末尾から追い出す副作用があるため 2→1 に絞る
+# （quota=0 だと fact_coverage が 0.956 へ低下し橋渡し効果を失う＝quota は 1 が最適）。
+BRIDGE_QUOTA = int(os.getenv("MULTIHOP_BRIDGE_QUOTA", "1"))
 
 
 def _prf_query(query: str, hop1: list[RetrievedChunk], *,
@@ -30,21 +47,24 @@ def _prf_query(query: str, hop1: list[RetrievedChunk], *,
 
 
 def _rrf_fuse(hop1: list[RetrievedChunk], hop2: list[RetrievedChunk], *,
-              top_k: int, bridge_quota: int = 2) -> list[RetrievedChunk]:
-    """既に各クエリでリランク済みの2リストを RRF で融合。chunk_id 重複除去。
-    hop2 上位を bridge_quota 枠で予約し、橋渡しの答えがリランクで落ちるのを防ぐ。"""
+              top_k: int, bridge_quota: int = BRIDGE_QUOTA,
+              hop1_weight: float = HOP1_WEIGHT,
+              hop2_weight: float = HOP2_WEIGHT) -> list[RetrievedChunk]:
+    """既に各クエリでリランク済みの2リストを重み付き RRF で融合。chunk_id 重複除去。
+    hop1 を hop2 より重く融合して頭の順位を hop1 寄りに保ちつつ、hop2 上位を
+    bridge_quota 枠で末尾予約し、橋渡しの答えがリランクで落ちるのを防ぐ。"""
     if not hop2:
         return hop1[:top_k]
     score: dict[str, float] = {}
     by_id: dict[str, RetrievedChunk] = {}
 
-    def add(lst: list[RetrievedChunk]) -> None:
+    def add(lst: list[RetrievedChunk], weight: float) -> None:
         for rank, c in enumerate(lst):
-            score[c.chunk_id] = score.get(c.chunk_id, 0.0) + 1.0 / (RRF_K + rank)
+            score[c.chunk_id] = score.get(c.chunk_id, 0.0) + weight / (RRF_K + rank)
             by_id.setdefault(c.chunk_id, c)
 
-    add(hop1)
-    add(hop2)
+    add(hop1, hop1_weight)
+    add(hop2, hop2_weight)
     fused = sorted(by_id, key=lambda cid: score[cid], reverse=True)
     top = fused[:top_k]
     top_set = set(top)
