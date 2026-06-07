@@ -7,4 +7,9 @@ const connectionString =
 
 export const pool = new Pool({ connectionString });
 
+// アイドル中のクライアントが切断された場合（例: Postgres 再起動）にプロセスがクラッシュしないよう error を握る
+pool.on("error", (err) => {
+  console.error("[db pool] idle client error:", err.message);
+});
+
 export const db = drizzle(pool, { schema });
