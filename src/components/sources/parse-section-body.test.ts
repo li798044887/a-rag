@@ -37,4 +37,18 @@ describe("parseSectionBody", () => {
       { kind: "table", html: "<table><tr><td>A</td></tr></table>" },
     ]);
   });
+
+  it("mermaid フェンスを mermaid セグメントとして取り出す", () => {
+    const segs = parseSectionBody("```mermaid\ngraph LR\n  A-->B\n```");
+    expect(segs).toEqual([{ kind: "mermaid", code: "graph LR\n  A-->B" }]);
+  });
+
+  it("閉じフェンスが後続テキストに密着していても分割する（実データ形）", () => {
+    const body = "図1: 冷却ライン\n```mermaid\ngraph LR\n  A[\"P-04\"]-->B[\"HX-7\"]\n```一次対応の説明";
+    expect(parseSectionBody(body)).toEqual([
+      { kind: "text", text: "図1: 冷却ライン" },
+      { kind: "mermaid", code: 'graph LR\n  A["P-04"]-->B["HX-7"]' },
+      { kind: "text", text: "一次対応の説明" },
+    ]);
+  });
 });

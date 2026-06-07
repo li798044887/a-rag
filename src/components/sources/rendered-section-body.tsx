@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { HtmlTable } from "@/components/sources/html-table";
+import { MermaidDiagram } from "@/components/sources/mermaid-diagram";
 import { parseSectionBody } from "@/components/sources/parse-section-body";
 import { TeXBlock, TeXText } from "@/components/sources/tex-text";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,7 @@ export function RenderedSectionBody({ body, blockType, className }: { body: stri
       {segs.map((s, i) => {
         if (s.kind === "table") return <HtmlTable key={i} html={s.html} className="my-1" renderMath />;
         if (s.kind === "image") return <SectionImage key={i} src={s.src} alt={s.alt} />;
+        if (s.kind === "mermaid") return <MermaidDiagram key={i} code={s.code} />;
         return (
           <div key={i} className={proseCls}>
             <TeXText text={s.text} />

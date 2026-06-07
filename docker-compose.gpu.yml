@@ -1,21 +1,46 @@
+# 本番(CUDA/GPU)用 overlay。
+# 使い方:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build
+#
+# GPU 割当は deploy.resources.reservations.devices で記述する。
+# トップレベルの `gpus: all` は Compose v2.30+ が必要なため、v2.28 系でも
+# 動くこの後方互換構文を使う（`docker compose up` でも device 予約は有効）。
+#
+# モデル供給元は MINERU_MODEL_SOURCE で切替（既定は MinerU 標準の huggingface）。
+# huggingface.co の LFS 配信が不安定/到達不可な環境では、起動時に
+#   MINERU_MODEL_SOURCE=modelscope docker compose -f ... -f docker-compose.gpu.yml up -d
+# とすれば MinerU(VLM) を ModelScope から取得・キャッシュ運用できる。
 services:
   rag:
+    build:
+      context: ./rag
+      args:
+        VARIANT: gpu
     environment:
       DEVICE: cuda
+      MINERU_BACKEND: hybrid-auto-engine
+      MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-huggingface}
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]
+
   rag-worker:
+    build:
+      context: ./rag
+      args:
+        VARIANT: gpu
     environment:
       DEVICE: cuda
+      MINERU_BACKEND: hybrid-auto-engine
+      MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-huggingface}
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]

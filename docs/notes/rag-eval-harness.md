@@ -468,7 +468,9 @@ Qdrant の collection 名は embedder 名を含めて分けられます。
 - `runAgent` を golden cases で実行する回答生成評価
 - faithfulness / answer correctness / citation precision
 - LLM judge、RAGAS、G-Eval 系の評価
-- 画像・表・図面由来の事実を扱う multimodal grounding 評価
+- より踏み込んだ multimodal grounding 評価（図表テキスト由来の grounding は MinerU hybrid(VLM) 抽出で
+  索引化済みで、`agentic_rag_demo` の `case2-image-grounding` が `fact_coverage` で評価する。
+  今後は画像意味理解そのものの直接評価など）
 - BEIR 以外の公開データセット追加
 
 公開ベンチは外部説明力が高く、専用 golden はプロダクトの実運用リスクに強いです。
