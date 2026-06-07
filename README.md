@@ -140,6 +140,29 @@ curl -s localhost:8000/health
 # {"status":"ok","device":"cuda","models_loaded":true}
 ```
 
+### 本番（フルコンテナ + ハードニング）
+
+web も含めて全てコンテナで動かす本番構成。`docker-compose.prod.yml` overlay が web サービス追加・`restart: unless-stopped`・infra ポートの loopback 封じ込め・`APP_ENV=production`（内部トークンの fail-fast 有効化）を担う。
+
+> **dev 専用の `docker-compose.override.yml` は含めない。** web はコンテナ網内で `postgres:5432` / `rag:8000` に直接繋ぐため、host ポートずらし（5433）に依存しない。CLAUDE.md の「`-f` 明示時は override も含める」は host 上で web を動かす dev 向けの注意で、本構成には当てはまらない。
+
+秘密はルート `.env`（git 管理外、compose が自動で読む）に置く。`APP_ENV=production` で `RAG_INTERNAL_TOKEN` が未設定/dev 既定のままなら `up`/`config` 時点で停止する。
+
+```bash
+# ルート .env に APP_ENV=production / RAG_INTERNAL_TOKEN / ARAG_JWT_SECRET を設定済みとする
+#   生成例: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+docker compose \
+  -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.prod.yml \
+  --profile worker up -d --build
+
+# マイグレーション（rag は in-container、web は loopback 経由で host から）
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.prod.yml \
+  exec -T rag uv run alembic upgrade head
+DATABASE_URL=postgres://arag:arag@localhost:5432/arag pnpm drizzle-kit migrate
+```
+
+web は `127.0.0.1` ではなく `3000` を全公開する。本番では前段に nginx 等のリバースプロキシを置くこと（Next.js self-hosting 推奨）。
+
 ## 環境変数一覧
 
 ### web (.env.local)
@@ -150,7 +173,7 @@ curl -s localhost:8000/health
 | `ANTHROPIC_API_KEY` | Claude API キー（回答生成に必須） | 未設定時は検索・引用は動作するが、回答生成はスキップし案内メッセージを返す |
 | `DATABASE_URL` | web→Postgres 接続（node-postgres 形式）。このリポジトリのローカル override では host 側 Postgres が `5433` | `postgres://arag:arag@localhost:5433/arag` |
 | `RAG_SERVICE_URL` | web→rag 内部 HTTP | `http://localhost:8000` |
-| `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン | `dev-internal-token` |
+| `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン（**本番は必須で差し替え**。web・rag・worker で同一値） | `dev-internal-token` |
 
 ### rag (compose 環境変数 / .env)
 
@@ -159,10 +182,11 @@ curl -s localhost:8000/health
 | `DATABASE_URL` | rag→Postgres 接続（psycopg3 形式） | `postgresql+psycopg://arag:arag@localhost:5432/arag` |
 | `QDRANT_URL` | Qdrant gRPC/HTTP | `http://localhost:6333` |
 | `REDIS_URL` | arq キューブローカー | `redis://localhost:6379` |
+| `APP_ENV` | 実行環境 `dev` または `production`。`production` 時に `RAG_INTERNAL_TOKEN` が dev 既定のままだと rag は起動を拒否する | `dev` |
 | `DEVICE` | モデル実行デバイス `cpu` または `cuda` | `cpu` |
 | `EMBEDDER` | 埋め込みモデル `bge-m3` または `stub` | `bge-m3` |
 | `RERANKER` | リランカーモデル `bge` または `stub` | `bge` |
-| `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン | `dev-internal-token` |
+| `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン（**本番は必須で差し替え**） | `dev-internal-token` |
 | `PRELOAD_MODELS` | `1` の場合、起動時にモデルを事前ロード | 未設定 |
 
 ## スクリプト

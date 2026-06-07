@@ -1,0 +1,73 @@
+# 本番ハードニング overlay。web をコンテナ化し、infra ポートを loopback に封じ、
+# restart ポリシーと APP_ENV=production を付与する。
+#
+# 使い方（dev 専用の override.yml は含めない。web はコンテナ網内で
+# postgres:5432 / rag:8000 に繋ぐため、host ポートずらし(5433)に依存しない）:
+#
+#   export APP_ENV=production
+#   export RAG_INTERNAL_TOKEN="$(openssl rand -hex 32)"
+#   export ARAG_JWT_SECRET="$(openssl rand -hex 32)"
+#   export ANTHROPIC_API_KEY=...        # 回答生成に使うなら
+#   docker compose \
+#     -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.prod.yml \
+#     --profile worker up -d --build
+#
+# Windows(PowerShell) は export の代わりにルート .env へ記載すれば compose が読む。
+# 秘密が未設定なら ${VAR:?...} が `up`/`config` 時点で停止する（fail-fast）。
+services:
+  postgres:
+    restart: unless-stopped
+    # 外部公開せず host の drizzle 移行/psql 用に loopback のみ開ける。
+    # host 側ポートは可変（既定 5432）。同一ホストで別 Postgres が 5432 を使う場合は
+    # POSTGRES_HOST_PORT=5433 等を .env に設定して衝突を避ける（コンテナ内は常に 5432）。
+    ports: !override
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+
+  qdrant:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+
+  redis:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:6379:6379"
+
+  rag:
+    restart: unless-stopped
+    environment:
+      # 本番は guard を有効化。トークン未設定なら rag が起動拒否する。
+      APP_ENV: production
+      RAG_INTERNAL_TOKEN: ${RAG_INTERNAL_TOKEN:?本番は強い RAG_INTERNAL_TOKEN を設定してください}
+    ports: !override
+      - "127.0.0.1:8000:8000"
+
+  rag-worker:
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      RAG_INTERNAL_TOKEN: ${RAG_INTERNAL_TOKEN:?本番は強い RAG_INTERNAL_TOKEN を設定してください}
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_ENV: production
+      # コンテナ網内のサービス名で接続（host ポートに依存しない）。
+      DATABASE_URL: postgres://arag:arag@postgres:5432/arag
+      RAG_SERVICE_URL: http://rag:8000
+      RAG_INTERNAL_TOKEN: ${RAG_INTERNAL_TOKEN:?本番は強い RAG_INTERNAL_TOKEN を設定してください}
+      ARAG_JWT_SECRET: ${ARAG_JWT_SECRET:?本番は ARAG_JWT_SECRET を設定してください}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    # リバースプロキシ(nginx 等)を前段に置く前提。直接公開は避ける。
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      rag: { condition: service_healthy }
