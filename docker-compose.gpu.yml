@@ -2,6 +2,12 @@
 # 使い方:
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build
 #
+# 本番では web↔rag 内部認証を必ず差し替える。同一シェルで export しておけば
+# web(.env.local) と rag/worker(${RAG_INTERNAL_TOKEN} 展開)へ同じ値が届く:
+#   export APP_ENV=production
+#   export RAG_INTERNAL_TOKEN="$(openssl rand -hex 32)"
+# APP_ENV=production のとき RAG_INTERNAL_TOKEN が dev 既定のままなら rag は起動を拒否する。
+#
 # GPU 割当は deploy.resources.reservations.devices で記述する。
 # トップレベルの `gpus: all` は Compose v2.30+ が必要なため、v2.28 系でも
 # 動くこの後方互換構文を使う（`docker compose up` でも device 予約は有効）。
