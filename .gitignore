@@ -62,6 +62,10 @@ rag/__pycache__/
 /outputs
 /.playwright-mcp
 
+# モデル初回取得/オフライン検証用の使い捨て compose overlay（手元専用・コミットしない）
+docker-compose.bootstrap.yml
+docker-compose.offline-test.yml
+
 # observatory（観測ツールのスナップショット。実データ由来なのでコミットしない）
 tools/observatory/snapshots/
 # Vite のキャッシュ（ツールを別ポートで動かすと生成される）
