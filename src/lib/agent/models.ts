@@ -30,10 +30,10 @@ export type ModelResolution =
   | { ok: false; reason: string };
 
 /** UI 既定（MODELS[0]）と一致させる。route 側で model 未指定のときのフォールバック。 */
-export const DEFAULT_MODEL_ID = "deepseek-flash";
+export const DEFAULT_MODEL_ID = "gpt-4.1";
 
 const ANTHROPIC_REWRITE = "claude-haiku-4-5";
-const OPENAI_REWRITE = "gpt-4o";
+const OPENAI_REWRITE = "gpt-4.1-mini";
 
 /** DeepSeek API モデル名へのマッピング */
 const DEEPSEEK_MODEL_MAP: Record<string, string> = {
