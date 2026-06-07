@@ -2,7 +2,7 @@
 
 - 日付: 2026-06-07
 - 対象: `rag/`（パース・チャンク・worker・Docker・依存）
-- 関連: `2026-06-06-ocr-image-indexing-design.md`（EasyOCR による画像内 OCR。本設計でこれを置換）
+- 関連: 旧アプローチ「EasyOCR による画像内 OCR」を本設計で置換し、EasyOCR 経路は廃止済み（旧プラン/設計は削除）。
 
 ## 背景・目的
 
