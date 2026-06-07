@@ -217,19 +217,21 @@ export function getSuggestedPrompts(locale: Locale): SuggestedPrompt[] {
 
 // モデルの label は製品名のため翻訳しない。tag / desc のみロケール化する。
 const MODELS_JA: ModelOption[] = [
-  { id: "deepseek-flash", label: "DeepSeek Flash", tag: "推奨", desc: "高速・低コスト" },
+  { id: "gpt-4.1", label: "GPT-4.1", tag: "推奨", desc: "OpenAI 最新・長文脈" },
+  { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 標準" },
+  { id: "deepseek-flash", label: "DeepSeek Flash", tag: "高速", desc: "高速・低コスト" },
   { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", tag: "高精度", desc: "高性能推論モデル" },
   { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "", desc: "汎用・最も賢い" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", tag: "高速", desc: "高速・低コスト" },
-  { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 標準" },
 ];
 
 const MODELS_ZH: ModelOption[] = [
-  { id: "deepseek-flash", label: "DeepSeek Flash", tag: "推荐", desc: "高速·低成本" },
+  { id: "gpt-4.1", label: "GPT-4.1", tag: "推荐", desc: "OpenAI 最新·长上下文" },
+  { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 标准" },
+  { id: "deepseek-flash", label: "DeepSeek Flash", tag: "高速", desc: "高速·低成本" },
   { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", tag: "高精度", desc: "高性能推理模型" },
   { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "", desc: "通用·最强" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", tag: "高速", desc: "高速·低成本" },
-  { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 标准" },
 ];
 
 /** 後方互換のため ja をデフォルトとして維持する。新規コードは getModels を使うこと。 */
