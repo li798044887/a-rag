@@ -27,6 +27,11 @@ jobs:
       EVAL_SUITE: ${{ inputs.suite || 'beir_scifact' }}
       QUERY_LIMIT: ${{ inputs.query_limit || '100' }}
       CORPUS_LIMIT: ${{ inputs.corpus_limit || '0' }}
+      # この runner では huggingface.co の LFS 配信が不安定なため、MinerU の VLM(hybrid) は
+      # ModelScope キャッシュから読む。docker-compose.gpu.yml の MINERU_MODEL_SOURCE 既定
+      # (huggingface) を上書きする。PDF を含む suite（agentic_rag_demo）の図表解析に必要で、
+      # .txt のみの beir/hotpot は VLM を取得しないため無影響。
+      MINERU_MODEL_SOURCE: modelscope
     defaults:
       run:
         shell: powershell
