@@ -17,8 +17,12 @@ on:
         description: "Cap number of cases (0 = full set)"
         required: false
         default: "0"
+      models:
+        description: "Override matrix (comma-separated, e.g. deepseek-v4-pro). Empty = answer.yaml"
+        required: false
+        default: ""
       primary:
-        description: "Gate target model id (overrides answer.yaml primary)"
+        description: "Gate target model id (overrides answer.yaml/--models default)"
         required: false
         default: ""
 
@@ -42,7 +46,7 @@ jobs:
       - uses: actions/checkout@v6
       # answer-eval ランナーは host 上で node tools/answer-eval/run.mts を実行する。
       # .mts の型ストリップに Node >=22.6 が要るため 24 を用意し、corepack で pnpm を供給する。
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
       - name: Enable corepack (pnpm)
@@ -99,6 +103,7 @@ jobs:
       - name: Run answer-eval with gate
         run: |
           $extra = @()
+          if ($env:INPUT_MODELS) { $extra += "--models"; $extra += $env:INPUT_MODELS }
           if ($env:INPUT_PRIMARY) { $extra += "--primary"; $extra += $env:INPUT_PRIMARY }
           if ($env:QUERY_LIMIT -ne "0") { $extra += "--limit"; $extra += $env:QUERY_LIMIT }
           if ($env:SUITE.StartsWith("beir_") -or $env:SUITE.StartsWith("hotpot_")) {
@@ -107,6 +112,7 @@ jobs:
           pnpm answer-eval --suite $env:SUITE --gate --out "artifacts/answer-eval" @extra
           exit $LASTEXITCODE
         env:
+          INPUT_MODELS: ${{ inputs.models }}
           INPUT_PRIMARY: ${{ inputs.primary }}
       - name: Publish report summary
         if: always()
