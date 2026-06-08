@@ -1,0 +1,13 @@
+# answer-eval（回答品質ハーネス）専用設定。golden は実行時生成（prepare-hotpot → /data）
+# のため、workflow が host にコピーした golden.yaml を run.mts の --golden で渡す。
+# queries/key_facts/relevant_documents はその生成 golden を再利用する。
+primary: gpt-4.1                   # gate 対象 = 本番既定
+models:                           # キーが無いモデルは run.mts が skip + warning する
+  - gpt-4.1
+  - gpt-4o
+  - deepseek-flash
+  - deepseek-v4-pro
+thresholds:                       # 公開ベンチは要キャリブレーション（暫定・低め）
+  citation_recall: 0.60
+  citation_precision: 0.40
+  answer_fact_coverage: 0.50

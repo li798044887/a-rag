@@ -17,8 +17,6 @@ on:
         description: "Number of corpus documents to ingest; 0 uses the full corpus"
         required: true
         default: "0"
-  schedule:
-    - cron: "0 18 * * *"  # 03:00 JST
 
 jobs:
   full-eval:
