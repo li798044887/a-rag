@@ -53,7 +53,7 @@ tools/answer-eval/
   metrics.ts       # 指標関数（純粋・単体テスト対象）
   golden.ts        # golden.yaml / answer.yaml ロード + 型
   report.ts        # JSON レポート形 + gate 判定
-  metrics.test.ts  # 既定 pnpm test で回る単体テスト（fixture、スタック不要）
+  metrics.test.ts  # 独自 config(pnpm answer-eval:test)で回る単体テスト（fixture、スタック不要）
   harness.test.ts  # fake runAgent を注入したロジック検証
 ```
 - **golden 再利用**: `rag/eval/suites/agentic_rag_demo/golden.yaml`（queries / key_facts /
@@ -80,8 +80,9 @@ golden の `relevant_documents`（PDF ファイル名）と **documentTitle で�
 - **citation precision** = |引用文書 ∩ relevant| / |引用文書|（引用ゼロは 0）
 - **answer fact coverage** = 充足した key_fact グループ数 / 全グループ数
   - 各グループは `any:` の表記揺れのいずれかが**最終回答テキストに含まれれば充足**。
-  - **Python `fact_coverage` と同一の部分一致セマンティクス**（正規化なしの素の
-    substring。golden が半角/全角を両方列挙しているのはこの前提のため）。マッチ対象は
+  - **Python `fact_coverage` と同一の部分一致セマンティクス**: Python eval の
+    `normalize_text`（NFKC 正規化＋連続空白の単一空白化＋trim＋小文字化）と同一の正規化を
+    回答・alias の双方に適用した上での substring 照合（大小文字・全角半角に頑健）。マッチ対象は
     `answer-delta` を連結した最終回答全文。
 
 **エッジケース**
@@ -155,15 +156,21 @@ thresholds:                        # 初回実測 - マージンで確定（暫�
 **統合ポイント**: ハーネスは runner host の Node で動き、`runAgent` → rag-client が
 **HTTP で rag に到達**する。host から rag の公開ポートへ `RAG_SERVICE_URL` を向け、
 `RAG_INTERNAL_TOKEN` と各 API キー（`OPENAI_API_KEY` / `DEEPSEEK_API_KEY`、secrets）を
-env で渡す。rag の host 公開ポートの厳密値は実装計画で確認。
+env で渡す。rag は compose で `8000:8000` を公開し、`rag-client` の既定が
+`http://localhost:8000` / `dev-internal-token` のため、runner host からは既定で到達できる
+（必要時のみ env 上書き）。なお host の Node は `.mts` 型ストリップ実行のため 22.6 以上
+（CI は `actions/setup-node` で 24）が必要。
 
 ## 7. ハーネス自体のテスト
 
 `runAgent` を**依存注入**にし、ロジックをスタック/API キー無しで単体テスト可能にする
 （observatory の `observe.test.ts` / `replay.test.ts` と同方針）。
-- `metrics.test.ts`（既定 `pnpm test`・スタック不要）: citation precision/recall
+- ツールの単体テストは **独自 vitest config**（`pnpm answer-eval:test`、
+  `tools/answer-eval/vitest.config.ts`）で回す（observatory と同じく root の `pnpm test`・
+  `tsc`・`eslint` 対象外）。スタック/API キー不要。
+- `metrics.test.ts`: citation precision/recall
   （完全/部分一致・引用ゼロ=0・無関係引用の penalize）、answer fact coverage
-  （半角/全角揺れ・部分充足・Python と同一 substring）。
+  （半角/全角揺れ・大小文字差・部分充足・Python `normalize_text` と同一の正規化）。
 - `harness.test.ts`: golden/answer ロード、**fake runAgent**（canned `done` を yield）を
   注入して 1 case 実行→指標→集計→gate 判定、キー欠如モデルの skip + warning。
 - 実 `runAgent` を使う統合確認は answer-eval 実行そのもの（CI）が担う。別途の重い統合
@@ -181,7 +188,7 @@ env で渡す。rag の host 公開ポートの厳密値は実装計画で確認
   relevant_documents（7 文書, owner `__eval_agentic_rag_demo__`）。
 
 ## 9. 未確定（実装計画で詰める）
-- documentTitle ↔ golden ファイル名の厳密な突合（拡張子・正規化の有無）。
-- rag の host 公開ポート（`RAG_SERVICE_URL` の値）。
+- documentTitle ↔ golden ファイル名の厳密な突合（拡張子・正規化の有無）。初回 CI 実測の
+  `cited_documents` 実値で確認する。
 - 閾値の確定値（初回キャリブレーション run 後に `answer.yaml` を更新）。
 - `pnpm answer-eval` スクリプトの引数仕様の最終形。
