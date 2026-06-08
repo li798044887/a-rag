@@ -88,3 +88,6 @@ if (values.gate && gateFailed) {
   console.error("[gate] 主モデルが閾値を割りました。");
   process.exit(1);
 }
+// CLI ツールとして確実に終了する。ssrLoadModule 経由でロードしたモジュールが保持する
+// リソース（DB プール・HTTP エージェント等）を待たず、Vite の close 後に強制終了する。
+process.exit(0);
