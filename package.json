@@ -14,7 +14,9 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "observe": "node tools/observatory/server.mts",
-    "observe:test": "vitest --config tools/observatory/vitest.config.ts run"
+    "observe:test": "vitest --config tools/observatory/vitest.config.ts run",
+    "answer-eval": "node tools/answer-eval/run.mts",
+    "answer-eval:test": "vitest --config tools/answer-eval/vitest.config.ts run"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.79",
@@ -64,7 +66,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "8.0.14",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "yaml": "^2.9.0"
   },
   "packageManager": "pnpm@9.13.0",
   "msw": {
