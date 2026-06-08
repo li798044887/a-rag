@@ -26,6 +26,8 @@ const { values } = parseArgs({
     golden: { type: "string" },
     // 評価 case 数の上限（0=全件）。大規模 suite のコスト制御用。
     limit: { type: "string", default: "0" },
+    // matrix の上書き（カンマ区切り）。例 "deepseek-v4-pro" で単一モデル試走。
+    models: { type: "string" },
     gate: { type: "boolean", default: false },
     primary: { type: "string" },
   },
@@ -39,7 +41,13 @@ const golden = loadGoldenFile(goldenPath);
 const limit = Number(values.limit ?? "0");
 if (limit > 0) golden.cases = golden.cases.slice(0, limit);
 const answerCfg = loadAnswerConfig(dir);
-const primary = values.primary ?? answerCfg.primary;
+// --models で matrix を上書き可能（単一モデルでの試走など）。未指定なら answer.yaml の matrix。
+const models = values.models
+  ? values.models.split(",").map((s) => s.trim()).filter(Boolean)
+  : answerCfg.models;
+// primary 未指定時、--models 指定があればその先頭を gate 対象にする（matrix 外 primary で
+// 全 skip → gate 失敗になるのを避ける）。
+const primary = values.primary ?? (values.models ? models[0] : answerCfg.primary);
 
 // root はツールディレクトリに固定する（observatory と同方針）。ROOT を root にすると
 // Vite の依存スキャンが Next アプリ全体を走査して数分かかり、その間に SSR の fetchModule
@@ -67,7 +75,7 @@ let gateFailed = false;
 let primaryEvaluated = false;
 
 try {
-  for (const modelId of answerCfg.models) {
+  for (const modelId of models) {
     const r = resolveModels(modelId);
     if (!r.ok) {
       console.warn(`[skip] ${modelId}: ${r.reason ?? "API キー未設定"}`);
