@@ -39,3 +39,10 @@ test("citationPrecision は引用のうち関連文書だった比率（引用�
   expect(citationPrecision(cited, ["A.pdf", "B.pdf"])).toBeCloseTo(1 / 2);
   expect(citationPrecision(new Set<string>(), ["A.pdf"])).toBe(0);
 });
+
+test("factGroupMatched は大小文字・全角半角を正規化して一致する（Python eval パリティ）", () => {
+  // golden の英語ファクトは CamelCase だが、回答が小文字でも一致する。
+  expect(factGroupMatched("原因は kafka consumer lag です", { any: ["Kafka consumer lag"] })).toBe(true);
+  // 全角英数字も NFKC で半角化して一致する。
+  expect(factGroupMatched("コードはＮ９でした", { any: ["N9"] })).toBe(true);
+});
