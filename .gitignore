@@ -70,3 +70,6 @@ docker-compose.offline-test.yml
 tools/observatory/snapshots/
 # Vite のキャッシュ（ツールを別ポートで動かすと生成される）
 tools/**/node_modules/
+
+# 回答品質評価ハーネスのローカル出力
+eval-reports/
