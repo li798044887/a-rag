@@ -1,6 +1,41 @@
 import { expect, test } from "vitest";
-import { _scaffold } from "./metrics.ts";
+import {
+  factGroupMatched,
+  factCoverage,
+  citationRecall,
+  citationPrecision,
+} from "./metrics.ts";
 
-test("scaffold wiring works", () => {
-  expect(_scaffold()).toBe(true);
+test("factGroupMatched は any のいずれかが回答に含まれれば true", () => {
+  expect(factGroupMatched("バイパス弁 V-12 を点検", { any: ["V-12", "Ｖ-12"] })).toBe(true);
+  // 全角表記でも、回答に全角があれば一致する（正規化なしの素の substring）。
+  expect(factGroupMatched("点検対象は Ｖ-12 です", { any: ["V-12", "Ｖ-12"] })).toBe(true);
+  expect(factGroupMatched("該当なし", { any: ["V-12", "Ｖ-12"] })).toBe(false);
+});
+
+test("factCoverage は充足グループ比率と各グループの真偽を返す", () => {
+  const groups = [{ any: ["N9"] }, { any: ["翌営業日AM", "翌営業日"] }, { any: ["0.91"] }];
+  const r = factCoverage("コードN9。翌営業日に対応。", groups);
+  expect(r.matched).toEqual([true, true, false]);
+  expect(r.coverage).toBeCloseTo(2 / 3);
+});
+
+test("factCoverage はグループ空なら coverage=1", () => {
+  expect(factCoverage("何でも", []).coverage).toBe(1);
+});
+
+test("citationRecall は関連文書のうち引用できた比率", () => {
+  const cited = new Set(["A.pdf", "B.pdf"]);
+  expect(citationRecall(cited, ["A.pdf", "C.pdf"])).toBeCloseTo(1 / 2);
+  expect(citationRecall(cited, ["A.pdf", "B.pdf"])).toBe(1);
+});
+
+test("citationRecall は relevant 空なら 1", () => {
+  expect(citationRecall(new Set(["A.pdf"]), [])).toBe(1);
+});
+
+test("citationPrecision は引用のうち関連文書だった比率（引用ゼロは 0）", () => {
+  const cited = new Set(["A.pdf", "X.pdf"]);
+  expect(citationPrecision(cited, ["A.pdf", "B.pdf"])).toBeCloseTo(1 / 2);
+  expect(citationPrecision(new Set<string>(), ["A.pdf"])).toBe(0);
 });
