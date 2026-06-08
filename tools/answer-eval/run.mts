@@ -33,11 +33,16 @@ const golden = loadGolden(dir);
 const answerCfg = loadAnswerConfig(dir);
 const primary = values.primary ?? answerCfg.primary;
 
+// root はツールディレクトリに固定する（observatory と同方針）。ROOT を root にすると
+// Vite の依存スキャンが Next アプリ全体を走査して数分かかり、その間に SSR の fetchModule
+// トランスポートがタイムアウトする。SSR ロードのみで client バンドルは不要なため、
+// optimizeDeps の探索も無効化してスキャンを丸ごと省く。
 const vite = await createViteServer({
-  root: ROOT,
+  root: __dirname,
   appType: "custom",
   server: { middlewareMode: true },
   resolve: { alias: { "@": SRC } },
+  optimizeDeps: { noDiscovery: true },
 });
 
 // 本番と同一の runAgent / モデル解決をエイリアス解決込みで読む。
