@@ -37,10 +37,13 @@ jobs:
         run: corepack enable
       - name: Prepare report directory
         run: New-Item -ItemType Directory -Force -Path "artifacts/answer-eval" | Out-Null
+      # docker-compose.override.yml は意図的に省略する（rag-eval-full.yml と同様）。
+      # override の 5433 ポートは host 側 pnpm dev / drizzle-kit 用で、本 job では不要。
+      # answer-eval は web を起動せず、rag は内部ネットワーク経由で postgres:5432 に接続する。
       - name: Bring up full stack (rebuild rag to bake eval/)
         run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build rag
       - name: Verify CUDA in rag container
-        run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -c "import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+        run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -c "import torch; assert torch.cuda.is_available(), 'CUDA is not available in the rag container'; print(torch.cuda.get_device_name(0))"
       - name: Ingest golden documents
         run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval ingest --suite $env:SUITE
       - name: Install web deps
