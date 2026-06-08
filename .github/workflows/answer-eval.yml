@@ -51,8 +51,15 @@ jobs:
           node-version: "24"
       - name: Enable corepack (pnpm)
         run: corepack enable
-      - name: Prepare report directory
-        run: New-Item -ItemType Directory -Force -Path "artifacts/answer-eval" | Out-Null
+      # compose は host の ./artifacts/eval-* を /data/eval-* にバインドマウントする
+      # (docker-compose.yml)。起動前に host 側を実在ディレクトリにしておかないと、
+      # beir/hotpot の prepare が /data/eval-cache 等で壊れたマウントに当たり失敗する。
+      - name: Prepare report directories (bind-mount sources)
+        run: |
+          New-Item -ItemType Directory -Force -Path "artifacts/answer-eval" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/eval-cache" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/eval-assets/$env:SUITE" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/rag-eval/$env:SUITE" | Out-Null
       # docker-compose.override.yml は意図的に省略する（rag-eval-full.yml と同様）。
       # override の 5433 ポートは host 側 pnpm dev / drizzle-kit 用で、本 job では不要。
       # answer-eval は web を起動せず、rag は内部ネットワーク経由で postgres:5432 に接続する。
@@ -89,15 +96,8 @@ jobs:
           } else {
             docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval ingest --suite $env:SUITE
           }
-      # host 実行の run.mts に golden を渡すため、生成 golden をコンテナから host へ取り出す。
-      - name: Copy generated golden to host (beir/hotpot only)
-        run: |
-          if ($env:SUITE.StartsWith("beir_") -or $env:SUITE.StartsWith("hotpot_")) {
-            New-Item -ItemType Directory -Force -Path "artifacts/golden/$env:SUITE" | Out-Null
-            docker compose -f docker-compose.yml -f docker-compose.gpu.yml cp `
-              "rag:/data/eval-reports/$env:SUITE/golden.yaml" `
-              "artifacts/golden/$env:SUITE/golden.yaml"
-          }
+      # /data/eval-reports は host の ./artifacts/rag-eval にバインドされるため、生成 golden は
+      # 既に host 側（artifacts/rag-eval/<suite>/golden.yaml）にある。cp は不要。
       - name: Install web deps
         run: pnpm install --frozen-lockfile
       - name: Run answer-eval with gate
@@ -107,7 +107,7 @@ jobs:
           if ($env:INPUT_PRIMARY) { $extra += "--primary"; $extra += $env:INPUT_PRIMARY }
           if ($env:QUERY_LIMIT -ne "0") { $extra += "--limit"; $extra += $env:QUERY_LIMIT }
           if ($env:SUITE.StartsWith("beir_") -or $env:SUITE.StartsWith("hotpot_")) {
-            $extra += "--golden"; $extra += "artifacts/golden/$env:SUITE/golden.yaml"
+            $extra += "--golden"; $extra += "artifacts/rag-eval/$env:SUITE/golden.yaml"
           }
           pnpm answer-eval --suite $env:SUITE --gate --out "artifacts/answer-eval" @extra
           exit $LASTEXITCODE
