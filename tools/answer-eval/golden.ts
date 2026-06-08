@@ -32,9 +32,13 @@ export function suiteDir(repoRoot: string, suite: string): string {
   return join(repoRoot, "rag", "eval", "suites", suite);
 }
 
+/** golden.yaml をファイルパス直指定で読む（beir/hotpot は生成 golden を host へコピーして渡す）。 */
+export function loadGoldenFile(file: string): Golden {
+  return parse(readFileSync(file, "utf8")) as Golden;
+}
+
 export function loadGolden(dir: string): Golden {
-  const raw = parse(readFileSync(join(dir, "golden.yaml"), "utf8")) as Golden;
-  return raw;
+  return loadGoldenFile(join(dir, "golden.yaml"));
 }
 
 export function loadAnswerConfig(dir: string): AnswerConfig {

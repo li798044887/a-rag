@@ -6,7 +6,7 @@ import { createServer as createViteServer, loadEnv } from "vite";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { loadGolden, loadAnswerConfig, suiteDir } from "./golden.ts";
+import { loadGoldenFile, loadAnswerConfig, suiteDir } from "./golden.ts";
 import { runModel, type RunAgentFn } from "./harness.ts";
 import { buildReport, writeReport } from "./report.ts";
 
@@ -21,6 +21,11 @@ const { values } = parseArgs({
   options: {
     suite: { type: "string", default: "agentic_rag_demo" },
     out: { type: "string", default: "eval-reports/answer" },
+    // golden を直接指定（未指定なら rag/eval/suites/<suite>/golden.yaml）。beir/hotpot の
+    // 生成 golden を host にコピーして渡すために使う。
+    golden: { type: "string" },
+    // 評価 case 数の上限（0=全件）。大規模 suite のコスト制御用。
+    limit: { type: "string", default: "0" },
     gate: { type: "boolean", default: false },
     primary: { type: "string" },
   },
@@ -29,7 +34,10 @@ const { values } = parseArgs({
 const suite = values.suite!;
 const outDir = resolve(ROOT, values.out!);
 const dir = suiteDir(ROOT, suite);
-const golden = loadGolden(dir);
+const goldenPath = values.golden ? resolve(ROOT, values.golden) : join(dir, "golden.yaml");
+const golden = loadGoldenFile(goldenPath);
+const limit = Number(values.limit ?? "0");
+if (limit > 0) golden.cases = golden.cases.slice(0, limit);
 const answerCfg = loadAnswerConfig(dir);
 const primary = values.primary ?? answerCfg.primary;
 
@@ -56,6 +64,7 @@ const resolveModels = modelsMod.resolveModels as (id: string) => {
 };
 
 let gateFailed = false;
+let primaryEvaluated = false;
 
 try {
   for (const modelId of answerCfg.models) {
@@ -65,6 +74,7 @@ try {
       continue;
     }
     const isGate = modelId === primary;
+    if (isGate) primaryEvaluated = true;
     console.log(`[run] ${modelId}${isGate ? " (gate)" : ""} ...`);
     const cases = await runModel(run, golden, modelId, "ja");
     const report = buildReport({
@@ -89,6 +99,11 @@ try {
   await vite.close();
 }
 
+// --gate 時、主モデルがキー欠如等で未評価なら緑で素通りさせず失敗にする（サイレント false-pass 防止）。
+if (values.gate && !primaryEvaluated) {
+  console.error(`[gate] 主モデル ${primary} が未評価です（API キー未設定で skip された可能性）。`);
+  process.exit(1);
+}
 if (values.gate && gateFailed) {
   console.error("[gate] 主モデルが閾値を割りました。");
   process.exit(1);
