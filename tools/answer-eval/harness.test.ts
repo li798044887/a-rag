@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { AgentEvent } from "@/lib/types";
-import { citedDocumentTitles, collect, runCase, type RunAgentFn } from "./harness.ts";
-import type { GoldenCase } from "./golden.ts";
+import { citedDocumentTitles, collect, runCase, runModel, type RunAgentFn } from "./harness.ts";
+import type { GoldenCase, Golden } from "./golden.ts";
 
 // done イベントの最小生成。citationMap の sourceId は sources の id（documentId）と対応する。
 function doneEvent(over: Partial<Extract<AgentEvent, { type: "done" }>>): Extract<AgentEvent, { type: "done" }> {
@@ -57,4 +57,43 @@ test("runCase は注入した runAgent の結果から指標を算出する", as
   expect(res.cited_documents).toEqual(["04-cross-page-table-semantic-loss.pdf"]);
   expect(res.fact_groups.map((g) => g.matched)).toEqual([true, true, false]);
   expect(res.tokens).toBe(10);
+});
+
+test("runCase は done が来なくても全指標0で完走する（生成失敗の防御）", async () => {
+  // done を一切 yield しない（モデル失敗・ストリーム異常を模す）。
+  const noDoneRun: RunAgentFn = async function* () {
+    yield { type: "answer-delta", text: "途中で切れた回答" };
+  };
+  const gc: GoldenCase = {
+    id: "case-x", query: "q",
+    relevant_documents: ["A.pdf"],
+    key_facts: [{ any: ["存在しない事実"] }],
+  };
+  const res = await runCase(noDoneRun, { ownerUserId: "owner", modelId: "gpt-4.1" }, gc);
+  expect(res.citation_recall).toBe(0);
+  expect(res.citation_precision).toBe(0);
+  expect(res.answer_fact_coverage).toBe(0);
+  expect(res.cited_documents).toEqual([]);
+  expect(res.tokens).toBe(0);
+});
+
+test("runModel は golden の全 case を回し owner_user_id を引き渡す", async () => {
+  const seen: { ownerUserId: string; ids: string[] } = { ownerUserId: "", ids: [] };
+  const fakeRun: RunAgentFn = async function* (input) {
+    seen.ownerUserId = input.ownerUserId;
+    seen.ids.push(input.threadId);
+    yield doneEvent({});
+  };
+  const golden: Golden = {
+    suite: "s", owner_user_id: "__owner__",
+    cases: [
+      { id: "a", query: "qa", relevant_documents: [], key_facts: [] },
+      { id: "b", query: "qb", relevant_documents: [], key_facts: [] },
+    ],
+  };
+  const results = await runModel(fakeRun, golden, "gpt-4.1");
+  expect(results.map((r) => r.id)).toEqual(["a", "b"]);
+  expect(seen.ownerUserId).toBe("__owner__");
+  // threadId は answer-eval:<id> で名前空間化される。
+  expect(seen.ids).toEqual(["answer-eval:a", "answer-eval:b"]);
 });

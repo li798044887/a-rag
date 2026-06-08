@@ -171,8 +171,10 @@ env で渡す。rag は compose で `8000:8000` を公開し、`rag-client` の�
 - `metrics.test.ts`: citation precision/recall
   （完全/部分一致・引用ゼロ=0・無関係引用の penalize）、answer fact coverage
   （半角/全角揺れ・大小文字差・部分充足・Python `normalize_text` と同一の正規化）。
-- `harness.test.ts`: golden/answer ロード、**fake runAgent**（canned `done` を yield）を
-  注入して 1 case 実行→指標→集計→gate 判定、キー欠如モデルの skip + warning。
+- `harness.test.ts`: **fake runAgent**（canned `done` を yield）を注入して 1 case 実行→指標、
+  done 不在時の防御（全指標0）、`runModel` の全 case 反復＋owner 引き渡しを検証。
+- キー欠如モデルの **skip + warning** は `run.mts`（`resolveModels(modelId).ok` 判定）に置き、
+  CI 実行で確認する（純ロジックでないため単体テスト対象外）。集計・gate 判定は `report.test.ts`。
 - 実 `runAgent` を使う統合確認は answer-eval 実行そのもの（CI）が担う。別途の重い統合
   テストは作らない。
 

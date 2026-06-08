@@ -8,7 +8,7 @@ import {
 
 test("factGroupMatched は any のいずれかが回答に含まれれば true", () => {
   expect(factGroupMatched("バイパス弁 V-12 を点検", { any: ["V-12", "Ｖ-12"] })).toBe(true);
-  // 全角表記でも、回答に全角があれば一致する（正規化なしの素の substring）。
+  // 全角表記でも、NFKC 正規化により半角 alias と一致する。
   expect(factGroupMatched("点検対象は Ｖ-12 です", { any: ["V-12", "Ｖ-12"] })).toBe(true);
   expect(factGroupMatched("該当なし", { any: ["V-12", "Ｖ-12"] })).toBe(false);
 });
