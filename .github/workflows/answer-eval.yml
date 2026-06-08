@@ -63,8 +63,11 @@ jobs:
       # docker-compose.override.yml は意図的に省略する（rag-eval-full.yml と同様）。
       # override の 5433 ポートは host 側 pnpm dev / drizzle-kit 用で、本 job では不要。
       # answer-eval は web を起動せず、rag は内部ネットワーク経由で postgres:5432 に接続する。
+      # --force-recreate: 直前ステップで作成した eval-* バインド元 host dir に rag のマウントを
+      # 再解決させる。既存コンテナを再利用するとマウントが古いまま（壊れた状態）になり
+      # beir/hotpot の prepare が /data/eval-cache で失敗するため、毎回 rag を作り直す。
       - name: Bring up full stack (rebuild rag to bake eval/)
-        run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build rag
+        run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build --force-recreate rag
       - name: Verify CUDA in rag container
         run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -c "import torch; assert torch.cuda.is_available(), 'CUDA is not available in the rag container'; print(torch.cuda.get_device_name(0))"
       # 公開ベンチ(beir/hotpot)は golden を実行時生成する。agentic は repo 同梱 golden を使う。
