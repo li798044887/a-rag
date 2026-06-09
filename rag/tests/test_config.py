@@ -35,6 +35,16 @@ def test_parse_backend_accepts_vlm(monkeypatch):
     assert config.settings.parse_backend == "vlm-auto-engine"
 
 
+def test_parse_backend_accepts_http_client(monkeypatch):
+    """常駐 mineru-vllm サーバへ委譲する http-client 系を受理する。"""
+    config = _fresh_settings(
+        monkeypatch, MINERU_BACKEND="hybrid-http-client",
+        MINERU_SERVER_URL="http://mineru-vllm:30000", MINERU_PAGE_WINDOW="40")
+    assert config.settings.parse_backend == "hybrid-http-client"
+    assert config.settings.mineru_server_url == "http://mineru-vllm:30000"
+    assert config.settings.mineru_page_window == 40
+
+
 def test_production_rejects_default_internal_token(monkeypatch):
     """APP_ENV=production で dev 既定トークンのままなら起動を止める。"""
     monkeypatch.setenv("RAG_INTERNAL_TOKEN", "dev-internal-token")
