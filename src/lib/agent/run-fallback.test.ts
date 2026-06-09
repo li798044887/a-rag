@@ -30,7 +30,7 @@ vi.mock("ai", async (orig) => {
   };
 });
 
-// 既定モデルは gpt-4.1 で、OpenAI 経路は createOpenAI で生成する。
+// 既定モデルは gpt-5-mini で、OpenAI 経路は createOpenAI で生成する。
 // streamText はモック済みのため返すモデル値は実際には使われない。
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: () => () => "model" }));
 
