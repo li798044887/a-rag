@@ -6,7 +6,7 @@ PDF/Office をどう解析し、**図表の中のテキスト**を検索（索�
 
 ## 0. 要点
 
-- 解析方式は `MINERU_BACKEND` で切替（`rag/app/config.py`）。**dev=CPU/`pipeline`**、**prod=CUDA/`hybrid-auto-engine`**。
+- 解析方式は `MINERU_BACKEND` で切替（`rag/app/config.py`）。**dev=CPU/`pipeline`**、**prod=CUDA/`hybrid-http-client`**（VLM 推論は常駐 `mineru-vllm` サーバへ委譲）。
 - hybrid(VLM) は図を解釈し、図中テキストを `content_list.json` の **`image` ブロックの `image_caption` と新規 `content`**（例: mermaid フローチャート）に出す。
 - 画像チャンクは**表示専用で Qdrant 索引から除外**されるため、図表テキストを検索に載せるには
   正規化層（`mineru.py`）で**独立した `text` ブロックに展開**する。
@@ -16,7 +16,7 @@ PDF/Office をどう解析し、**図表の中のテキスト**を検索（索�
 
 ```mermaid
 flowchart LR
-  PDF[原本 PDF/Office] --> MIN["mineru CLI<br/>-d device -b backend"]
+  PDF[原本 PDF/Office] --> MIN["mineru CLI<br/>-b backend (-u server / -s,-e 分割)"]
   MIN --> CL["*_content_list.json"]
   CL --> NORM["mineru.py<br/>_block_from_item / _figure_text"]
   NORM --> BLK["ParsedBlock[]<br/>(text/title/table/equation/image + 図text)"]
@@ -32,19 +32,34 @@ flowchart LR
 | | dev（Mac/Docker・CPU） | prod（CUDA/GPU） |
 |---|---|---|
 | `DEVICE` | `cpu` | `cuda` |
-| `MINERU_BACKEND` | `pipeline`（既定） | `hybrid-auto-engine` |
+| `MINERU_BACKEND` | `pipeline`（既定） | `hybrid-http-client` |
 | 図中テキスト | 取り込まない（図は画像のまま） | VLM が `--image-analysis` で解釈 |
-| VLM 推論 | しない（vllm 不要） | vllm + `opendatalab/MinerU2.5-Pro-2604-1.2B` |
+| VLM 推論 | しない（vllm 不要） | 常駐 `mineru-vllm` サーバ（`opendatalab/MinerU2.5-Pro-2604-1.2B`）へ HTTP 委譲 |
 
-許容値は `pipeline` / `hybrid-auto-engine` / `vlm-auto-engine`（`vlm-auto-engine` は純 VLM・現状未使用）。
-`mineru -b` の実在値と一致（`vlm-http-client` / `hybrid-http-client` は別ホスト推論で未採用）。
-VLM 系バックエンド時のみ起動時に MinerU2.5 を事前取得（`main.py` の `_maybe_preload_vlm`）。
+許容値は `pipeline` / `hybrid-auto-engine` / `vlm-auto-engine` / `hybrid-http-client` / `vlm-http-client`
+（`mineru -b` の実在値と一致）。`*-auto-engine` は VLM を各 ingest が in-process で cold 起動する旧方式で、
+単一 GPU では VRAM スパイクが大きく OOM しやすい。**prod は `hybrid-http-client` を採用**し、VLM を常駐
+`mineru-vllm` サーバ（OpenAI 互換 vllm, port 30000）へ集約して VRAM 予算を `--gpu-memory-utilization` で固定する。
+クライアント（rag/worker）は `MINERU_SERVER_URL` でサーバを指す（`mineru -u`）。VLM 推論はリモートだが、
+hybrid のローカルレイアウト/OCR（PDF-Extract-Kit）はクライアント側で走る。
+in-process VLM（`*-auto-engine`）のときだけ起動時に MinerU2.5 を事前取得（`main.py` の `_maybe_preload_vlm`）。
+http-client では重みはサーバ側のみが持つためクライアントは取得しない。
 
 ## 3. content_list の正規化（`rag/app/parsing/mineru.py`）
 
-`parse()` が `mineru -p <raw> -o <out> -d <device> -b <backend>` を実行し、
+`parse()` が `mineru -p <raw> -o <out> -b <backend>`（http-client では `-u <server>` 付き）を実行し、
 `*_content_list.json` を `ParsedBlock` 列へ正規化する。`type` → ブロック種別は `_TYPE_MAP`
 （`text`/`title`/`table`/`equation`/`image`、`list`/`index` は text 扱い）。
+device は env `MINERU_DEVICE_MODE`/auto 検出で決まる（CLI は未知オプションを黙殺するため `-d` は渡さない）。
+
+### ページ分割（`MINERU_PAGE_WINDOW`・大判 PDF の RAM 対策）
+
+http-client でも PDF→画像ラスタライズはクライアント側に残るため、画像入り大判 PDF は
+ホスト RAM を食い潰す。`MINERU_PAGE_WINDOW>0`（PDF のみ）なら `_parse_windowed` が `-s/-e` で
+ページ窓ごとに分割実行し、ピーク RAM をページ数に依らず頭打ちにする。MinerU は窓を新 PDF に
+組み直して `page_idx` を **0 始まり**で返すため、窓開始ページを加算して絶対ページへ補正し、
+各窓の `images/` を単一ディレクトリへ統合する（`img_path` は `images/<name>` のままで worker と整合）。
+窓境界をまたぐ表は分断され得るので、表中心の文書では窓を大きめに。
 
 ### 図表テキストの格納先（MinerU 3.1.15・hybrid 実測）
 

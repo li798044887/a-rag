@@ -20,14 +20,14 @@ def test_parse_passes_configured_backend(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mineru.subprocess, "run", fake_run)
     monkeypatch.setattr(mineru.settings, "parse_backend", "hybrid-auto-engine")
-    monkeypatch.setattr(mineru.settings, "device", "cuda")
 
     doc = mineru.parse(str(tmp_path / "in.pdf"), str(tmp_path / "out"))
 
     assert "-b" in captured["cmd"]
     assert captured["cmd"][captured["cmd"].index("-b") + 1] == "hybrid-auto-engine"
-    assert "-d" in captured["cmd"]
-    assert captured["cmd"][captured["cmd"].index("-d") + 1] == "cuda"
+    # device は env(MINERU_DEVICE_MODE)/auto 検出で決まる。MinerU CLI は未知オプションを
+    # 黙殺する（no-op）ため -d は渡さない。
+    assert "-d" not in captured["cmd"]
     assert any(b.type == "text" and b.text == "本文" for b in doc.blocks)
 
 
