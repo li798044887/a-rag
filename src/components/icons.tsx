@@ -38,8 +38,8 @@ const glyphs = {
   ),
   cog: (
     <>
+      <path d="M5.6 3.84 6.24 2.06H9.76l.64 1.78 1.87-.34 1.76 3.05L12.8 8l1.23 1.45-1.76 3.05-1.87-.34-.64 1.78H6.24l-.64-1.78-1.87.34-1.76-3.05L3.2 8 1.97 6.55l1.76-3.05 1.87.34Z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" />
       <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" fill="none" />
-      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" />
     </>
   ),
   shield: <path d="M8 1.5l5.5 2v4.7c0 3.4-2.4 6.4-5.5 7.3-3.1-.9-5.5-3.9-5.5-7.3V3.5l5.5-2z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" />,
