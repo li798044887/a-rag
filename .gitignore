@@ -66,3 +66,6 @@ rag/__pycache__/
 tools/observatory/snapshots/
 # Vite のキャッシュ（ツールを別ポートで動かすと生成される）
 tools/**/node_modules/
+
+# Docker Compose override（ローカル環境ごとの設定なので追跡しない）
+docker-compose.override.yml
