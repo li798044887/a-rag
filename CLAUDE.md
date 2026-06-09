@@ -67,7 +67,7 @@ pnpm drizzle-kit migrate                               # web 側マイグレー�
 pnpm dev                                               # http://localhost:3000
 ```
 
-`docker-compose.override.yml`（`docker compose` が自動マージ）によりホスト側 Postgres は **5433**。`.env.local` の `DATABASE_URL` は `postgres://arag:arag@localhost:5433/arag` にする。
+ホスト側 Postgres は **5432**。`.env.local` の `DATABASE_URL` は `postgres://arag:arag@localhost:5432/arag` にする。
 
 ### GPU 起動（prod / CUDA・hybrid VLM）
 
@@ -75,16 +75,15 @@ nvidia-container-toolkit（または WSL2 GPU）前提。`docker-compose.gpu.yml
 
 ```bash
 docker compose \
-  -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml \
+  -f docker-compose.yml -f docker-compose.gpu.yml \
   --profile worker up -d --build
 ```
 
-- **`-f` を明示する時は `docker-compose.override.yml` も必ず含める。** `-f` を並べると override の自動マージが無効になり、Postgres のホストポートが 5433→5432 に戻って web の login が失敗する（`DATABASE_URL` が 5433 を指すため）。
 - **GPU 割当**は `deploy.resources.reservations.devices` で記述している。トップレベル `gpus: all` は Docker Compose **v2.30+** が必要で、それ未満（例 v2.28）では構成検証に失敗するため使わない。
 - **モデル供給**: `MINERU_MODEL_SOURCE` で切替（既定 `huggingface`）。VLM 重み（`opendatalab/MinerU2.5-Pro-2604-1.2B`, 約 2.15GB）は初回オンライン取得 → 以降 `HF_HUB_OFFLINE=1` でキャッシュ運用。**huggingface.co の LFS 配信が不安定/到達不可な環境**では `MINERU_MODEL_SOURCE=modelscope` を付けて起動し、ModelScope（opendatalab の native ホスト）から取得する（キャッシュ存在時はオフラインでも再利用可）。
   ```bash
   MINERU_MODEL_SOURCE=modelscope docker compose \
-    -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml \
+    -f docker-compose.yml -f docker-compose.gpu.yml \
     --profile worker up -d
   ```
 - `/health` が `{"device":"cuda","models_loaded":true}` を返せば準備完了。
@@ -116,7 +115,7 @@ rag イメージは `uv sync --no-dev` でビルドされ **pytest を含まな�
 
 ```bash
 # GPU 機の例（CPU dev なら gpu overlay を外す）
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml \
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml \
   run --rm -v "$PWD/rag/app:/app/app" -v "$PWD/rag/tests:/app/tests" \
   rag sh -c 'uv sync --frozen --group dev >/tmp/s.log 2>&1; uv run --no-sync python -m pytest tests/ -q'
 ```
@@ -137,8 +136,8 @@ docker compose exec -T rag uv run python -m eval run --suite agentic_rag_demo \
 ```bash
 # web（Drizzle）: スキーマ src/lib/db/schema.ts を変更後
 pnpm drizzle-kit generate                                  # 差分から SQL を生成（オフライン可）
-DATABASE_URL=postgres://arag:arag@localhost:5433/arag pnpm drizzle-kit migrate   # 適用
-# ※ drizzle.config.ts の既定は 5432。ホストから流す時は 5433 の DATABASE_URL を明示する。
+DATABASE_URL=postgres://arag:arag@localhost:5432/arag pnpm drizzle-kit migrate   # 適用
+# ※ drizzle.config.ts の既定も 5432。ホストから流す時はこの DATABASE_URL を明示する。
 
 # rag（Alembic）
 docker compose exec -T rag uv run alembic upgrade head

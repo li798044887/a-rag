@@ -7,8 +7,8 @@ disable-model-invocation: true
 # create-migration
 
 ARag の Postgres スキーマを Drizzle で変更し、マイグレーションを生成・適用するためのスキル。
-ローカル Postgres は **host 5433**（`docker-compose.override.yml` の上書き。別プロジェクト回避のため）。
-`drizzle.config.ts` のデフォルトは 5432 なので、**適用時は必ず 5433 の DSN を渡す**こと。
+ローカル Postgres は **host 5432**（`docker-compose.yml`）。
+`drizzle.config.ts` のデフォルトも 5432 だが、`.env.local` を確実に使うため**適用時は DSN を明示する**こと。
 
 ## 前提の確認
 - スキーマ定義: `src/lib/db/schema.ts`
@@ -31,9 +31,9 @@ ARag の Postgres スキーマを Drizzle で変更し、マイグレーショ�
    - 破壊的変更（DROP / NOT NULL 追加 / 型変更）が含まれていないか確認。
    - 既存データに影響する場合はデフォルト値やバックフィル手順を検討。
 
-4. **ローカル DB に適用する**（必ず 5433 の DSN を明示）
+4. **ローカル DB に適用する**（DSN を明示）
    ```bash
-   DATABASE_URL=postgres://arag:arag@localhost:5433/arag pnpm drizzle-kit migrate
+   DATABASE_URL=postgres://arag:arag@localhost:5432/arag pnpm drizzle-kit migrate
    ```
 
 5. **rag 側スキーマとの整合を確認する**
@@ -46,5 +46,5 @@ ARag の Postgres スキーマを Drizzle で変更し、マイグレーショ�
 
 ## 守ること
 - `.env.local` は直接編集しない（フックでブロックされる）。DSN はコマンドにインラインで渡す。
-- ポートは必ず **5433**。5432 だと別プロジェクトの DB を触る恐れがある。
+- ポートは **5432**（`.env.local` の `DATABASE_URL` と一致させる）。
 - 生成 SQL は手で書き換えず、原則 `schema.ts` を直して再生成する。

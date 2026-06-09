@@ -16,7 +16,7 @@ case "$base" in
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
-        permissionDecisionReason: ($base + " はローカル構成が壊れやすい環境ファイルです（Postgres host 5433 オーバーライド、HF オフライン設定、内部トークンなど）。フックにより直接編集をブロックしました。テンプレを変えたい場合は .env.example を編集し、実値はユーザーに依頼してください。")
+        permissionDecisionReason: ($base + " はローカル構成が壊れやすい環境ファイルです（DB 接続情報、HF オフライン設定、内部トークンなど）。フックにより直接編集をブロックしました。テンプレを変えたい場合は .env.example を編集し、実値はユーザーに依頼してください。")
       }
     }'
     exit 0
