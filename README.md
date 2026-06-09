@@ -132,11 +132,21 @@ curl -s localhost:8000/health
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build
 ```
 
+GPU では VLM(MinerU2.5) を常駐サーバ `mineru-vllm`（OpenAI 互換 vllm, port 30000）へ集約し、
+rag/worker は `hybrid-http-client` でそこへ接続する薄いクライアントになる（各 ingest が worker 内で
+vllm を cold 起動して VRAM を奪い合う OOM を回避）。VRAM 予算は `mineru-vllm` の
+`--gpu-memory-utilization`、画像入り大判 PDF のホスト RAM は `MINERU_PAGE_WINDOW` で調整する
+（詳細は CLAUDE.md「GPU 起動」「VRAM/RAM のチューニング」）。
+
 `/health` で `"device": "cuda"` が返ることを確認:
 
 ```bash
 curl -s localhost:8000/health
 # {"status":"ok","device":"cuda","models_loaded":true}
+
+# VLM サーバ（GPU 時）の疎通確認
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec mineru-vllm \
+  python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:30000/health').status)"
 ```
 
 ### 本番（フルコンテナ + ハードニング）
@@ -185,6 +195,10 @@ web は `127.0.0.1` ではなく `3000` を全公開する。本番では前段�
 | `RERANKER` | リランカーモデル `bge` または `stub` | `bge` |
 | `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン（**本番は必須で差し替え**） | `dev-internal-token` |
 | `PRELOAD_MODELS` | `1` の場合、起動時にモデルを事前ロード | 未設定 |
+| `MINERU_BACKEND` | パース方式。`pipeline`（CPU/dev）/ `hybrid-http-client`（GPU/prod 推奨）/ `hybrid-auto-engine` / `vlm-auto-engine` / `vlm-http-client` | `pipeline` |
+| `MINERU_SERVER_URL` | `*-http-client` 時に接続する常駐 `mineru-vllm` サーバ URL | 空（gpu overlay で `http://mineru-vllm:30000`） |
+| `MINERU_PAGE_WINDOW` | PDF をこのページ数ごとに分割解析しピーク RAM を抑える（0 で無効） | `0`（gpu overlay で `40`） |
+| `MINERU_MODEL_SOURCE` | VLM 重みの供給元 `huggingface` / `modelscope`（HF 不安定時） | `huggingface` |
 
 ## スクリプト
 
