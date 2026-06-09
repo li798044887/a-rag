@@ -40,7 +40,7 @@ vi.mock("ai", async (orig) => {
   };
 });
 
-// 既定モデルは gpt-4.1 で、OpenAI 経路は createOpenAI で生成する。
+// 既定モデルは gpt-5-mini で、OpenAI 経路は createOpenAI で生成する。
 // streamText はモック済みのため返すモデル値は実際には使われない。
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: () => () => "model" }));
 
@@ -302,7 +302,7 @@ test("未裏付けがあれば訂正本文が最終回答になる", async () =>
 
   // verify ステップは未裏付け主張の一覧を、revise ステップは訂正前→訂正後を保持する。
   const verifyDone = events.find((e) => e.type === "step" && e.step.name === "verify" && e.step.status === "done");
-  expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "gpt-4.1-mini" });
+  expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "gpt-5-nano" });
   expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({ claims: ["x"], checkableClaims: 1 });
   expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({
     inputTokens: 12,
@@ -310,7 +310,7 @@ test("未裏付けがあれば訂正本文が最終回答になる", async () =>
     totalTokens: 16,
   });
   const revise = events.find((e) => e.type === "step" && e.step.name === "revise");
-  expect((revise as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "gpt-4.1-mini" });
+  expect((revise as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "gpt-5-nano" });
   const reviseOut = (revise as Extract<AgentEvent, { type: "step" }>).step.output as { draft: unknown; revised: unknown };
   expect(reviseOut.revised).toBe("訂正後の回答[1]。");
   expect(typeof reviseOut.draft).toBe("string");

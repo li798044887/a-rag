@@ -217,8 +217,10 @@ export function getSuggestedPrompts(locale: Locale): SuggestedPrompt[] {
 
 // モデルの label は製品名のため翻訳しない。tag / desc のみロケール化する。
 const MODELS_JA: ModelOption[] = [
-  { id: "gpt-4.1", label: "GPT-4.1", tag: "推奨", desc: "OpenAI 最新・長文脈" },
-  { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 標準" },
+  { id: "gpt-5-mini", label: "GPT-5 mini", tag: "推奨", desc: "コスパ最良・高精度" },
+  { id: "gpt-5", label: "GPT-5", tag: "高精度", desc: "OpenAI 最上位" },
+  { id: "gpt-5-nano", label: "GPT-5 nano", tag: "高速", desc: "最安・高速" },
+  { id: "gpt-4.1", label: "GPT-4.1", tag: "", desc: "長文脈・非推論" },
   { id: "deepseek-flash", label: "DeepSeek Flash", tag: "高速", desc: "高速・低コスト" },
   { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", tag: "高精度", desc: "高性能推論モデル" },
   { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "", desc: "汎用・最も賢い" },
@@ -226,8 +228,10 @@ const MODELS_JA: ModelOption[] = [
 ];
 
 const MODELS_ZH: ModelOption[] = [
-  { id: "gpt-4.1", label: "GPT-4.1", tag: "推荐", desc: "OpenAI 最新·长上下文" },
-  { id: "gpt-4o", label: "GPT-4o", tag: "", desc: "OpenAI 标准" },
+  { id: "gpt-5-mini", label: "GPT-5 mini", tag: "推荐", desc: "性价比最优·高精度" },
+  { id: "gpt-5", label: "GPT-5", tag: "高精度", desc: "OpenAI 旗舰" },
+  { id: "gpt-5-nano", label: "GPT-5 nano", tag: "高速", desc: "最便宜·高速" },
+  { id: "gpt-4.1", label: "GPT-4.1", tag: "", desc: "长上下文·非推理" },
   { id: "deepseek-flash", label: "DeepSeek Flash", tag: "高速", desc: "高速·低成本" },
   { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", tag: "高精度", desc: "高性能推理模型" },
   { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", tag: "", desc: "通用·最强" },
