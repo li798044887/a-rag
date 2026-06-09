@@ -2,6 +2,7 @@ export const documents = {
   // Modal header
   title: "上传文档",
   itemCount: "{count}件",
+  processingEngine: "解析引擎（GPU 时索引更快、支持图表解析）",
 
   // Upload split-button
   uploadButton: "上传",
@@ -54,7 +55,6 @@ export const documents = {
   tabSpreadsheet: "表格",
   tabConvertedPdf: "原文档转换PDF",
   tabLayout: "布局",
-  tabSpan: "Span",
   tabText: "解析文本",
   tabRich: "格式化显示",
   tabHtml: "HTML格式",
