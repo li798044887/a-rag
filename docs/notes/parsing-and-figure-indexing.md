@@ -106,8 +106,7 @@ rendered（チャンク）ビューは `documents-modal` の `RenderedChunk` →
 
 ## 6. GPU 運用メモ
 
-- 起動は CLAUDE.md「GPU 起動」を参照。`-f` 明示時は `docker-compose.override.yml` も含める
-  （含めないと Postgres が 5433→5432 に戻り web login が失敗）。
+- 起動は CLAUDE.md「GPU 起動」を参照（`-f docker-compose.yml -f docker-compose.gpu.yml`）。
 - GPU 割当は `deploy.resources.reservations.devices`（`gpus: all` は Compose v2.30+ 必須）。
 - モデル供給は `MINERU_MODEL_SOURCE`（既定 huggingface）。HF の LFS 配信が不安定な環境では
   `MINERU_MODEL_SOURCE=modelscope` を付与。初回取得後は `HF_HUB_OFFLINE=1` でキャッシュ運用。

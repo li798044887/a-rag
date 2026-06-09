@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     # MinerU パースバックエンド。dev/CPU は "pipeline"、prod/CUDA は "hybrid-auto-engine"。
     # hybrid/vlm は VLM(MinerU2.5) + vllm を要し GPU 前提。
     parse_backend: str = Field(default="pipeline", validation_alias="MINERU_BACKEND")
+    # arq worker の同時実行ジョブ数。0（既定）なら device で自動決定する。
+    # GPU では各 ingest が mineru サブプロセス→vllm エンジンを丸ごと cold 起動し
+    # gpu_memory_utilization=0.5（≒12GB）を掴むため、embedder/reranker と同居する単一 GPU では
+    # 同時に 1 個しか載らない。並列させると後続が "No available memory for the cache blocks" で
+    # OOM するため GPU 既定も 1 とする（メモリに余裕があれば WORKER_CONCURRENCY で引き上げ可）。
+    worker_concurrency: int = Field(default=0, validation_alias="WORKER_CONCURRENCY")
+
+    @property
+    def resolved_worker_concurrency(self) -> int:
+        """worker_concurrency が未指定(0以下)なら 1 に解決する。"""
+        return self.worker_concurrency if self.worker_concurrency > 0 else 1
 
     @field_validator("device")
     @classmethod

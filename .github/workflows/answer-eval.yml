@@ -60,8 +60,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path "artifacts/eval-cache" | Out-Null
           New-Item -ItemType Directory -Force -Path "artifacts/eval-assets/$env:SUITE" | Out-Null
           New-Item -ItemType Directory -Force -Path "artifacts/rag-eval/$env:SUITE" | Out-Null
-      # docker-compose.override.yml は意図的に省略する（rag-eval-full.yml と同様）。
-      # override の 5433 ポートは host 側 pnpm dev / drizzle-kit 用で、本 job では不要。
       # answer-eval は web を起動せず、rag は内部ネットワーク経由で postgres:5432 に接続する。
       # --force-recreate: 直前ステップで作成した eval-* バインド元 host dir に rag のマウントを
       # 再解決させる。既存コンテナを再利用するとマウントが古いまま（壊れた状態）になり

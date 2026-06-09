@@ -91,11 +91,10 @@ pnpm drizzle-kit migrate
 pnpm dev   # http://localhost:3000
 ```
 
-このリポジトリには `docker-compose.override.yml` があり、ホスト側 Postgres ポートは `5433` に変更されています。
-そのため、`.env.local` の `DATABASE_URL` は次の値にしてください。
+ホスト側 Postgres ポートは `5432` です。`.env.local` の `DATABASE_URL` は次の値にしてください。
 
 ```env
-DATABASE_URL=postgres://arag:arag@localhost:5433/arag
+DATABASE_URL=postgres://arag:arag@localhost:5432/arag
 RAG_SERVICE_URL=http://localhost:8000
 RAG_INTERNAL_TOKEN=dev-internal-token
 ```
@@ -130,7 +129,7 @@ curl -s localhost:8000/health
 ### GPU（NVIDIA + nvidia-container-toolkit が必要）
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml --profile worker up -d --build
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build
 ```
 
 `/health` で `"device": "cuda"` が返ることを確認:
@@ -143,8 +142,6 @@ curl -s localhost:8000/health
 ### 本番（フルコンテナ + ハードニング）
 
 web も含めて全てコンテナで動かす本番構成。`docker-compose.prod.yml` overlay が web サービス追加・`restart: unless-stopped`・infra ポートの loopback 封じ込め・`APP_ENV=production`（内部トークンの fail-fast 有効化）を担う。
-
-> **dev 専用の `docker-compose.override.yml` は含めない。** web はコンテナ網内で `postgres:5432` / `rag:8000` に直接繋ぐため、host ポートずらし（5433）に依存しない。CLAUDE.md の「`-f` 明示時は override も含める」は host 上で web を動かす dev 向けの注意で、本構成には当てはまらない。
 
 秘密はルート `.env`（git 管理外、compose が自動で読む）に置く。`APP_ENV=production` で `RAG_INTERNAL_TOKEN` が未設定/dev 既定のままなら `up`/`config` 時点で停止する。
 
@@ -171,7 +168,7 @@ web は `127.0.0.1` ではなく `3000` を全公開する。本番では前段�
 |---|---|---|
 | `ARAG_JWT_SECRET` | JWT 署名鍵（本番では必須） | 開発用固定値 |
 | `ANTHROPIC_API_KEY` | Claude API キー（回答生成に必須） | 未設定時は検索・引用は動作するが、回答生成はスキップし案内メッセージを返す |
-| `DATABASE_URL` | web→Postgres 接続（node-postgres 形式）。このリポジトリのローカル override では host 側 Postgres が `5433` | `postgres://arag:arag@localhost:5433/arag` |
+| `DATABASE_URL` | web→Postgres 接続（node-postgres 形式）。host 側 Postgres は `5432` | `postgres://arag:arag@localhost:5432/arag` |
 | `RAG_SERVICE_URL` | web→rag 内部 HTTP | `http://localhost:8000` |
 | `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン（**本番は必須で差し替え**。web・rag・worker で同一値） | `dev-internal-token` |
 
@@ -210,7 +207,7 @@ web 側の Drizzle マイグレーションが未適用です。Postgres が起�
 pnpm drizzle-kit migrate
 ```
 
-`docker-compose.override.yml` を使うローカル環境では、`.env.local` の `DATABASE_URL` が `localhost:5433` を指している必要があります。
+`.env.local` の `DATABASE_URL` が `localhost:5432` を指している必要があります。
 Windows で `sh is not recognized` や pnpm のリンク解決エラーが出る場合は、同じ環境（PowerShell なら PowerShell、WSL なら WSL）で `pnpm install` をやり直してから再実行してください。
 
 ### `relation "documents" does not exist`
