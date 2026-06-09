@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -73,33 +74,118 @@ def _figure_text(item: dict) -> str:
     return "\n".join(parts).strip()
 
 
-def parse(file_path: str, out_dir: str) -> ParsedDocument:
-    """MinerU CLI を実行し content_list.json を正規化して返す。"""
-    Path(out_dir).mkdir(parents=True, exist_ok=True)
-    # -b: settings.parse_backend で切替。
-    #   pipeline … CPU/レイアウト解析のみ（dev 既定）。content_list.json を出力。
-    #   hybrid-auto-engine … VLM + 構造解析（prod/CUDA）。--image-analysis(既定有効) で図表も解釈。
-    subprocess.run(
-        ["mineru", "-p", file_path, "-o", out_dir,
-         "-d", settings.device, "-b", settings.parse_backend],
-        check=True,
-    )
-    files = sorted(Path(out_dir).rglob("*_content_list.json"))
-    if not files:
-        raise FileNotFoundError(f"no *_content_list.json found under {out_dir}")
-    content_list = files[-1]
-    items = json.loads(content_list.read_text(encoding="utf-8"))
+def _items_to_blocks(items: list[dict], page_offset: int = 0) -> list[ParsedBlock]:
+    """content_list の items を ParsedBlock 列へ正規化する。
+
+    page_offset はページ分割時に窓内 0 始まりの page_idx を絶対ページへ補正する
+    （MinerU は -s/-e 指定でも PDF を切り出し直して 0 始まりで page_idx を振るため）。
+    """
     blocks: list[ParsedBlock] = []
     for it in items:
         block = _block_from_item(it)
         if block is None:
             continue
+        if page_offset:
+            block.page += page_offset
         blocks.append(block)
         # 画像は表示用に残しつつ、VLM 抽出の図表テキストを索引対象の text として展開する。
         if block.type == "image":
             figure = _figure_text(it)
             if figure:
                 blocks.append(ParsedBlock(type="text", text=figure, page=block.page))
+    return blocks
+
+
+def _mineru_command(file_path: str, out_dir: str, *,
+                    start: int | None = None, end: int | None = None) -> list[str]:
+    """mineru CLI 引数を組み立てる。
+
+    -b: settings.parse_backend で切替。
+      pipeline … CPU/レイアウト解析のみ（dev 既定）。content_list.json を出力。
+      hybrid-auto-engine … VLM + 構造解析を in-process で実行（VLM cold 起動で VRAM スパイク大）。
+      hybrid-http-client … 常駐 mineru-vllm サーバへ HTTP 接続（-u 必須）。VLM を抱えず VRAM を専有しない。
+    device は env(MINERU_DEVICE_MODE)/auto 検出で決まる。CLI は未知オプションを黙殺するため -d は渡さない。
+    """
+    cmd = ["mineru", "-p", file_path, "-o", out_dir, "-b", settings.parse_backend]
+    if settings.parse_backend.endswith("http-client"):
+        if not settings.mineru_server_url:
+            raise RuntimeError(
+                "http-client バックエンドには MINERU_SERVER_URL（mineru-vllm サーバ URL）が必要です。")
+        cmd += ["-u", settings.mineru_server_url]
+    if start is not None:
+        cmd += ["-s", str(start)]
+    if end is not None:
+        cmd += ["-e", str(end)]
+    return cmd
+
+
+def _content_list(out_dir: str) -> Path:
+    files = sorted(Path(out_dir).rglob("*_content_list.json"))
+    if not files:
+        raise FileNotFoundError(f"no *_content_list.json found under {out_dir}")
+    return files[-1]
+
+
+def _pdf_page_count(file_path: str) -> int:
+    import pypdfium2 as pdfium  # MinerU 依存。ここでだけ使う。
+    pdf = pdfium.PdfDocument(file_path)
+    try:
+        return len(pdf)
+    finally:
+        pdf.close()
+
+
+def parse(file_path: str, out_dir: str) -> ParsedDocument:
+    """MinerU CLI を実行し content_list.json を正規化して返す。
+
+    PDF かつ MINERU_PAGE_WINDOW>0 で総ページ数が窓を超える場合は、ページ窓ごとに
+    分割実行してピーク RAM を頭打ちにする（画像入り大判 PDF の RAM 枯渇対策）。
+    """
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    window = settings.mineru_page_window
+    # ページ分割は PDF のみ（office/画像はページ単位スライスが不確実なため一括）。
+    if window > 0 and Path(file_path).suffix.lower() == ".pdf":
+        page_count = _pdf_page_count(file_path)
+        if page_count > window:
+            return _parse_windowed(file_path, out_dir, page_count, window)
+    return _parse_once(file_path, out_dir)
+
+
+def _parse_once(file_path: str, out_dir: str) -> ParsedDocument:
+    subprocess.run(_mineru_command(file_path, out_dir), check=True)
+    content_list = _content_list(out_dir)
+    items = json.loads(content_list.read_text(encoding="utf-8"))
+    blocks = _items_to_blocks(items)
     page_count = max((b.page for b in blocks), default=0) + 1
     return ParsedDocument(blocks=blocks, page_count=page_count,
                           images_dir=str(content_list.parent))
+
+
+def _parse_windowed(file_path: str, out_dir: str,
+                    page_count: int, window: int) -> ParsedDocument:
+    """ページ窓ごとに mineru を回し、ページ番号を絶対値へ補正してブロックと画像を統合する。
+
+    各窓は独立サブディレクトリへ出力し、画像は単一の images/ へ集約する。
+    画像名は内容ハッシュで一意なため、窓をまたいで衝突しても同一実体で上書き互換。
+    img_path は "images/<name>" のままなので worker の _copy_assets と整合する。
+    """
+    merged_root = Path(out_dir) / "merged"
+    merged_images = merged_root / "images"
+    merged_images.mkdir(parents=True, exist_ok=True)
+    blocks: list[ParsedBlock] = []
+    for start in range(0, page_count, window):
+        end = min(start + window - 1, page_count - 1)
+        win_out = str(Path(out_dir) / f"win_{start:04d}")
+        subprocess.run(
+            _mineru_command(file_path, win_out, start=start, end=end), check=True)
+        content_list = _content_list(win_out)
+        items = json.loads(content_list.read_text(encoding="utf-8"))
+        blocks.extend(_items_to_blocks(items, page_offset=start))
+        src_images = content_list.parent / "images"
+        if src_images.is_dir():
+            for img in src_images.iterdir():
+                if img.is_file():
+                    shutil.copy2(img, merged_images / img.name)
+    page_count = max((b.page for b in blocks), default=0) + 1
+    return ParsedDocument(blocks=blocks, page_count=page_count,
+                          images_dir=str(merged_root))

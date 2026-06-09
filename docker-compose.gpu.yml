@@ -16,7 +16,44 @@
 # huggingface.co の LFS 配信が不安定/到達不可な環境では、起動時に
 #   MINERU_MODEL_SOURCE=modelscope docker compose -f ... -f docker-compose.gpu.yml up -d
 # とすれば MinerU(VLM) を ModelScope から取得・キャッシュ運用できる。
+# VLM(MinerU2.5) は常駐 vllm サーバ(mineru-vllm)へ集約し、rag/worker はそこへ
+# HTTP 接続する薄いクライアント(hybrid-http-client)になる。これにより各 ingest が
+# worker 内で vllm を cold 起動して ~12GB を奪い合い OOM する問題を解消する。
+# VRAM 予算はサーバ側の --gpu-memory-utilization で一元的に固定する。
+# 大判の画像入り PDF は MINERU_PAGE_WINDOW でページ分割し、クライアント側の
+# ラスタライズによるホスト RAM 枯渇を頭打ちにする。
 services:
+  mineru-vllm:
+    build:
+      context: ./rag
+      args:
+        VARIANT: gpu
+    # MinerU(VLM) を OpenAI 互換 vllm サーバとして 1 プロセスだけ常駐させる。
+    # --gpu-memory-utilization で VRAM 予算を固定（24GB の約 40% ≒ 9.6GB）。残りは
+    # rag/worker の embedder+reranker が使う。OOM するなら下げ、余れば上げる。
+    command: ["mineru-vllm-server", "--host", "0.0.0.0", "--port", "30000",
+              "--gpu-memory-utilization", "0.40"]
+    environment:
+      MINERU_DEVICE_MODE: cuda
+      # VLM 重みの供給元。modelcache に取得済みなら HF_HUB_OFFLINE=1 でオフライン運用可。
+      MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-huggingface}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+    volumes:
+      - "modelcache:/root/.cache"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:30000/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 300s
+
   rag:
     build:
       context: ./rag
@@ -24,7 +61,9 @@ services:
         VARIANT: gpu
     environment:
       DEVICE: cuda
-      MINERU_BACKEND: hybrid-auto-engine
+      MINERU_BACKEND: hybrid-http-client
+      MINERU_SERVER_URL: http://mineru-vllm:30000
+      MINERU_DEVICE_MODE: cuda
       MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-huggingface}
     deploy:
       resources:
@@ -41,8 +80,15 @@ services:
         VARIANT: gpu
     environment:
       DEVICE: cuda
-      MINERU_BACKEND: hybrid-auto-engine
+      MINERU_BACKEND: hybrid-http-client
+      MINERU_SERVER_URL: http://mineru-vllm:30000
+      MINERU_DEVICE_MODE: cuda
+      # PDF をこのページ数ごとに分割解析してピーク RAM を抑える。
+      MINERU_PAGE_WINDOW: ${MINERU_PAGE_WINDOW:-40}
       MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-huggingface}
+    depends_on:
+      mineru-vllm:
+        condition: service_healthy
     deploy:
       resources:
         reservations:

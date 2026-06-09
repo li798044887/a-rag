@@ -26,9 +26,16 @@ class Settings(BaseSettings):
     upload_dir: str = "/data/uploads"
     # 空なら embedder からコレクション名を導出（バージョニング: モデル毎に別コレクション）。
     qdrant_collection: str = ""
-    # MinerU パースバックエンド。dev/CPU は "pipeline"、prod/CUDA は "hybrid-auto-engine"。
-    # hybrid/vlm は VLM(MinerU2.5) + vllm を要し GPU 前提。
+    # MinerU パースバックエンド。dev/CPU は "pipeline"。prod/CUDA は
+    #   hybrid-auto-engine … vllm を各 ingest が in-process で cold 起動（VRAM スパイク大）
+    #   hybrid-http-client … 常駐 mineru-vllm サーバへ HTTP 接続する薄いクライアント（推奨）
+    # *-http-client は MINERU_SERVER_URL を要する。*-auto-engine は VLM+vllm を要し GPU 前提。
     parse_backend: str = Field(default="pipeline", validation_alias="MINERU_BACKEND")
+    # http-client 系バックエンドが接続する常駐 MinerU(VLM) サーバの URL（例 http://mineru-vllm:30000）。
+    mineru_server_url: str = Field(default="", validation_alias="MINERU_SERVER_URL")
+    # PDF をこのページ数ごとに分割解析し、ピーク RAM を頭打ちにする（画像入り大判 PDF の RAM 枯渇対策）。
+    # 0（既定）で無効＝一括解析。窓内の page_idx は 0 始まりで返るため、マージ時に窓開始ページを加算する。
+    mineru_page_window: int = Field(default=0, validation_alias="MINERU_PAGE_WINDOW")
     # arq worker の同時実行ジョブ数。0（既定）なら device で自動決定する。
     # GPU では各 ingest が mineru サブプロセス→vllm エンジンを丸ごと cold 起動し
     # gpu_memory_utilization=0.5（≒12GB）を掴むため、embedder/reranker と同居する単一 GPU では
@@ -59,7 +66,8 @@ class Settings(BaseSettings):
     def _check_parse_backend(cls, v: str) -> str:
         """許容するバックエンドのみ通す。"""
         v = v.strip()
-        allowed = {"pipeline", "hybrid-auto-engine", "vlm-auto-engine"}
+        allowed = {"pipeline", "hybrid-auto-engine", "vlm-auto-engine",
+                   "hybrid-http-client", "vlm-http-client"}
         if v not in allowed:
             raise ValueError(
                 f"MINERU_BACKEND は {sorted(allowed)} のいずれか。受領: {v!r}"
