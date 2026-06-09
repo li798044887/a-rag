@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from app.db import SessionLocal
 from app.embedding.factory import get_embedder
 from app.reranker.factory import get_reranker
+from app.retrieval.multihop import retrieve_multihop, retrieve_multihop_stream
 from app.retrieval.service import retrieve as run_retrieve_service
 from app.retrieval.service import retrieve_stream
 from app.schemas import RetrieveRequest, RetrieveResponse, RetrievedChunk
@@ -20,7 +21,8 @@ def _run_retrieve(req: RetrieveRequest) -> list[RetrievedChunk]:
     try:
         embedder = get_embedder()
         store = QdrantStore(dim=getattr(embedder, "dim", 1024))
-        return run_retrieve_service(
+        fn = retrieve_multihop if req.multi_hop else run_retrieve_service
+        return fn(
             session, store, embedder, get_reranker(),
             query=req.rewritten or req.query, owner_user_id=req.owner_user_id,
             top_k=req.top_k, candidate_k=req.candidate_k,
@@ -40,7 +42,8 @@ def _stream_ndjson(req: RetrieveRequest):
     try:
         embedder = get_embedder()
         store = QdrantStore(dim=getattr(embedder, "dim", 1024))
-        for ev in retrieve_stream(
+        stream_fn = retrieve_multihop_stream if req.multi_hop else retrieve_stream
+        for ev in stream_fn(
                 session, store, embedder, get_reranker(),
                 query=req.rewritten or req.query, owner_user_id=req.owner_user_id,
                 top_k=req.top_k, candidate_k=req.candidate_k,

@@ -21,7 +21,7 @@ import { cn, formatFileSize } from "@/lib/utils";
 import type { DocumentPreview, DocumentPreviewChunk, DocumentSummary } from "@/lib/types";
 import type { PushToast } from "@/hooks/use-toasts";
 
-type Tab = "pdf" | "layout" | "span" | "text" | "html" | "rich" | "images";
+type Tab = "pdf" | "layout" | "text" | "html" | "rich" | "images";
 const IMG_RE = /!\[[^\]]*\]\((\/api\/documents\/[^)\s]+)\)/g;
 
 function statusLabels(t: Dictionary): Record<string, string> {
@@ -66,6 +66,8 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // rag の解析エンジン（GPU/CPU）。索引速度や図表解析の可否がこれで変わるため一目で分かるよう表示する。
+  const [device, setDevice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
@@ -79,6 +81,17 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
     // load/onChanged は参照安定でないため readyCount のみを依存に絞る。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readyCount, open]);
+
+  // モーダルを開いたタイミングで rag の解析エンジン（cuda/cpu）を一度だけ取得する。
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    fetch("/api/system")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { device?: string } | null) => { if (alive && d?.device) setDevice(d.device); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [open]);
 
   const selected = docs.items.find((d) => d.id === selectedId) ?? null;
   const isPdfFile = selected ? isPdf(selected.filename) : false;
@@ -170,6 +183,19 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
             <Icon name="database" size={15} />
             <span id="documents-modal-title">{t.documents.title}</span>
             <span className="font-mono text-[11px] font-normal text-muted">{interpolate(t.documents.itemCount, { count: docs.total })}</span>
+            {device && device !== "unknown" && (
+              <span
+                title={t.documents.processingEngine}
+                className={cn(
+                  "rounded-[5px] px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em]",
+                  device === "cuda"
+                    ? "bg-[rgba(46,160,67,0.14)] text-[#2EA043]"
+                    : "bg-divider text-muted",
+                )}
+              >
+                {device === "cuda" ? "GPU" : "CPU"}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {/* アップロード（スプリットボタン）: 本体=ファイル選択 / ▾=フォルダ選択 */}
@@ -384,7 +410,7 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   <div className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
                     {(textKind
                       ? ([["pdf", t.documents.tabOriginal], ["text", t.documents.tabText], ["rich", t.documents.tabRich]] as [Tab, string][])
-                      : ([["pdf", originalTabLabel(selected.filename, t)], ...(isPdfFile ? [["layout", t.documents.tabLayout], ["span", t.documents.tabSpan]] as [Tab, string][] : []), ["text", t.documents.tabText], ["html", t.documents.tabHtml], ["images", images.length ? interpolate(t.documents.tabImagesCount, { n: images.length }) : t.documents.tabImages]] as [Tab, string][])
+                      : ([["pdf", originalTabLabel(selected.filename, t)], ...(isPdfFile ? [["layout", t.documents.tabLayout]] as [Tab, string][] : []), ["text", t.documents.tabText], ["html", t.documents.tabHtml], ["images", images.length ? interpolate(t.documents.tabImagesCount, { n: images.length }) : t.documents.tabImages]] as [Tab, string][])
                     ).map(([tabKey, label]) => (
                       <button key={tabKey} onClick={() => setTab(tabKey)} className={cn(
                         "shrink-0 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
@@ -406,9 +432,6 @@ export function DocumentsModal({ open, onClose, onChanged, onToast }: {
                   )}
                   {tab === "layout" && isPdfFile && (
                     <iframe title={`${selected.filename} ${t.documents.tabLayout}`} src={`/api/documents/${encodeURIComponent(selected.id)}/layout`} className="h-full w-full border-0" />
-                  )}
-                  {tab === "span" && isPdfFile && (
-                    <iframe title={`${selected.filename} ${t.documents.tabSpan}`} src={`/api/documents/${encodeURIComponent(selected.id)}/span`} className="h-full w-full border-0" />
                   )}
                   {tab === "html" && (
                     <div className="mx-auto max-w-[820px] p-5">

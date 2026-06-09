@@ -32,6 +32,12 @@ test("clampAgentCfg keeps explicit boolean values", () => {
   expect(clampAgentCfg({ admitUnknown: false }).admitUnknown).toBe(false);
 });
 
+test("clampAgentCfg multiHop defaults to false and keeps explicit value", () => {
+  expect(AGENT_CFG_DEFAULTS.multiHop).toBe(false);
+  expect(clampAgentCfg({ maxSteps: 5 }).multiHop).toBe(false);
+  expect(clampAgentCfg({ multiHop: true }).multiHop).toBe(true);
+});
+
 test("clampAgentCfg clamps topK / candidateK into range", () => {
   expect(clampAgentCfg({ topK: 0 }).topK).toBe(1);
   expect(clampAgentCfg({ topK: 100 }).topK).toBe(20);

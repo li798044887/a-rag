@@ -1,10 +1,10 @@
 import os
 import tempfile
 
-# a-rag の Postgres は docker-compose.override.yml によりホスト側 5433 に割り当てられている
-# （他プロジェクトが host:5432 を使うため）。ホストから走る pytest はこの 5433 を指す必要がある。
+# a-rag の Postgres はホスト側 5432 で公開される（docker-compose.yml）。
+# ホストから走る pytest はこの 5432 を指す。
 # app（= app.db のエンジン生成）を import する前に既定値を設定する。実 env var があればそれを優先。
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://arag:arag@localhost:5433/arag")
+os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://arag:arag@localhost:5432/arag")
 
 import pytest
 from fastapi.testclient import TestClient

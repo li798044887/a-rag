@@ -30,14 +30,14 @@ vi.mock("ai", async (orig) => {
   };
 });
 
-// 既定モデルは deepseek-flash で、DeepSeek 経路は createAnthropic で生成する。
+// 既定モデルは gpt-5-mini で、OpenAI 経路は createOpenAI で生成する。
 // streamText はモック済みのため返すモデル値は実際には使われない。
-vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model", createAnthropic: () => () => "model" }));
+vi.mock("@ai-sdk/openai", () => ({ createOpenAI: () => () => "model" }));
 
 import { runAgent } from "@/lib/agent/run";
 import type { AgentEvent } from "@/lib/types";
 
-process.env.DEEPSEEK_API_KEY = "test-key";
+process.env.OPENAI_API_KEY = "test-key";
 
 test("retrieve failure surfaces an error step and still finishes gracefully", async () => {
   const events: AgentEvent[] = [];

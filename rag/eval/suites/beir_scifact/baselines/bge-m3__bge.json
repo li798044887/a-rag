@@ -1,0 +1,11 @@
+{
+  "suite": "beir_scifact",
+  "note": "2026-06-08 フルスタック実評価の実測値（embedder=bge-m3, reranker=bge / scifact test 全 300 問 = query_limit:0）。意図的な品質変化のときのみ更新する。完全ミス 45/300（15.0%）と完璧 248/300（82.7%）の二極化が既知特性。",
+  "aggregate": {
+    "recall_at_5": 0.7781,
+    "recall_at_k": 0.8397,
+    "precision_at_k": 0.0950,
+    "mrr": 0.7094,
+    "ndcg_at_k": 0.7375
+  }
+}

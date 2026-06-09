@@ -1,13 +1,17 @@
 /** セクション本文を順序付きセグメントへ分割する。
- *  本文は素のテキスト・HTML 表・markdown 画像の混在を取りうる。
+ *  本文は素のテキスト・HTML 表・markdown 画像・mermaid 図の混在を取りうる。
  *  画像の src は tools.ts で絶対 API パスへ解決済み。 */
 export type BodySegment =
   | { kind: "text"; text: string }
   | { kind: "table"; html: string }
-  | { kind: "image"; src: string; alt: string };
+  | { kind: "image"; src: string; alt: string }
+  | { kind: "mermaid"; code: string };
 
-// <table>…</table> ブロック、または markdown 画像 ![alt](src) のいずれかにマッチ。
-const SEG_RE = /<table[\s\S]*?<\/table>|!\[([^\]]*)\]\(([^)\s]+)\)/gi;
+// 順に: ```mermaid フェンス（閉じ ``` は後続テキストに密着しうるので非貪欲）、
+// <table>…</table> ブロック、markdown 画像 ![alt](src)。
+// グループ: [1]=mermaid コード, [2]=画像 alt, [3]=画像 src。
+const SEG_RE =
+  /```mermaid[ \t]*\r?\n([\s\S]*?)```|<table[\s\S]*?<\/table>|!\[([^\]]*)\]\(([^)\s]+)\)/gi;
 
 export function parseSectionBody(body: string): BodySegment[] {
   const segs: BodySegment[] = [];
@@ -20,10 +24,12 @@ export function parseSectionBody(body: string): BodySegment[] {
   SEG_RE.lastIndex = 0;
   while ((m = SEG_RE.exec(body)) !== null) {
     pushText(body.slice(last, m.index));
-    if (m[0][0] === "<") {
+    if (m[1] !== undefined) {
+      segs.push({ kind: "mermaid", code: m[1].trim() });
+    } else if (m[0][0] === "<") {
       segs.push({ kind: "table", html: m[0] });
     } else {
-      segs.push({ kind: "image", alt: m[1] ?? "", src: m[2] ?? "" });
+      segs.push({ kind: "image", alt: m[2] ?? "", src: m[3] ?? "" });
     }
     last = m.index + m[0].length;
   }

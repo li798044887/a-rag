@@ -115,9 +115,11 @@ def test_vendored_suite_loads_and_builds(tmp_path):
     # 同梱データ(先頭200問)が元スキーマとして妥当で、fact_coverage 用の key_facts を生むことを検証。
     config = load_hotpot_config(_SUITE_YAML)
     assert config.source_path and config.source_path.endswith(".json.gz")
-    suite_dict = build_hotpot_suite(_read_vendored(config), config, tmp_path / "assets")
+    records = _read_vendored(config)
+    suite_dict = build_hotpot_suite(records, config, tmp_path / "assets")
     suite = load_suite_from_dict(suite_dict, tmp_path)
-    assert len(suite.cases) == config.query_limit  # query_limit=100 で頭打ち
+    assert config.query_limit == 0  # フルセット運用（baseline と CI 実行を再現一致させる）
+    assert len(suite.cases) == len(records)  # query_limit:0 なので全件（gold 付き）が採用される
     # yes/no 以外の設問では answer が key_fact になり facts 列が埋まる
     assert any(c.key_facts for c in suite.cases)
     # 正解文書は必ずコーパスに含まれる

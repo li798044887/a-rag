@@ -4,6 +4,7 @@ export const documents: typeof zhDocuments = {
   // Modal header
   title: "アップロード文書",
   itemCount: "{count}件",
+  processingEngine: "解析エンジン（GPU なら索引が高速・図表解析に対応）",
 
   // Upload split-button
   uploadButton: "アップロード",
@@ -56,7 +57,6 @@ export const documents: typeof zhDocuments = {
   tabSpreadsheet: "スプレッドシート",
   tabConvertedPdf: "原本PDF変換",
   tabLayout: "レイアウト",
-  tabSpan: "Span",
   tabText: "解析テキスト",
   tabRich: "整形表示",
   tabHtml: "HTML整形",

@@ -1,0 +1,36 @@
+# web イメージ（context=root）用。rag は context=./rag なので rag/.dockerignore 側で管理。
+# ビルドに不要なものを除外して context を小さく保つ。
+
+# 依存・ビルド成果物（イメージ内で再生成する）
+node_modules
+.next
+out
+tsconfig.tsbuildinfo
+
+# VCS / CI / エディタ
+.git
+.github
+.vscode
+.claude
+.playwright-mcp
+
+# rag スタックとドキュメント（web ビルドに不要）
+rag
+docs
+artifacts
+tools
+
+# compose / 秘密情報
+docker-compose*.yml
+Dockerfile.web
+.env
+.env.*
+
+# テスト・ストーリー（next build では不要）
+tests-e2e
+.storybook
+**/*.stories.tsx
+**/*.test.ts
+**/*.test.tsx
+playwright.config.ts
+vitest.config.ts

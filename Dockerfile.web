@@ -1,0 +1,43 @@
+# web (Next.js 16) 本番イメージ。multi-stage で standalone 出力のみを runner へ移す。
+# build context はリポジトリ root（rag/ や docs/ は .dockerignore で除外済み）。
+# 改行は LF 固定（.gitattributes）。CRLF だと alpine/sh の RUN が壊れるため。
+
+# ---- deps: lockfile から依存のみ解決（キャッシュ層） ----
+FROM node:22-bookworm-slim AS deps
+WORKDIR /app
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# ---- builder: ソースを入れて standalone をビルド ----
+FROM node:22-bookworm-slim AS builder
+WORKDIR /app
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# next.config.ts の output:"standalone" により .next/standalone を生成する。
+RUN pnpm build
+
+# ---- runner: 最小依存で server.js を起動 ----
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+# 非 root 実行。
+RUN groupadd --system --gid 1001 nodejs \
+    && useradd --system --uid 1001 --gid nodejs nextjs
+# standalone は server.js と最小 node_modules を含む。static/public は別途コピーが要る。
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+USER nextjs
+EXPOSE 3000
+CMD ["node", "server.js"]

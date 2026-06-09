@@ -1,0 +1,12 @@
+# answer-eval（回答品質ハーネス）専用設定。Python 文書レベル eval の golden.yaml とは
+# 別ファイルにして相互汚染を避ける。queries/key_facts/relevant_documents は golden.yaml を再利用。
+primary: gpt-4.1                   # gate 対象 = 本番既定
+models:                           # キーが無いモデルは run.mts が skip + warning する
+  - gpt-4.1
+  - gpt-4o
+  - deepseek-flash
+  - deepseek-v4-pro
+thresholds:                       # 初回実測 - マージンで確定する暫定値（要キャリブレーション）
+  citation_recall: 0.80
+  citation_precision: 0.75
+  answer_fact_coverage: 0.80

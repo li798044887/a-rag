@@ -91,11 +91,10 @@ pnpm drizzle-kit migrate
 pnpm dev   # http://localhost:3000
 ```
 
-このリポジトリには `docker-compose.override.yml` があり、ホスト側 Postgres ポートは `5433` に変更されています。
-そのため、`.env.local` の `DATABASE_URL` は次の値にしてください。
+ホスト側 Postgres ポートは `5432` です。`.env.local` の `DATABASE_URL` は次の値にしてください。
 
 ```env
-DATABASE_URL=postgres://arag:arag@localhost:5433/arag
+DATABASE_URL=postgres://arag:arag@localhost:5432/arag
 RAG_SERVICE_URL=http://localhost:8000
 RAG_INTERNAL_TOKEN=dev-internal-token
 ```
@@ -130,7 +129,7 @@ curl -s localhost:8000/health
 ### GPU（NVIDIA + nvidia-container-toolkit が必要）
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml --profile worker up -d --build
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build
 ```
 
 `/health` で `"device": "cuda"` が返ることを確認:
@@ -140,6 +139,27 @@ curl -s localhost:8000/health
 # {"status":"ok","device":"cuda","models_loaded":true}
 ```
 
+### 本番（フルコンテナ + ハードニング）
+
+web も含めて全てコンテナで動かす本番構成。`docker-compose.prod.yml` overlay が web サービス追加・`restart: unless-stopped`・infra ポートの loopback 封じ込め・`APP_ENV=production`（内部トークンの fail-fast 有効化）を担う。
+
+秘密はルート `.env`（git 管理外、compose が自動で読む）に置く。`APP_ENV=production` で `RAG_INTERNAL_TOKEN` が未設定/dev 既定のままなら `up`/`config` 時点で停止する。
+
+```bash
+# ルート .env に APP_ENV=production / RAG_INTERNAL_TOKEN / ARAG_JWT_SECRET を設定済みとする
+#   生成例: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+docker compose \
+  -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.prod.yml \
+  --profile worker up -d --build
+
+# マイグレーション（rag は in-container、web は loopback 経由で host から）
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.prod.yml \
+  exec -T rag uv run alembic upgrade head
+DATABASE_URL=postgres://arag:arag@localhost:5432/arag pnpm drizzle-kit migrate
+```
+
+web は `127.0.0.1` ではなく `3000` を全公開する。本番では前段に nginx 等のリバースプロキシを置くこと（Next.js self-hosting 推奨）。
+
 ## 環境変数一覧
 
 ### web (.env.local)
@@ -148,9 +168,9 @@ curl -s localhost:8000/health
 |---|---|---|
 | `ARAG_JWT_SECRET` | JWT 署名鍵（本番では必須） | 開発用固定値 |
 | `ANTHROPIC_API_KEY` | Claude API キー（回答生成に必須） | 未設定時は検索・引用は動作するが、回答生成はスキップし案内メッセージを返す |
-| `DATABASE_URL` | web→Postgres 接続（node-postgres 形式）。このリポジトリのローカル override では host 側 Postgres が `5433` | `postgres://arag:arag@localhost:5433/arag` |
+| `DATABASE_URL` | web→Postgres 接続（node-postgres 形式）。host 側 Postgres は `5432` | `postgres://arag:arag@localhost:5432/arag` |
 | `RAG_SERVICE_URL` | web→rag 内部 HTTP | `http://localhost:8000` |
-| `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン | `dev-internal-token` |
+| `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン（**本番は必須で差し替え**。web・rag・worker で同一値） | `dev-internal-token` |
 
 ### rag (compose 環境変数 / .env)
 
@@ -159,10 +179,11 @@ curl -s localhost:8000/health
 | `DATABASE_URL` | rag→Postgres 接続（psycopg3 形式） | `postgresql+psycopg://arag:arag@localhost:5432/arag` |
 | `QDRANT_URL` | Qdrant gRPC/HTTP | `http://localhost:6333` |
 | `REDIS_URL` | arq キューブローカー | `redis://localhost:6379` |
+| `APP_ENV` | 実行環境 `dev` または `production`。`production` 時に `RAG_INTERNAL_TOKEN` が dev 既定のままだと rag は起動を拒否する | `dev` |
 | `DEVICE` | モデル実行デバイス `cpu` または `cuda` | `cpu` |
 | `EMBEDDER` | 埋め込みモデル `bge-m3` または `stub` | `bge-m3` |
 | `RERANKER` | リランカーモデル `bge` または `stub` | `bge` |
-| `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン | `dev-internal-token` |
+| `RAG_INTERNAL_TOKEN` | web↔rag 内部認証トークン（**本番は必須で差し替え**） | `dev-internal-token` |
 | `PRELOAD_MODELS` | `1` の場合、起動時にモデルを事前ロード | 未設定 |
 
 ## スクリプト
@@ -186,7 +207,7 @@ web 側の Drizzle マイグレーションが未適用です。Postgres が起�
 pnpm drizzle-kit migrate
 ```
 
-`docker-compose.override.yml` を使うローカル環境では、`.env.local` の `DATABASE_URL` が `localhost:5433` を指している必要があります。
+`.env.local` の `DATABASE_URL` が `localhost:5432` を指している必要があります。
 Windows で `sh is not recognized` や pnpm のリンク解決エラーが出る場合は、同じ環境（PowerShell なら PowerShell、WSL なら WSL）で `pnpm install` をやり直してから再実行してください。
 
 ### `relation "documents" does not exist`

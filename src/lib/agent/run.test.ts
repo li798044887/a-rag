@@ -40,9 +40,9 @@ vi.mock("ai", async (orig) => {
   };
 });
 
-// 既定モデルは deepseek-flash で、DeepSeek 経路は createAnthropic で生成する。
+// 既定モデルは gpt-5-mini で、OpenAI 経路は createOpenAI で生成する。
 // streamText はモック済みのため返すモデル値は実際には使われない。
-vi.mock("@ai-sdk/anthropic", () => ({ anthropic: () => "model", createAnthropic: () => () => "model" }));
+vi.mock("@ai-sdk/openai", () => ({ createOpenAI: () => () => "model" }));
 
 import { streamText, generateText } from "ai";
 import { retrieveChunksStream } from "@/lib/agent/retrieve-client";
@@ -50,11 +50,11 @@ import { runAgent } from "@/lib/agent/run";
 import { getAgentPrompts } from "@/lib/agent/prompts";
 import type { AgentEvent } from "@/lib/types";
 
-process.env.DEEPSEEK_API_KEY = "test-key";
+process.env.OPENAI_API_KEY = "test-key";
 
 // 各テストでキーやモック差し替えが他テストへ漏れないよう確実に復元する。
 afterEach(() => {
-  process.env.DEEPSEEK_API_KEY = "test-key";
+  process.env.OPENAI_API_KEY = "test-key";
   vi.mocked(streamText).mockClear();
   vi.mocked(generateText).mockClear();
 });
@@ -153,7 +153,7 @@ test("runAgent emits an error step on tool-error and continues to stream the ans
 });
 
 test("runAgent returns the missing-key reason and empty sources when no API key is set", async () => {
-  delete process.env.DEEPSEEK_API_KEY;
+  delete process.env.OPENAI_API_KEY;
 
   const events: AgentEvent[] = [];
   for await (const e of runAgent({ query: "認証は?", ownerUserId: "u1", threadId: "t1", locale: "ja" })) {
@@ -302,7 +302,7 @@ test("未裏付けがあれば訂正本文が最終回答になる", async () =>
 
   // verify ステップは未裏付け主張の一覧を、revise ステップは訂正前→訂正後を保持する。
   const verifyDone = events.find((e) => e.type === "step" && e.step.name === "verify" && e.step.status === "done");
-  expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "deepseek-chat" });
+  expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "gpt-5-nano" });
   expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({ claims: ["x"], checkableClaims: 1 });
   expect((verifyDone as Extract<AgentEvent, { type: "step" }>).step.output).toMatchObject({
     inputTokens: 12,
@@ -310,7 +310,7 @@ test("未裏付けがあれば訂正本文が最終回答になる", async () =>
     totalTokens: 16,
   });
   const revise = events.find((e) => e.type === "step" && e.step.name === "revise");
-  expect((revise as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "deepseek-chat" });
+  expect((revise as Extract<AgentEvent, { type: "step" }>).step.input).toMatchObject({ model: "gpt-5-nano" });
   const reviseOut = (revise as Extract<AgentEvent, { type: "step" }>).step.output as { draft: unknown; revised: unknown };
   expect(reviseOut.revised).toBe("訂正後の回答[1]。");
   expect(typeof reviseOut.draft).toBe("string");

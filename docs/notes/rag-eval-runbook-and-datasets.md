@@ -6,9 +6,12 @@
 
 ## 1. 現行の標準 suite
 
-標準 suite は二段構え。
+標準 suite は三本立て。
 
-- `beir_scifact`: 公開ベンチマーク。検索評価の再現性・対外説明用。
+- `beir_scifact`: 公開ベンチマーク（BEIR SciFact）。検索評価の再現性・対外説明用。
+- `hotpot_dev`: 公開データセット（HotpotQA dev distractor の同梱サブセット 200 問）。多ホップ検索と
+  `answer` 部分一致による `fact_coverage` を測る。外部ダウンロード不要。詳細は
+  [`rag-eval-harness.md`](./rag-eval-harness.md) §2 / §7.3。
 - `agentic_rag_demo`: repo 管理の専用 golden。表・図面・複数文書照合など、プロダクト固有の難所確認用。
 
 既定 suite は `beir_scifact`。

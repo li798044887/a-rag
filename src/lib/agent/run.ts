@@ -71,7 +71,7 @@ async function pump(
       registry, ownerUserId, meta, bus, attachmentDocIds, prompts,
       concurrency: cfg.parallelTools, topK: cfg.topK, candidateK: cfg.candidateK,
       gradeModel: rewriteModel, gradeThreshold: cfg.gradeThreshold,
-      maxRetrieveRetries: cfg.maxRetrieveRetries,
+      maxRetrieveRetries: cfg.maxRetrieveRetries, multiHop: cfg.multiHop,
     });
 
     const userContent = prompts.buildUserContent(query, attachments ?? [], attachmentDocIds ?? []);

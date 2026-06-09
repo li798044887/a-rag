@@ -173,8 +173,10 @@ class WorkerSettings:
     functions = [ingest_document]
     on_startup = requeue_interrupted_jobs
     redis_settings = redis_settings()
-    # GPU では複数ファイルを並列処理し、CPU ではローカル環境の安定性を優先して直列処理にする。
-    max_jobs = 10 if settings.device == "cuda" else 1
+    # 同時実行ジョブ数。GPU/CPU とも既定は直列(1)。
+    # GPU で並列にすると mineru ごとの vllm エンジンが各 ~12GB を奪い合い OOM するため、
+    # 既定で直列化する。メモリに余裕がある構成では WORKER_CONCURRENCY で引き上げる。
+    max_jobs = settings.resolved_worker_concurrency
     # CPU での MinerU 解析 + BGE-M3 埋め込みは数分かかるため、arq 既定の 300s を大幅に延長。
     # max_tries=1: 長時間ジョブのタイムアウト自動再試行による二重実行を避ける（再試行は /jobs/{id}/retry で明示的に行う）。
     job_timeout = 3600

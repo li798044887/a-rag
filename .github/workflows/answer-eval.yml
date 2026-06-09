@@ -1,0 +1,131 @@
+name: answer-eval
+
+# 手動のみ（フルスタック + 実 LLM が必要なためセルフホスト GPU runner 前提）。
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Eval suite"
+        type: choice
+        required: true
+        default: agentic_rag_demo
+        options:
+          - agentic_rag_demo
+          - beir_scifact
+          - hotpot_dev
+      query_limit:
+        description: "Cap number of cases (0 = full set)"
+        required: false
+        default: "0"
+      models:
+        description: "Override matrix (comma-separated, e.g. deepseek-v4-pro). Empty = answer.yaml"
+        required: false
+        default: ""
+      primary:
+        description: "Gate target model id (overrides answer.yaml/--models default)"
+        required: false
+        default: ""
+
+jobs:
+  answer-eval:
+    runs-on: [self-hosted, Windows, rag, gpu]
+    env:
+      SUITE: ${{ inputs.suite || 'agentic_rag_demo' }}
+      QUERY_LIMIT: ${{ inputs.query_limit || '0' }}
+      MINERU_MODEL_SOURCE: modelscope
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # runner host から rag の公開ポート(8000)へ到達する。トークンは compose 既定に合わせる。
+      RAG_SERVICE_URL: http://localhost:8000
+      RAG_INTERNAL_TOKEN: ${{ secrets.RAG_INTERNAL_TOKEN || 'dev-internal-token' }}
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v6
+      # answer-eval ランナーは host 上で node tools/answer-eval/run.mts を実行する。
+      # .mts の型ストリップに Node >=22.6 が要るため 24 を用意し、corepack で pnpm を供給する。
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+      # compose は host の ./artifacts/eval-* を /data/eval-* にバインドマウントする
+      # (docker-compose.yml)。起動前に host 側を実在ディレクトリにしておかないと、
+      # beir/hotpot の prepare が /data/eval-cache 等で壊れたマウントに当たり失敗する。
+      - name: Prepare report directories (bind-mount sources)
+        run: |
+          New-Item -ItemType Directory -Force -Path "artifacts/answer-eval" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/eval-cache" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/eval-assets/$env:SUITE" | Out-Null
+          New-Item -ItemType Directory -Force -Path "artifacts/rag-eval/$env:SUITE" | Out-Null
+      # answer-eval は web を起動せず、rag は内部ネットワーク経由で postgres:5432 に接続する。
+      # --force-recreate: 直前ステップで作成した eval-* バインド元 host dir に rag のマウントを
+      # 再解決させる。既存コンテナを再利用するとマウントが古いまま（壊れた状態）になり
+      # beir/hotpot の prepare が /data/eval-cache で失敗するため、毎回 rag を作り直す。
+      - name: Bring up full stack (rebuild rag to bake eval/)
+        run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile worker up -d --build --force-recreate rag
+      - name: Verify CUDA in rag container
+        run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -c "import torch; assert torch.cuda.is_available(), 'CUDA is not available in the rag container'; print(torch.cuda.get_device_name(0))"
+      # 公開ベンチ(beir/hotpot)は golden を実行時生成する。agentic は repo 同梱 golden を使う。
+      - name: Prepare public dataset (beir/hotpot only)
+        run: |
+          if ($env:SUITE.StartsWith("beir_")) {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval prepare-beir `
+              --suite $env:SUITE `
+              --assets-dir "/data/eval-assets/$env:SUITE" `
+              --golden-out "/data/eval-reports/$env:SUITE/golden.yaml" `
+              --query-limit $env:QUERY_LIMIT `
+              --corpus-limit 0
+          } elseif ($env:SUITE.StartsWith("hotpot_")) {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval prepare-hotpot `
+              --suite $env:SUITE `
+              --assets-dir "/data/eval-assets/$env:SUITE" `
+              --golden-out "/data/eval-reports/$env:SUITE/golden.yaml" `
+              --query-limit $env:QUERY_LIMIT
+          } else {
+            "Suite $env:SUITE は repo 同梱 golden を使用。準備をスキップ。"
+          }
+      - name: Ingest golden documents
+        run: |
+          if ($env:SUITE.StartsWith("beir_") -or $env:SUITE.StartsWith("hotpot_")) {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval ingest `
+              --suite $env:SUITE `
+              --golden "/data/eval-reports/$env:SUITE/golden.yaml" `
+              --files-dir "/data/eval-assets/$env:SUITE"
+          } else {
+            docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval ingest --suite $env:SUITE
+          }
+      # /data/eval-reports は host の ./artifacts/rag-eval にバインドされるため、生成 golden は
+      # 既に host 側（artifacts/rag-eval/<suite>/golden.yaml）にある。cp は不要。
+      - name: Install web deps
+        run: pnpm install --frozen-lockfile
+      - name: Run answer-eval with gate
+        run: |
+          $extra = @()
+          if ($env:INPUT_MODELS) { $extra += "--models"; $extra += $env:INPUT_MODELS }
+          if ($env:INPUT_PRIMARY) { $extra += "--primary"; $extra += $env:INPUT_PRIMARY }
+          if ($env:QUERY_LIMIT -ne "0") { $extra += "--limit"; $extra += $env:QUERY_LIMIT }
+          if ($env:SUITE.StartsWith("beir_") -or $env:SUITE.StartsWith("hotpot_")) {
+            $extra += "--golden"; $extra += "artifacts/rag-eval/$env:SUITE/golden.yaml"
+          }
+          pnpm answer-eval --suite $env:SUITE --gate --out "artifacts/answer-eval" @extra
+          exit $LASTEXITCODE
+        env:
+          INPUT_MODELS: ${{ inputs.models }}
+          INPUT_PRIMARY: ${{ inputs.primary }}
+      - name: Publish report summary
+        if: always()
+        run: |
+          Get-ChildItem "artifacts/answer-eval/*.json" | ForEach-Object {
+            $r = Get-Content $_.FullName | ConvertFrom-Json
+            "## $($r.model) $(if ($r.gate) { '(gate)' } else { '(ref)' })" | Add-Content $env:GITHUB_STEP_SUMMARY
+            "recall=$($r.metrics.citation_recall) precision=$($r.metrics.citation_precision) fact=$($r.metrics.answer_fact_coverage) passed=$($r.passed)" | Add-Content $env:GITHUB_STEP_SUMMARY
+          }
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: answer-eval-${{ env.SUITE }}
+          path: artifacts/answer-eval/*

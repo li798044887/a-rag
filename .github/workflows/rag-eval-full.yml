@@ -10,23 +10,26 @@ on:
         required: true
         default: "beir_scifact"
       query_limit:
-        description: "Number of queries to evaluate; 0 uses the suite default"
+        description: "Number of queries to evaluate; 0 = full set (= suite default, matches committed baselines)"
         required: true
-        default: "100"
+        default: "0"
       corpus_limit:
         description: "Number of corpus documents to ingest; 0 uses the full corpus"
         required: true
         default: "0"
-  schedule:
-    - cron: "0 18 * * *"  # 03:00 JST
 
 jobs:
   full-eval:
     runs-on: [self-hosted, Windows, rag, gpu]
     env:
       EVAL_SUITE: ${{ inputs.suite || 'beir_scifact' }}
-      QUERY_LIMIT: ${{ inputs.query_limit || '100' }}
+      QUERY_LIMIT: ${{ inputs.query_limit || '0' }}
       CORPUS_LIMIT: ${{ inputs.corpus_limit || '0' }}
+      # この runner では huggingface.co の LFS 配信が不安定なため、MinerU の VLM(hybrid) は
+      # ModelScope キャッシュから読む。docker-compose.gpu.yml の MINERU_MODEL_SOURCE 既定
+      # (huggingface) を上書きする。PDF を含む suite（agentic_rag_demo）の図表解析に必要で、
+      # .txt のみの beir/hotpot は VLM を取得しないため無影響。
+      MINERU_MODEL_SOURCE: modelscope
     defaults:
       run:
         shell: powershell
@@ -87,6 +90,16 @@ jobs:
               | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.md"
           }
           exit $LASTEXITCODE
+      - name: Run multi-hop comparison (hotpot only)
+        if: startsWith(env.EVAL_SUITE, 'hotpot_')
+        continue-on-error: true
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.gpu.yml exec -T rag uv run python -m eval run `
+            --suite $env:EVAL_SUITE `
+            --golden "/data/eval-reports/$env:EVAL_SUITE/golden.yaml" `
+            --multi-hop `
+            --out "/data/eval-reports/$env:EVAL_SUITE/eval-report.multihop.json" `
+            | Tee-Object -FilePath "artifacts/rag-eval/$env:EVAL_SUITE/eval-report.multihop.md"
       - name: Publish report summary
         if: always()
         run: |

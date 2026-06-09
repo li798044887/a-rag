@@ -4,7 +4,9 @@ dataset: scifact
 split: test
 source_url: https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip
 owner_user_id: __eval_beir_scifact__
-query_limit: 100
+# 0 = scifact test 全 300 問（baseline と再現一致させるためフルセットで回す）
+query_limit: 0
 corpus_limit: 0
+# 2026-06-08 実測 recall@5=0.778 ベースに 0.50→0.70 へ引き上げ（margin 約 0.08）。
 thresholds:
-  recall_at_5: 0.50
+  recall_at_5: 0.70

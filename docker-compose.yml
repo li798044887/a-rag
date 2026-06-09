@@ -29,10 +29,13 @@ services:
       DATABASE_URL: postgresql+psycopg://arag:arag@postgres:5432/arag
       QDRANT_URL: http://qdrant:6333
       REDIS_URL: redis://redis:6379
-      DEVICE: cpu
+      DEVICE: auto
       EMBEDDER: bge-m3
       RERANKER: bge
-      RAG_INTERNAL_TOKEN: dev-internal-token
+      # 本番は .env で APP_ENV=production と強い RAG_INTERNAL_TOKEN を設定する。
+      # 未設定なら dev 既定にフォールバック（dev は従来どおりゼロ設定で起動可）。
+      APP_ENV: ${APP_ENV:-dev}
+      RAG_INTERNAL_TOKEN: ${RAG_INTERNAL_TOKEN:-dev-internal-token}
       PRELOAD_MODELS: "1"
       # モデルは modelcache に取得済み。オフライン強制でキャッシュから読み込み、
       # transformers が起動時に huggingface.co を叩く（mistral 判定の model_info）のを防ぐ。
@@ -67,10 +70,12 @@ services:
       DATABASE_URL: postgresql+psycopg://arag:arag@postgres:5432/arag
       QDRANT_URL: http://qdrant:6333
       REDIS_URL: redis://redis:6379
-      DEVICE: cpu
+      DEVICE: auto
       EMBEDDER: bge-m3
       RERANKER: bge
-      RAG_INTERNAL_TOKEN: dev-internal-token
+      # rag 本体と同一の値を共有する（web↔rag↔worker でトークンが揃っていないと 401）。
+      APP_ENV: ${APP_ENV:-dev}
+      RAG_INTERNAL_TOKEN: ${RAG_INTERNAL_TOKEN:-dev-internal-token}
       # モデルは modelcache に取得済み。オフライン強制でキャッシュから読み込み、
       # transformers が huggingface.co を叩く（mistral 判定の model_info）のを防ぐ。
       HF_HUB_OFFLINE: "1"

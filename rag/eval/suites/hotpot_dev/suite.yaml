@@ -6,8 +6,10 @@ split: dev
 # source_url を使う（公式ホストは不安定なので非推奨）。
 source_path: hotpot_dev_distractor_sample.json.gz
 owner_user_id: __eval_hotpot_dev__
-query_limit: 100
-# 多ホップ検索＋answer 部分一致による fact_coverage。初回は実測してから再ベースライン推奨。
+# 0 = 同梱サンプル全 200 問（baseline と再現一致させるためフルセットで回す）
+query_limit: 0
+# gate は single-hop レポートに対して効く（multi-hop は CI では非 gate の比較実行）。
+# 2026-06-08 実測 recall@5=0.938 / fact_coverage=0.956 ベースに引き上げ。
 thresholds:
-  recall_at_5: 0.40
-  fact_coverage: 0.50
+  recall_at_5: 0.85
+  fact_coverage: 0.90

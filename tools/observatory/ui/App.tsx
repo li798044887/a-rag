@@ -59,6 +59,10 @@ export function App() {
   const [locale, setLocale] = useState("ja");
   const [owner, setOwner] = useState("");
   const [retrieveMode, setRetrieveMode] = useState<"live" | "replay">("replay");
+  const [multiHop, setMultiHop] = useState(false);
+  // /api/defaults が返す完全な AgentCfg。multiHop だけ差し替えて /api/run へ送る
+  // （runAgent は cfg を無 clamp で信頼するため、部分 cfg ではなく完全形を渡す必要がある）。
+  const [baseCfg, setBaseCfg] = useState<Record<string, unknown> | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [meta, setMeta] = useState<{ ownerUserId: string; model: string | null; retrieveMode: string } | null>(null);
   const [events, setEvents] = useState<unknown[]>([]);
@@ -94,6 +98,7 @@ export function App() {
   useEffect(() => {
     fetch(`/api/defaults?locale=${locale}`).then((r) => r.json()).then((d) => {
       setDefaults(d);
+      setBaseCfg((d.cfg as Record<string, unknown>) ?? null);
       setOwner((cur) => cur || d.owner || "");
     }).catch(() => {});
   }, [locale]);
@@ -101,10 +106,13 @@ export function App() {
   async function runIt() {
     setTraces([]); setEvents([]); setMeta(null); setError(""); setRunning(true);
     try {
+      // baseCfg があれば multiHop を差し替えた完全 cfg を送る。未ロード時は cfg を送らず
+      // サーバ既定（AGENT_CFG_DEFAULTS, multiHop=false）に委ねる（既定 OFF と等価）。
+      const cfg = baseCfg ? { ...baseCfg, multiHop } : undefined;
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query, model, locale, retrieveMode, overrides, owner }),
+        body: JSON.stringify({ query, model, locale, retrieveMode, overrides, owner, ...(cfg ? { cfg } : {}) }),
       });
       const reader = res.body!.getReader();
       const dec = new TextDecoder();
@@ -194,6 +202,17 @@ export function App() {
             <label>owner（検索スコープ）</label>
             <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="owner id" />
           </div>
+        </div>
+        <div className="row">
+          <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, cursor: "pointer", fontSize: 12, color: "var(--ink)" }}>
+            <input
+              type="checkbox"
+              checked={multiHop}
+              onChange={(e) => setMultiHop(e.target.checked)}
+              style={{ width: "auto", margin: 0, flex: "none" }}
+            />
+            多ホップ（multi_hop / hop-2 を発火）
+          </label>
         </div>
         {error && <pre className="err">{error}</pre>}
 
